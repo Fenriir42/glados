@@ -3,6 +3,7 @@ packages:
   ast/
   compiler/
   parser/
+  typechecker/
   repl/
   vm/
   cli/
