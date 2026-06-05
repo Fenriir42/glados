@@ -6,6 +6,7 @@ import AST.Types.AST
 import AST.Types.Common (FuncName (..), Located (..), VarName (..), getSpan, unLocated)
 import AST.Types.Operator (binaryOpPrecedence)
 import AST.Types.Type (Type (..))
+import qualified Data.Text as T
 import Parser.Literal (parseLiteral)
 import Parser.Operator (parseBinaryOp, parseUnaryOp)
 import Parser.Type (parsePrimitiveType)
@@ -36,6 +37,19 @@ parseExprCall = do
   args <- MP.sepBy parseExpr (matchSymbol ",")
   Located endSpan _ <- matchSymbol ")"
   return $ Located (nameSpan <> endSpan) (ExprCall (Located nameSpan (FuncName name)) args)
+
+-- | Parse a qualified function call of the form @module.function(args)@.
+-- Produces an @ExprCall@ with name @"module.function"@.
+parseExprDottedCall :: TokenParser (Located (Expr ann))
+parseExprDottedCall = do
+  Located modSpan (TokIdentifier modName) <- MP.satisfy isIdentifier
+  _ <- matchSymbol "."
+  Located fnSpan (TokIdentifier fnName) <- MP.satisfy isIdentifier
+  _ <- matchSymbol "("
+  args <- MP.sepBy parseExpr (matchSymbol ",")
+  Located endSpan _ <- matchSymbol ")"
+  let qualName = FuncName (modName <> T.singleton '.' <> fnName)
+  return $ Located (modSpan <> endSpan) (ExprCall (Located (modSpan <> fnSpan) qualName) args)
 
 parseExprIndex :: TokenParser (Located (Expr ann))
 parseExprIndex = do
@@ -77,6 +91,7 @@ parsePrimary :: TokenParser (Located (Expr ann))
 parsePrimary =
   MP.choice
     [ parseExprLiteral,
+      MP.try parseExprDottedCall,
       MP.try parseExprCall,
       parseExprCast,
       parseExprParen,
@@ -103,7 +118,8 @@ parseBinary minPrec = do
   where
     parseBinaryRHS :: Int -> Located (Expr ann) -> TokenParser (Located (Expr ann))
     parseBinaryRHS minPrec' left = do
-      maybeOp <- MP.optional (MP.try parseBinaryOp)
+      -- Peek first so we never consume an op we won't use.
+      maybeOp <- MP.optional (MP.try (MP.lookAhead parseBinaryOp))
       case maybeOp of
         Nothing -> return left
         Just op -> do
@@ -111,6 +127,7 @@ parseBinary minPrec = do
           if prec < minPrec'
             then return left
             else do
+              _ <- parseBinaryOp -- now consume for real
               right <- parseBinary (prec + 1) -- Left-associative
               let combinedSpan = getSpan left <> getSpan op <> getSpan right
               let newExpr = Located combinedSpan (ExprBinary (unLocated op) left right)

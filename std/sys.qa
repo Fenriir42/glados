@@ -1,0 +1,66 @@
+// Quant Standard Library - System Module
+
+// Exit with status code
+fn exit(code: int) -> void {
+    sys.exit(code);
+}
+
+// Get number of command-line arguments
+fn argc() -> int {
+    return sys.argc();
+}
+
+// Get command-line arguments as [str]
+fn args() -> [str] {
+    return sys.args();
+}
+
+// Get Unix timestamp (seconds since epoch)
+fn time() -> int {
+    return sys.time();
+}
+
+// Get current time in milliseconds
+fn time_millis() -> int {
+    return sys.time_millis();
+}
+
+// Sleep for ms milliseconds
+fn sleep(ms: int) -> void {
+    sys.sleep(ms);
+}
+
+// Get environment variable (empty string if unset)
+fn env(name: str) -> str {
+    return sys.env(name);
+}
+
+// Set environment variable
+fn set_env(name: str, value: str) -> bool {
+    return sys.set_env(name, value);
+}
+
+// Platform name: "linux", "windows", "macos"
+fn platform() -> str {
+    return sys.platform();
+}
+
+// Hostname
+fn hostname() -> str {
+    return sys.hostname();
+}
+
+// Current working directory
+fn getcwd() -> str {
+    return sys.getcwd();
+}
+
+// Change directory (returns True on success)
+fn chdir(path: str) -> bool {
+    return sys.chdir(path);
+}
+
+// Execute shell command (returns exit code)
+fn system(command: str) -> int {
+    return sys.system(command);
+}

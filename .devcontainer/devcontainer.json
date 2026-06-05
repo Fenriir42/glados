@@ -1,0 +1,54 @@
+{
+  "name": "GLaDOS - Nix Haskell",
+  "image": "nixos/nix:latest",
+  "remoteUser": "root",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "configureZshAsDefaultShell": true
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "containerEnv": {
+    "NIX_CONFIG": "experimental-features = nix-command flakes"
+  },
+  "postCreateCommand": "mkdir -p /etc/nix && echo 'experimental-features = nix-command flakes' >> /etc/nix/nix.conf && nix profile install nixpkgs#direnv && echo 'eval \"$(direnv hook bash)\"' >> ~/.bashrc && direnv allow",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "haskell.haskell",
+        "justusadam.language-haskell",
+        "hoovercj.haskell-linter",
+        "kamadorueda.alejandra",
+        "arrterian.nix-env-selector",
+        "eamodio.gitlens",
+        "ms-vscode.makefile-tools",
+        "esbenp.prettier-vscode",
+        "ms-vscode.hexeditor",
+        "direnv.direnv"
+      ],
+      "settings": {
+        "nix.enableLanguageServer": true,
+        "nix.serverPath": "nil",
+        "direnv.path.auto": true
+      }
+    }
+  },
+  "forwardPorts": [8000, 8080, 3000],
+  "portsAttributes": {
+    "8000": {
+      "label": "Application",
+      "onAutoForward": "silent"
+    },
+    "8080": {
+      "label": "Web UI",
+      "onAutoForward": "silent"
+    },
+    "3000": {
+      "label": "Dev Server",
+      "onAutoForward": "silent"
+    }
+  },
+  "remoteEnv": {
+    "NIX_PATH": "nixpkgs=flake:nixpkgs"
+  }
+}

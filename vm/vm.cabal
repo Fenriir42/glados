@@ -1,8 +1,8 @@
 cabal-version: 3.8
-name:          cli
-version:       1.0.0
+name:          vm
+version:       0.0.1
 build-type:    Simple
-description:   Generic Language and data operand syntax
+description:   Stack-based virtual machine for the Quant language
 homepage:      https://github.com/Sigmapitech/glados
 bug-reports:   https://github.com/Sigmapitech/glados/issues
 author:        Sigmapitech
@@ -20,19 +20,31 @@ common warnings
 common release
   ghc-options: -O2
 
-executable cli
-  import:         lang
-  import:         warnings
-  import:         release
-  main-is:        Main.hs
-  hs-source-dirs: src
+library
+  import:             lang
+  import:             warnings
+  import:             release
+  hs-source-dirs:     src
+  exposed-modules:
+    VM
+    VM.Builtins
+    VM.Interpreter
+
+  default-extensions:
+    DeriveGeneric
+    DerivingStrategies
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+
   build-depends:
     , ast
     , base
-    , bytestring
     , compiler
-    , megaparsec
-    , optparse-applicative
-    , parser
+    , containers
+    , directory
+    , hostname
+    , mtl
+    , process
     , text
-    , vm
+    , time

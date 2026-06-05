@@ -1,0 +1,16 @@
+// Quant Standard Library - I/O Module
+
+// Print without newline
+fn print(msg: str) -> void {
+    io.print(msg);
+}
+
+// Print with newline
+fn println(msg: str) -> void {
+    io.println(msg);
+}
+
+// Read a line from stdin
+fn read() -> str {
+    return io.read();
+}

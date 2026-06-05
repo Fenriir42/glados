@@ -1,0 +1,146 @@
+// Quant Standard Library - String Module
+
+// Length of string
+fn len(s: str) -> int {
+    return string.len(s);
+}
+
+// Concatenate two strings
+fn concat(a: str, b: str) -> str {
+    return string.concat(a, b);
+}
+
+// Substring from start (inclusive) to end (exclusive)
+fn substring(s: str, start: int, end: int) -> str {
+    return string.substring(s, start, end);
+}
+
+// Character at index (single-char string)
+fn char_at(s: str, index: int) -> str {
+    return string.char_at(s, index);
+}
+
+// Split string by delimiter (returns [str])
+fn split(s: str, delim: str) -> [str] {
+    return string.split(s, delim);
+}
+
+// Join array of strings with delimiter
+fn join(arr: [str], delim: str) -> str {
+    return string.join(arr, delim);
+}
+
+// Trim whitespace from both ends
+fn trim(s: str) -> str {
+    return string.trim(s);
+}
+
+// Trim whitespace from left
+fn trim_left(s: str) -> str {
+    return string.trim_left(s);
+}
+
+// Trim whitespace from right
+fn trim_right(s: str) -> str {
+    return string.trim_right(s);
+}
+
+// Convert to uppercase
+fn to_upper(s: str) -> str {
+    return string.to_upper(s);
+}
+
+// Convert to lowercase
+fn to_lower(s: str) -> str {
+    return string.to_lower(s);
+}
+
+// Check if string contains substring
+fn contains(s: str, substr: str) -> bool {
+    return string.contains(s, substr);
+}
+
+// Check if string starts with prefix
+fn starts_with(s: str, prefix: str) -> bool {
+    return string.starts_with(s, prefix);
+}
+
+// Check if string ends with suffix
+fn ends_with(s: str, suffix: str) -> bool {
+    return string.ends_with(s, suffix);
+}
+
+// First index of substring (-1 if not found)
+fn index_of(s: str, substr: str) -> int {
+    return string.index_of(s, substr);
+}
+
+// Last index of substring (-1 if not found)
+fn last_index_of(s: str, substr: str) -> int {
+    return string.last_index_of(s, substr);
+}
+
+// Replace all occurrences
+fn replace(s: str, old: str, new: str) -> str {
+    return string.replace(s, old, new);
+}
+
+// Replace first occurrence
+fn replace_first(s: str, old: str, new: str) -> str {
+    return string.replace_first(s, old, new);
+}
+
+// Repeat string n times
+fn repeat(s: str, n: int) -> str {
+    return string.repeat(s, n);
+}
+
+// Reverse string
+fn reverse(s: str) -> str {
+    return string.reverse(s);
+}
+
+// True if string is empty
+fn is_empty(s: str) -> bool {
+    return string.is_empty(s);
+}
+
+// Pad left to reach target length
+fn pad_left(s: str, length: int, pad_char: str) -> str {
+    current_len: int = string.len(s);
+    if (current_len >= length) {
+        return s;
+    };
+    padding: str = string.repeat(pad_char, length - current_len);
+    return string.concat(padding, s);
+}
+
+// Pad right to reach target length
+fn pad_right(s: str, length: int, pad_char: str) -> str {
+    current_len: int = string.len(s);
+    if (current_len >= length) {
+        return s;
+    };
+    padding: str = string.repeat(pad_char, length - current_len);
+    return string.concat(s, padding);
+}
+
+// Convert int to string
+fn from_int(n: int) -> str {
+    return string.from_int(n);
+}
+
+// Convert float to string
+fn from_float(f: float) -> str {
+    return string.from_float(f);
+}
+
+// Parse string to int (returns 0 on failure)
+fn to_int(s: str) -> int {
+    return string.to_int(s);
+}
+
+// Parse string to float (returns 0.0 on failure)
+fn to_float(s: str) -> float {
+    return string.to_float(s);
+}

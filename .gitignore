@@ -1,6 +1,9 @@
 # haskell
 dist-newstyle
 
+# claude code session data
+.claude/
+
 # outputs
 lisp-interpreter
 

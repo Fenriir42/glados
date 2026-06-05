@@ -73,6 +73,7 @@
           ++ self.checks.${pkgs.system}.pre-commit-check.enabledPackages
           ++ (with haskell; [
             cabal-install
+            haskell-language-server
 
             (ghcWithPackages (p: [
               Cabal

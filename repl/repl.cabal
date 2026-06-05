@@ -26,14 +26,19 @@ library
   exposed-modules:    Repl
   default-extensions:
     GeneralizedNewtypeDeriving
-    LambdaCase
     OverloadedStrings
 
   hs-source-dirs:     src
   build-depends:
+    , ast
     , base
+    , compiler
+    , containers
     , haskeline
+    , megaparsec
     , parser
+    , text
+    , vm
 
 executable glados-repl
   import:         lang

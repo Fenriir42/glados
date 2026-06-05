@@ -1,8 +1,8 @@
 cabal-version: 3.8
-name:          compiler
+name:          typechecker
 version:       0.0.1
 build-type:    Simple
-description:   Generic Language and data operand syntax
+description:   Type checker for the Quant language
 homepage:      https://github.com/Sigmapitech/glados
 bug-reports:   https://github.com/Sigmapitech/glados/issues
 author:        Sigmapitech
@@ -26,12 +26,11 @@ library
   import:             release
   hs-source-dirs:     src
   exposed-modules:
-    Compiler
-    Compiler.Bytecode
-    Compiler.Codegen
-    Compiler.Disasm
-    Compiler.Error
-    Compiler.Serialize
+    TypeChecker
+    TypeChecker.Builtins
+    TypeChecker.Env
+    TypeChecker.Error
+    TypeChecker.Infer
 
   default-extensions:
     DeriveGeneric
@@ -43,39 +42,23 @@ library
   build-depends:
     , ast
     , base
-    , binary
-    , bytestring
     , containers
-    , hashable
     , mtl
-    , optparse-applicative
     , text
 
-executable compiler-exe
-  import:         lang
-  import:         warnings
-  import:         release
-  main-is:        Main.hs
-  hs-source-dirs: app
-  build-depends:
-    , base
-    , compiler
-    , optparse-applicative
-
-test-suite compiler-test
-  import:         lang
-  import:         warnings
-  type:           exitcode-stdio-1.0
-  main-is:        Spec.hs
-  hs-source-dirs: tests
+test-suite typechecker-test
+  import:             lang
+  import:             warnings
+  type:               exitcode-stdio-1.0
+  main-is:            Spec.hs
+  hs-source-dirs:     tests
+  default-extensions: OverloadedStrings
   build-depends:
     , ast
     , base                >=4.7 && <5
-    , compiler
-    , directory
-    , filepath
     , hspec
     , hspec-expectations
     , megaparsec
     , parser
     , text
+    , typechecker

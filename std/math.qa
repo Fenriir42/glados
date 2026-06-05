@@ -1,0 +1,234 @@
+// Quant Standard Library - Math Module
+
+// Absolute value for integers
+fn abs(x: int) -> int {
+    if (x < 0) {
+        return -x;
+    };
+    return x;
+}
+
+// Absolute value for floats
+fn fabs(x: float) -> float {
+    if (x < 0.0) {
+        return -x;
+    };
+    return x;
+}
+
+// Minimum of two integers
+fn min(a: int, b: int) -> int {
+    if (a < b) {
+        return a;
+    };
+    return b;
+}
+
+// Maximum of two integers
+fn max(a: int, b: int) -> int {
+    if (a > b) {
+        return a;
+    };
+    return b;
+}
+
+// Minimum of two floats
+fn fmin(a: float, b: float) -> float {
+    if (a < b) {
+        return a;
+    };
+    return b;
+}
+
+// Maximum of two floats
+fn fmax(a: float, b: float) -> float {
+    if (a > b) {
+        return a;
+    };
+    return b;
+}
+
+// e^x via Taylor series
+fn exp(x: float) -> float {
+    term: float = 1.0;
+    sum: float = 1.0;
+    n: int = 1;
+    while (n < 30) {
+        term = term * x / float(n);
+        sum = sum + term;
+        n++;
+    };
+    return sum;
+}
+
+// Natural logarithm (Newton's method)
+fn log(x: float) -> float {
+    if (x <= 0.0) {
+        sys.exit(136);
+    };
+    y: float = 0.0;
+    i: int = 0;
+    while (i < 25) {
+        ey: float = exp(y);
+        y = y - (ey - x) / ey;
+        i++;
+    };
+    return y;
+}
+
+// base^exp for floats
+fn pow(base: float, exponent: float) -> float {
+    if (base <= 0.0) {
+        sys.exit(136);
+    };
+    return exp(exponent * log(base));
+}
+
+// Square root (Newton's method)
+fn sqrt(x: float) -> float {
+    if (x < 0.0) {
+        sys.exit(136);
+    };
+    if (x == 0.0) {
+        return 0.0;
+    };
+    guess: float = x;
+    i: int = 0;
+    while (i < 20) {
+        guess = 0.5 * (guess + x / guess);
+        i++;
+    };
+    return guess;
+}
+
+// Sine via Taylor series
+fn sin(x: float) -> float {
+    PI: float = 3.14159265358979323846;
+    TAU: float = 6.28318530717958647692;
+    // Reduce to [-PI, PI]
+    t: float = x - float(int(x / TAU)) * TAU;
+    if (t > PI) {
+        t = t - TAU;
+    };
+    if (t < -PI) {
+        t = t + TAU;
+    };
+    term: float = t;
+    sum: float = t;
+    x2: float = t * t;
+    sign: float = -1.0;
+    i: int = 1;
+    while (i <= 5) {
+        term = term * x2 / float(2*i * (2*i+1));
+        sum = sum + sign * term;
+        sign = -sign;
+        i++;
+    };
+    return sum;
+}
+
+// Cosine via Taylor series
+fn cos(x: float) -> float {
+    PI: float = 3.14159265358979323846;
+    TAU: float = 6.28318530717958647692;
+    t: float = x - float(int(x / TAU)) * TAU;
+    if (t > PI) {
+        t = t - TAU;
+    };
+    if (t < -PI) {
+        t = t + TAU;
+    };
+    term: float = 1.0;
+    sum: float = 1.0;
+    x2: float = t * t;
+    sign: float = -1.0;
+    i: int = 1;
+    while (i <= 5) {
+        term = term * x2 / float((2*i-1) * (2*i));
+        sum = sum + sign * term;
+        sign = -sign;
+        i++;
+    };
+    return sum;
+}
+
+// Floor - round down
+fn floor(x: float) -> int {
+    int_part: int = int(x);
+    if (float(int_part) > x) {
+        return int_part - 1;
+    };
+    return int_part;
+}
+
+// Ceiling - round up
+fn ceil(x: float) -> int {
+    int_part: int = int(x);
+    if (float(int_part) < x) {
+        return int_part + 1;
+    };
+    return int_part;
+}
+
+// Round to nearest integer
+fn round(x: float) -> int {
+    int_part: int = int(x);
+    frac_part: float = x - float(int_part);
+    if (frac_part >= 0.5) {
+        return int_part + 1;
+    };
+    if (frac_part <= -0.5) {
+        return int_part - 1;
+    };
+    return int_part;
+}
+
+// Clamp integer between min and max
+fn clamp(value: int, min_val: int, max_val: int) -> int {
+    if (value < min_val) {
+        return min_val;
+    };
+    if (value > max_val) {
+        return max_val;
+    };
+    return value;
+}
+
+// Clamp float between min and max
+fn fclamp(value: float, min_val: float, max_val: float) -> float {
+    if (value < min_val) {
+        return min_val;
+    };
+    if (value > max_val) {
+        return max_val;
+    };
+    return value;
+}
+
+// Factorial (recursive)
+fn factorial(n: int) -> int {
+    if (n <= 1) {
+        return 1;
+    };
+    return n * factorial(n - 1);
+}
+
+// Greatest common divisor
+fn gcd(a: int, b: int) -> int {
+    a = abs(a);
+    b = abs(b);
+    while (b != 0) {
+        temp: int = b;
+        b = a % b;
+        a = temp;
+    };
+    return a;
+}
+
+// Least common multiple
+fn lcm(a: int, b: int) -> int {
+    if (a == 0 || b == 0) {
+        return 0;
+    };
+    return abs(a * b) / gcd(a, b);
+}

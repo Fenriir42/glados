@@ -1,0 +1,254 @@
+---
+title: Formal Grammar (BNF)
+description: Complete BNF grammar of the Quant language
+---
+
+This page gives a complete formal grammar for Quant using a Backus–Naur Form (BNF) notation.
+Terminals are written in `"double quotes"` or described by a rule name in **bold**.
+`*` = zero or more, `+` = one or more, `?` = optional, `|` = alternative, `(…)` = grouping.
+
+---
+
+## Top-level structure
+
+```bnf
+<program>   ::= <decl>*
+
+<decl>      ::= <import-decl>
+              | <visibility> "fn" <func-decl>
+              | <visibility> "struct" <struct-decl>
+
+<visibility> ::= "pub" | ε
+
+<import-decl> ::= "import" <module-name>
+               |  "from" <module-name> "import" <import-list>
+
+<import-list> ::= <identifier> ("," <identifier>)*
+```
+
+---
+
+## Function declarations
+
+```bnf
+<func-decl>  ::= <identifier> "(" <param-list>? ")" "->" <type> <block>
+
+<param-list> ::= <param> ("," <param>)*
+
+<param>      ::= <identifier> ":" <qualified-type>
+```
+
+---
+
+## Struct declarations
+
+```bnf
+<struct-decl> ::= <identifier> "{" <field-list>? "}"
+
+<field-list>  ::= <field> ("," <field>)*
+
+<field>       ::= <identifier> ":" <qualified-type>
+```
+
+---
+
+## Types
+
+```bnf
+<type>           ::= <primitive-type>
+                   | "[" <qualified-type> "]"       -- array type
+                   | <identifier>                    -- named / struct type
+                   | "!" <error-set>                 -- error set
+                   | <type> "!" <error-set>          -- result type  (T!E)
+
+<qualified-type> ::= "const"? <type>
+
+<primitive-type> ::= "int"
+                   | "i8" | "i16" | "i32" | "i64"
+                   | "u8" | "u16" | "u32" | "u64"
+                   | "float" | "f32" | "f64"
+                   | "bool"
+                   | "str"
+                   | "char"
+                   | "void"
+
+<error-set>      ::= <identifier> ("|" <identifier>)*
+```
+
+---
+
+## Statements
+
+```bnf
+<block>  ::= "{" <stmt>* "}"
+
+<stmt>   ::= <var-decl> ";"
+           | <assign-stmt> ";"
+           | <expr-stmt> ";"
+           | <if-stmt>
+           | <while-stmt>
+           | <for-stmt>
+           | <return-stmt> ";"
+           | "break" ";"
+           | "continue" ";"
+           | <block>
+
+<var-decl>    ::= <identifier> ":" <qualified-type> ("=" <expr>)?
+
+<assign-stmt> ::= <lvalue> <assign-op> <expr>
+
+<lvalue>      ::= <identifier>
+               | <lvalue> "[" <expr> "]"
+               | <lvalue> "." <identifier>
+
+<assign-op>   ::= "=" | "+=" | "-=" | "*=" | "/=" | "%="
+                | "&=" | "|=" | "^=" | "<<=" | ">>="
+                | "~="
+
+<expr-stmt>   ::= <expr>
+
+<if-stmt>     ::= "if" "(" <expr> ")" <block>
+                  ("else" "if" "(" <expr> ")" <block>)*
+                  ("else" <block>)?
+
+<while-stmt>  ::= "while" "(" <expr> ")" <block>
+
+<for-stmt>    ::= "for" "(" <for-init>? ";" <expr>? ";" <for-post>? ")" <block>
+
+<for-init>    ::= <var-decl>
+               |  <assign-stmt>
+
+<for-post>    ::= <assign-stmt>
+               |  <expr>
+
+<return-stmt> ::= "return" <expr>?
+```
+
+---
+
+## Expressions
+
+Expressions are listed from **lowest** to **highest** precedence.
+
+```bnf
+<expr>        ::= <binary-expr>
+
+<binary-expr> ::= <unary-expr> (<binary-op> <unary-expr>)*
+
+<unary-expr>  ::= <unary-op> <unary-expr>
+               |  "must" <unary-expr>
+               |  <primary>
+
+<primary>     ::= <literal>
+               | <identifier> "." <identifier> "(" <arg-list>? ")"  -- dotted call
+               | <identifier> "(" <arg-list>? ")"                   -- function call
+               | <primitive-type> "(" <expr> ")"                    -- type cast
+               | <primary> "[" <expr> "]"                           -- index
+               | <identifier>                                        -- variable
+               | "(" <expr> ")"                                      -- parenthesised
+
+<arg-list>    ::= <expr> ("," <expr>)*
+```
+
+### Binary operators (precedence, lowest first)
+
+| Level | Operators | Associativity |
+|-------|-----------|---------------|
+| 1 | `\|\|` | left |
+| 2 | `&&` | left |
+| 3 | `==` `!=` | left |
+| 4 | `<` `<=` `>` `>=` | left |
+| 5 | `\|` | left |
+| 6 | `^` | left |
+| 7 | `&` | left |
+| 8 | `<<` `>>` | left |
+| 9 | `+` `-` | left |
+| 10 | `*` `/` `%` | left |
+
+```bnf
+<binary-op> ::= "||" | "&&"
+              | "==" | "!="
+              | "<"  | "<=" | ">" | ">="
+              | "|"  | "^"  | "&"
+              | "<<" | ">>"
+              | "+"  | "-"
+              | "*"  | "/"  | "%"
+
+<unary-op>  ::= "!" | "-" | "~" | "+"
+```
+
+---
+
+## Literals
+
+```bnf
+<literal>    ::= <int-literal>
+              |  <float-literal>
+              |  <bool-literal>
+              |  <string-literal>
+              |  <array-literal>
+
+<int-literal>    ::= <decimal>
+                   | "0x" <hex-digit>+
+                   | "0o" <octal-digit>+
+                   | "0b" <binary-digit>+
+
+<float-literal>  ::= <decimal> "." <decimal>
+
+<bool-literal>   ::= "True" | "False"
+
+<string-literal> ::= '"' <char>* '"'
+                   -- supports escape sequences: \n \t \r \\ \"
+
+<array-literal>  ::= "[" (<expr> ("," <expr>)*)? "]"
+
+<decimal>        ::= <digit>+
+<digit>          ::= "0" … "9"
+<hex-digit>      ::= "0" … "9" | "a" … "f" | "A" … "F"
+<octal-digit>    ::= "0" … "7"
+<binary-digit>   ::= "0" | "1"
+```
+
+---
+
+## Lexical elements
+
+```bnf
+<identifier>   ::= <letter> (<letter> | <digit> | "_")*
+
+<module-name>  ::= <identifier> ("." <identifier>)*
+
+<letter>       ::= "a" … "z" | "A" … "Z" | "_"
+
+<comment>      ::= "//" <any-char-except-newline>* <newline>
+                 | "/*" <any-char>* "*/"
+```
+
+### Keywords
+
+```
+bool  break  char  const  continue  else  f32  f64  float  fn  for
+from  i16  i32  i64  i8  if  import  int  must  pub  return  str
+struct  try  u16  u32  u64  u8  void  while
+```
+
+---
+
+## Operator precedence summary
+
+The grammar implements C-style precedence.  Unary operators bind tighter than
+any binary operator, and parentheses override all precedence rules.
+
+```
+Highest  unary: !, -, ~, +
+         binary: *, /, %
+                 +, -
+                 <<, >>
+                 &
+                 ^
+                 |
+                 <, <=, >, >=
+                 ==, !=
+                 &&
+Lowest   ||
+```

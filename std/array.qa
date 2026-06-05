@@ -1,0 +1,175 @@
+// Quant Standard Library - Array Module
+
+// Get length of array
+fn len(arr: [int]) -> int {
+    return array.len(arr);
+}
+
+// Append element to end of array (modifies in place)
+fn push(arr: [int], item: int) -> void {
+    array.push(arr, item);
+}
+
+// Remove and return last element
+fn pop(arr: [int]) -> int {
+    return array.pop(arr);
+}
+
+// Reverse array (returns new array)
+fn reverse(arr: [int]) -> [int] {
+    result: [int];
+    i: int = array.len(arr) - 1;
+    while (i >= 0) {
+        array.push(result, arr[i]);
+        i--;
+    };
+    return result;
+}
+
+// Sort array ascending (bubble sort, returns new array)
+fn sort(arr: [int]) -> [int] {
+    n: int = array.len(arr);
+    result: [int];
+    i: int = 0;
+    while (i < n) {
+        array.push(result, arr[i]);
+        i++;
+    };
+    i = 0;
+    while (i < n) {
+        j: int = 0;
+        while (j < n - i - 1) {
+            if (result[j] > result[j + 1]) {
+                temp: int = result[j];
+                result[j] = result[j + 1];
+                result[j + 1] = temp;
+            };
+            j++;
+        };
+        i++;
+    };
+    return result;
+}
+
+// Find first index of target (-1 if not found)
+fn index_of(arr: [int], target: int) -> int {
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        if (arr[i] == target) {
+            return i;
+        };
+        i++;
+    };
+    return -1;
+}
+
+// Check if array contains element
+fn contains(arr: [int], target: int) -> bool {
+    return index_of(arr, target) != -1;
+}
+
+// Slice from start (inclusive) to end (exclusive)
+fn slice(arr: [int], start: int, end: int) -> [int] {
+    result: [int];
+    i: int = start;
+    while (i < end) {
+        array.push(result, arr[i]);
+        i++;
+    };
+    return result;
+}
+
+// Sum all elements
+fn sum(arr: [int]) -> int {
+    total: int = 0;
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        total = total + arr[i];
+        i++;
+    };
+    return total;
+}
+
+// Minimum value in array
+fn min(arr: [int]) -> int {
+    length: int = array.len(arr);
+    if (length == 0) {
+        return 0;
+    };
+    min_val: int = arr[0];
+    i: int = 1;
+    while (i < length) {
+        if (arr[i] < min_val) {
+            min_val = arr[i];
+        };
+        i++;
+    };
+    return min_val;
+}
+
+// Maximum value in array
+fn max(arr: [int]) -> int {
+    length: int = array.len(arr);
+    if (length == 0) {
+        return 0;
+    };
+    max_val: int = arr[0];
+    i: int = 1;
+    while (i < length) {
+        if (arr[i] > max_val) {
+            max_val = arr[i];
+        };
+        i++;
+    };
+    return max_val;
+}
+
+// Fill all slots with a value
+fn fill(arr: [int], value: int) -> void {
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        arr[i] = value;
+        i++;
+    };
+}
+
+// Shallow copy
+fn copy(arr: [int]) -> [int] {
+    result: [int];
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        array.push(result, arr[i]);
+        i++;
+    };
+    return result;
+}
+
+// True if all elements are positive
+fn all_positive(arr: [int]) -> bool {
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        if (arr[i] <= 0) {
+            return False;
+        };
+        i++;
+    };
+    return True;
+}
+
+// True if any element is positive
+fn any_positive(arr: [int]) -> bool {
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        if (arr[i] > 0) {
+            return True;
+        };
+        i++;
+    };
+    return False;
+}

@@ -1,0 +1,290 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "GLaDOS"
+    }
+  ],
+  "settings": {
+    "makefile.configureOnOpen": true,
+    "[haskell]": {
+      "editor.defaultFormatter": "haskell.haskell",
+      "editor.formatOnSave": true,
+      "editor.tabSize": 2,
+      "editor.insertSpaces": true
+    },
+    "files.exclude": {
+      "**/.git": true,
+      "**/dist-newstyle": true,
+      "**/.build": true,
+      "**/.direnv": true,
+      "**/.ghc": true
+    },
+    "search.exclude": {
+      "dist-newstyle": true,
+      ".build": true,
+      ".direnv": true,
+      ".ghc": true,
+      "node_modules": true
+    },
+    "haskell.checkMatch": true,
+    "haskell.logLevel": "debug",
+    "haskell.diagnosticsOnChange": true,
+    "haskell.formatting": "ormolu",
+    "haskell.formattingProvider": "ormolu",
+    "nix.enableLanguageServer": true,
+    "nix.serverPath": "nil",
+    "nix.serverSettings": {
+      "nil": {
+        "formatting": {
+          "command": ["alejandra"]
+        }
+      }
+    },
+    "direnv.path.auto": true,
+    "direnv.status.showNotifications": true,
+    "[json]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.formatOnSave": true
+    },
+    "[markdown]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.formatOnSave": true,
+      "editor.wordWrap": "on"
+    },
+    "[nix]": {
+      "editor.defaultFormatter": "kamadorueda.alejandra",
+      "editor.formatOnSave": true
+    },
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.defaultFormatter": "haskell.haskell",
+    "git.ignoreLimitWarning": true,
+    "window.title": "${folderName} - GLaDOS ${dirty}",
+    "terminal.integrated.env.linux": {
+      "NIX_PATH": "nixpkgs=flake:nixpkgs"
+    },
+    "editor.rulers": [80, 100, 120],
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wordWrapColumn": 100,
+    "files.associations": {
+      "*.qa": "quant",
+      "*.bnf": "bnf"
+    },
+    "nixEnvSelector.nixFile": "${workspaceFolder}/flake.nix",
+    "nixEnvSelector.useFlakes": true,
+    "nixEnvSelector.flakeShell": "default"
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Build All",
+        "type": "ghc",
+        "request": "launch",
+        "preLaunchTask": "Build All"
+      },
+      {
+        "name": "Run Tests",
+        "type": "ghc",
+        "request": "launch",
+        "preLaunchTask": "Test All"
+      },
+      {
+        "name": "Run Lisp Interpreter",
+        "type": "ghc",
+        "request": "launch",
+        "preLaunchTask": "Run Lisp Interpreter"
+      },
+      {
+        "name": "Run CLI",
+        "type": "ghc",
+        "request": "launch",
+        "preLaunchTask": "Run CLI (glados)"
+      },
+      {
+        "name": "Run REPL",
+        "type": "ghc",
+        "request": "launch",
+        "preLaunchTask": "Run REPL"
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Build All",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["build", "all"],
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "problemMatcher": ["$ghcModern"],
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        }
+      },
+      {
+        "label": "Build Parser",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["build", "parser"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Build Evaluator",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["build", "eval"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Build Compiler",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["build", "compiler"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Build Lisp",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["build", "lisp"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Build CLI",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["build", "cli"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Test All",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["test", "all"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Test Parser",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["test", "parser"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Test Evaluator",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["test", "eval"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Test Lisp",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["test", "lisp"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Test Compiler",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["test", "compiler"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Run CLI (glados)",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["run", "cli", "--", "--help"]
+      },
+      {
+        "label": "Run Lisp Interpreter",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["run", "lisp:exe:lisp-interpreter"]
+      },
+      {
+        "label": "Run REPL",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["run", "repl:exe:glados-repl"]
+      },
+      {
+        "label": "Clean",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["clean"]
+      },
+      {
+        "label": "GHCi REPL",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["repl", "all"],
+        "isBackground": false
+      },
+      {
+        "label": "Format All (ormolu)",
+        "type": "shell",
+        "command": "ormolu",
+        "args": ["--mode", "inplace", "-i", "$(find . -name '*.hs' -type f)"],
+        "presentation": {
+          "reveal": "always"
+        }
+      },
+      {
+        "label": "Format Nix (alejandra)",
+        "type": "shell",
+        "command": "alejandra",
+        "args": ["."]
+      },
+      {
+        "label": "Lint (hlint)",
+        "type": "shell",
+        "command": "hlint",
+        "args": ["."],
+        "problemMatcher": {
+          "pattern": {
+            "regexp": "^(.+?):(\\d+):(\\d+): (Error|Warning): (.+)$",
+            "file": 1,
+            "location": 2,
+            "message": 5
+          }
+        }
+      },
+      {
+        "label": "Pre-commit Check",
+        "type": "shell",
+        "command": "nix",
+        "args": ["flake", "check"],
+        "presentation": {
+          "reveal": "always"
+        }
+      }
+    ]
+  },
+  "extensions": {
+    "recommendations": [
+      "haskell.haskell",
+      "justusadam.language-haskell",
+      "hoovercj.haskell-linter",
+      "kamadorueda.alejandra",
+      "arrterian.nix-env-selector",
+      "nixos.nixos-ui",
+      "eamodio.gitlens",
+      "ms-vscode.makefile-tools",
+      "esbenp.prettier-vscode",
+      "ms-vscode.hexeditor",
+      "charliermarsh.ruff",
+      "ms-python.python"
+    ]
+  }
+}
