@@ -1,76 +1,66 @@
-# Quant Standard Library - System Module
-# Provides system-level operations
+// Quant Standard Library - System Module
 
-# Exit program with status code
+// Exit with status code
 fn exit(code: int) -> void {
-    # Built-in implementation
-    # Terminates program with given exit code
+    sys.exit(code);
 }
 
-# Get command-line arguments
-fn args() -> [str] {
-    # Built-in implementation
-    # Returns array of command-line arguments
-}
-
-# Get number of command-line arguments
+// Get number of command-line arguments
 fn argc() -> int {
-    # Built-in implementation
-    # Returns count of command-line arguments
+    return sys.argc();
 }
 
-# Get environment variable
-# Returns empty string if variable doesn't exist
-fn env(name: str) -> str {
-    # Built-in implementation
+// Get command-line arguments as [str]
+fn args() -> [str] {
+    return sys.args();
 }
 
-# Set environment variable
-# Returns True on success, False on error
-fn set_env(name: str, value: str) -> bool {
-    # Built-in implementation
-}
-
-# Get current Unix timestamp (seconds since epoch)
+// Get Unix timestamp (seconds since epoch)
 fn time() -> int {
-    # Built-in implementation
+    return sys.time();
 }
 
-# Get current time in milliseconds
+// Get current time in milliseconds
 fn time_millis() -> int {
-    # Built-in implementation
+    return sys.time_millis();
 }
 
-# Sleep for specified milliseconds
+// Sleep for ms milliseconds
 fn sleep(ms: int) -> void {
-    # Built-in implementation
+    sys.sleep(ms);
 }
 
-# Get current working directory
-fn getcwd() -> str {
-    # Built-in implementation
+// Get environment variable (empty string if unset)
+fn env(name: str) -> str {
+    return sys.env(name);
 }
 
-# Change current working directory
-# Returns True on success, False on error
-fn chdir(path: str) -> bool {
-    # Built-in implementation
+// Set environment variable
+fn set_env(name: str, value: str) -> bool {
+    return sys.set_env(name, value);
 }
 
-# Get platform/operating system name
-# Returns "linux", "windows", "macos", etc.
+// Platform name: "linux", "windows", "macos"
 fn platform() -> str {
-    # Built-in implementation
+    return sys.platform();
 }
 
-# Execute shell command
-# Returns exit code of command
-fn system(command: str) -> int {
-    # Built-in implementation
-    # Executes command in system shell
-}
-
-# Get hostname
+// Hostname
 fn hostname() -> str {
-    # Built-in implementation
+    return sys.hostname();
+}
+
+// Current working directory
+fn getcwd() -> str {
+    return sys.getcwd();
+}
+
+// Change directory (returns True on success)
+fn chdir(path: str) -> bool {
+    return sys.chdir(path);
+}
+
+// Execute shell command (returns exit code)
+fn system(command: str) -> int {
+    return sys.system(command);
 }
