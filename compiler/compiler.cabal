@@ -21,14 +21,35 @@ common release
   ghc-options: -O2
 
 library
-  import:          lang
-  import:          warnings
-  import:          release
-  hs-source-dirs:  src
-  exposed-modules: Compiler
+  import:             lang
+  import:             warnings
+  import:             release
+  hs-source-dirs:     src
+  exposed-modules:
+    Compiler
+    Compiler.Bytecode
+    Compiler.Codegen
+    Compiler.Disasm
+    Compiler.Error
+    Compiler.Serialize
+
+  default-extensions:
+    DeriveGeneric
+    DerivingStrategies
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+
   build-depends:
+    , ast
     , base
+    , binary
+    , bytestring
+    , containers
+    , hashable
+    , mtl
     , optparse-applicative
+    , text
 
 executable compiler-exe
   import:         lang
@@ -48,8 +69,13 @@ test-suite compiler-test
   main-is:        Spec.hs
   hs-source-dirs: tests
   build-depends:
+    , ast
     , base                >=4.7 && <5
     , compiler
     , directory
+    , filepath
     , hspec
     , hspec-expectations
+    , megaparsec
+    , parser
+    , text

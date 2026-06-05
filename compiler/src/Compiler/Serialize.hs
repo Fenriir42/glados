@@ -1,0 +1,171 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
+--
+-- File format:
+--   magic   : 4 bytes  "QBC\0"
+--   version : Word8    = 1
+--   funcs   : [Bytecode]  (length-prefixed list)
+
+-- | Binary serialization and deserialization for Quant bytecode (.qbc files).
+module Compiler.Serialize
+  ( encodeBytecodes,
+    decodeBytecodes,
+  )
+where
+
+import AST.Types.Common (FuncName (..), VarName (..))
+import Compiler.Bytecode
+import Data.Binary (Binary (..))
+import Data.Binary.Get (Get, getByteString, runGetOrFail)
+import Data.Binary.Put (putByteString, runPut)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Text as T
+import Data.Word (Word8)
+
+-- ---------------------------------------------------------------------------
+-- Magic / version
+
+magic :: BS.ByteString
+magic = "QBC\0"
+
+currentVersion :: Word8
+currentVersion = 1
+
+-- ---------------------------------------------------------------------------
+-- Public API
+
+encodeBytecodes :: [Bytecode] -> BSL.ByteString
+encodeBytecodes bcs = runPut $ do
+  putByteString magic
+  put currentVersion
+  put bcs
+
+decodeBytecodes :: BSL.ByteString -> Either String [Bytecode]
+decodeBytecodes bs =
+  case runGetOrFail parseBytecodes bs of
+    Left (_, _, err) -> Left err
+    Right (_, _, bcs) -> Right bcs
+
+parseBytecodes :: Get [Bytecode]
+parseBytecodes = do
+  hdr <- getByteString 4
+  if hdr /= magic
+    then fail "Not a QBC file (bad magic bytes)"
+    else do
+      ver <- get :: Get Word8
+      if ver /= currentVersion
+        then fail $ "Unsupported QBC version: " ++ show ver
+        else get
+
+-- ---------------------------------------------------------------------------
+-- Binary instances
+
+-- Binary Text is provided by the text package.
+
+instance Binary FuncName where
+  put (FuncName t) = put t
+  get = FuncName <$> get
+
+instance Binary VarName where
+  put (VarName t) = put t
+  get = VarName <$> get
+
+instance Binary InstructionPointer where
+  put (InstructionPointer i) = put i
+  get = InstructionPointer <$> get
+
+instance Binary FunctionRef where
+  put (FunctionRef f) = put f
+  get = FunctionRef <$> get
+
+instance Binary CastType where
+  put CastToInt = put (0 :: Word8)
+  put CastToFloat = put (1 :: Word8)
+  put CastToBool = put (2 :: Word8)
+  put CastToString = put (3 :: Word8)
+  get =
+    (get :: Get Word8) >>= \case
+      0 -> pure CastToInt
+      1 -> pure CastToFloat
+      2 -> pure CastToBool
+      3 -> pure CastToString
+      t -> fail $ "Unknown CastType tag: " ++ show t
+
+instance Binary Value where
+  put (VInt n) = put (0 :: Word8) >> put n
+  put (VFloat f) = put (1 :: Word8) >> put f
+  put (VBool b) = put (2 :: Word8) >> put b
+  put (VStringRef i) = put (3 :: Word8) >> put i
+  put (VArrayRef i) = put (4 :: Word8) >> put i
+  put VUnit = put (5 :: Word8)
+  get =
+    (get :: Get Word8) >>= \case
+      0 -> VInt <$> get
+      1 -> VFloat <$> get
+      2 -> VBool <$> get
+      3 -> VStringRef <$> get
+      4 -> VArrayRef <$> get
+      5 -> pure VUnit
+      t -> fail $ "Unknown Value tag: " ++ show t
+
+instance Binary BinaryOp where
+  put op = put (fromIntegral (fromEnum op) :: Word8)
+  get = toEnum . fromIntegral <$> (get :: Get Word8)
+
+instance Binary UnaryOp where
+  put op = put (fromIntegral (fromEnum op) :: Word8)
+  get = toEnum . fromIntegral <$> (get :: Get Word8)
+
+instance Binary Instruction where
+  put i = case i of
+    IPush v -> tag 0 >> put v
+    IPop -> tag 1
+    IDup -> tag 2
+    IBinary op -> tag 3 >> put op
+    IUnary op -> tag 4 >> put op
+    ILoad var -> tag 5 >> put var
+    IStore var -> tag 6 >> put var
+    IJump ip -> tag 7 >> put ip
+    IJumpTrue ip -> tag 8 >> put ip
+    IJumpFalse ip -> tag 9 >> put ip
+    ICall ref argc -> tag 10 >> put ref >> put (argc :: Int)
+    IRet -> tag 11
+    INop -> tag 12
+    INewArray -> tag 13
+    IArrayGet -> tag 14
+    IArrayGetOrNew -> tag 15
+    IArraySet -> tag 16
+    ICast ct -> tag 17 >> put ct
+    where
+      tag n = put (n :: Word8)
+
+  get =
+    (get :: Get Word8) >>= \case
+      0 -> IPush <$> get
+      1 -> pure IPop
+      2 -> pure IDup
+      3 -> IBinary <$> get
+      4 -> IUnary <$> get
+      5 -> ILoad <$> get
+      6 -> IStore <$> get
+      7 -> IJump <$> get
+      8 -> IJumpTrue <$> get
+      9 -> IJumpFalse <$> get
+      10 -> ICall <$> get <*> (get :: Get Int)
+      11 -> pure IRet
+      12 -> pure INop
+      13 -> pure INewArray
+      14 -> pure IArrayGet
+      15 -> pure IArrayGetOrNew
+      16 -> pure IArraySet
+      17 -> ICast <$> get
+      t -> fail $ "Unknown Instruction tag: " ++ show t
+
+instance Binary Bytecode where
+  put bc =
+    put (bytecodeFunction bc)
+      >> put (bytecodeInstructions bc)
+      >> put (bytecodeEntry bc)
+      >> put (bytecodeStrings bc)
+  get = Bytecode <$> get <*> get <*> get <*> get
