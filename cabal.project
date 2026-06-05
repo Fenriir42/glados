@@ -2,8 +2,9 @@ packages:
   cabal-extract/
   ast/
   compiler/
-  eval/
   parser/
   repl/
+  vm/
+  cli/
 
 tests: True
