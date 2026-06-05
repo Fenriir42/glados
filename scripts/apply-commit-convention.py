@@ -17,9 +17,9 @@ def has_correct_message(msg: str) -> bool:
         return False
 
     scope, sentence = title.split(":")
-    # Allow `[a-z]`, `-` and `/` characters
-    if not all((c.isalpha() and c.islower()) or c in '-/' for c in scope):
-        print("scope must be a single lowercase word.")
+    # Allow `[a-z]`, `-`, `/` and `()` characters (convco type(scope) form)
+    if not all((c.isalpha() and c.islower()) or c in '-/()' for c in scope):
+        print("scope must be lowercase words with optional type(scope) form.")
         return False
 
     if not sentence[0].startswith(" "):
