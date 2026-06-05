@@ -4,6 +4,7 @@ packages:
   compiler/
   parser/
   typechecker/
+  lsp-server/
   repl/
   vm/
   cli/

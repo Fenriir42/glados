@@ -1,0 +1,144 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Quant",
+  "scopeName": "source.quant",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#function-definition" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#boolean-literals" },
+    { "include": "#module-call" },
+    { "include": "#function-call" },
+    { "include": "#variable-declaration" },
+    { "include": "#numbers" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.quant",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.line.number-sign.quant",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.block.quant",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.quant",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.quant",
+          "match": "\\\\[nrt\\\\\"0]"
+        }
+      ]
+    },
+    "function-definition": {
+      "comment": "fn <name>( — highlight keyword + function name together",
+      "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()",
+      "captures": {
+        "1": { "name": "keyword.declaration.function.quant" },
+        "2": { "name": "entity.name.function.quant" }
+      }
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.quant",
+          "match": "\\b(return|if|else|for|while|break|continue|must)\\b"
+        },
+        {
+          "name": "keyword.declaration.quant",
+          "match": "\\b(fn|const)\\b"
+        },
+        {
+          "name": "keyword.other.import.quant",
+          "match": "\\b(import|from)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "comment": "Parameterised int type: int<32> or int<32, u>",
+          "name": "storage.type.quant",
+          "match": "\\bint\\s*(?:<\\s*\\d+(?:\\s*,\\s*[su])?\\s*>)?"
+        },
+        {
+          "comment": "Parameterised float type: float<32>",
+          "name": "storage.type.quant",
+          "match": "\\bfloat\\s*(?:<\\s*(?:32|64)\\s*>)?"
+        },
+        {
+          "name": "storage.type.quant",
+          "match": "\\b(bool|string|str|void|none)\\b"
+        }
+      ]
+    },
+    "boolean-literals": {
+      "name": "constant.language.boolean.quant",
+      "match": "\\b(True|False)\\b"
+    },
+    "module-call": {
+      "comment": "module.function( — e.g. math.sin, io.read, array.len",
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()",
+      "captures": {
+        "1": { "name": "entity.name.namespace.quant" },
+        "2": { "name": "entity.name.function.quant" }
+      }
+    },
+    "function-call": {
+      "comment": "identifier followed by ( — function call",
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()",
+      "captures": {
+        "1": { "name": "entity.name.function.quant" }
+      }
+    },
+    "variable-declaration": {
+      "comment": "identifier before : in a declaration context",
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*:)",
+      "captures": {
+        "1": { "name": "variable.other.quant" }
+      }
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.quant",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.quant",
+          "match": "\\b0[oO][0-7]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.quant",
+          "match": "\\b0[bB][01]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.quant",
+          "match": "\\b\\d+\\.\\d+(?:[eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.quant",
+          "match": "\\b\\d+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "name": "keyword.operator.quant",
+      "match": "(->|<<|>>|<=|>=|==|!=|&&|\\|\\||\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=|[-+*/%<>=!&|^~])"
+    }
+  }
+}

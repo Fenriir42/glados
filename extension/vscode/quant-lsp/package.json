@@ -1,0 +1,92 @@
+{
+  "name": "quant-lsp",
+  "displayName": "Quant Language Server",
+  "description": "LSP support for Quant: diagnostics, hover types, and improved syntax highlighting",
+  "version": "0.1.0",
+  "publisher": "quant-team",
+  "author": {
+    "name": "Quant team"
+  },
+  "license": "BSD-2-Clause",
+  "icon": "assets/quant-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sigmapitech/glados"
+  },
+  "bugs": {
+    "url": "https://github.com/Sigmapitech/glados/issues"
+  },
+  "keywords": ["quant", "lsp", "language-server", "diagnostics"],
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": ["Programming Languages", "Linters"],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "quant",
+        "aliases": ["Quant", "quant"],
+        "extensions": [".qa"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./assets/quant-icon.png",
+          "dark": "./assets/quant-icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "quant",
+        "scopeName": "source.quant",
+        "path": "./syntaxes/quant.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Quant Language Server",
+      "properties": {
+        "quant-lsp.enable": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable the Quant language server (diagnostics, hover types)."
+        },
+        "quant-lsp.serverPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `glados-lsp` binary. Leave empty to search `$PATH`."
+        },
+        "quant-lsp.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "enumDescriptions": [
+            "No tracing",
+            "Log request/response messages",
+            "Log all LSP traffic including notifications"
+          ],
+          "default": "off",
+          "markdownDescription": "Trace LSP communication between VS Code and the Quant language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc --watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "package": "npx @vscode/vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.82.0",
+    "@vscode/vsce": "^2.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

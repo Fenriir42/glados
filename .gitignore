@@ -1,6 +1,10 @@
 # haskell
 dist-newstyle
 
+# node / vscode extensions
+node_modules/
+out/
+
 # claude code session data
 .claude/
 
