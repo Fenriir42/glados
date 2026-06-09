@@ -35,4 +35,5 @@ executable cli
     , optparse-applicative
     , parser
     , text
+    , typechecker
     , vm

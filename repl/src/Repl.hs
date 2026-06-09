@@ -6,7 +6,7 @@ module Repl
 where
 
 import AST.Types.AST (Program (..))
-import AST.Types.Common (FuncName (..), VarName (..))
+import AST.Types.Common (FuncName (..), VarName (..), displaySpan)
 import Compiler.Bytecode (Bytecode, bytecodeFunction)
 import Compiler.Codegen (compileProgram)
 import Compiler.Error (displayError)
@@ -32,6 +32,8 @@ import System.Console.Haskeline
     simpleCompletion,
   )
 import Text.Megaparsec (errorBundlePretty, many, runParser)
+import TypeChecker (TypeCheckResult (..), typeCheck)
+import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
 import VM (runProgram)
 import VM.Interpreter (VMError (..))
 
@@ -164,6 +166,10 @@ tryCompile src existing = do
   decls <- case runParser (many parseDecl) "<repl>" tokens of
     Left err -> Left (errorBundlePretty err)
     Right ds -> Right ds
+  let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+  case typeErrs of
+    [] -> Right ()
+    errs -> Left (concatMap formatTypeErr errs)
   case compileProgram (Program decls) of
     Left err -> Left (displayError err (lines src))
     Right bcs -> Right (existing ++ bcs)
@@ -297,6 +303,27 @@ cyan = esc "36"
 
 warn :: String -> String
 warn msg = bold ++ red ++ "warning" ++ reset ++ ": " ++ msg
+
+-- ---------------------------------------------------------------------------
+-- Type error formatting (compact, no source-line context needed in REPL)
+
+formatTypeErr :: TypeCheckError -> String
+formatTypeErr e =
+  bold
+    ++ red
+    ++ "error[type]"
+    ++ reset
+    ++ ": "
+    ++ tcErrMessage e
+    ++ "\n"
+    ++ "  "
+    ++ bold
+    ++ cyan
+    ++ "-->"
+    ++ reset
+    ++ " "
+    ++ T.unpack (displaySpan (tcErrSpan e))
+    ++ "\n"
 
 -- ---------------------------------------------------------------------------
 -- Tab completion

@@ -38,6 +38,7 @@ library
     , megaparsec
     , parser
     , text
+    , typechecker
     , vm
 
 executable glados-repl

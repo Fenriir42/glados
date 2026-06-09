@@ -1,7 +1,15 @@
 module Main where
 
 import AST.Types.AST (Program (..))
-import AST.Types.Common (FuncName (..), VarName (..))
+import AST.Types.Common
+  ( Column (..),
+    FuncName (..),
+    Line (..),
+    SourcePos (..),
+    SourceSpan (..),
+    VarName (..),
+    displaySpan,
+  )
 import qualified Compiler (Bytecode, Options (..), options, prologue)
 import Compiler.Codegen (compileProgram)
 import Compiler.Disasm (disassemble)
@@ -14,6 +22,8 @@ import Options.Applicative
 import Parser.Decl (parseDecl)
 import System.Exit (exitFailure)
 import Text.Megaparsec (errorBundlePretty, runParser)
+import TypeChecker (TypeCheckResult (..), typeCheck)
+import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
 import VM (runProgram)
 import VM.Interpreter (VMError (..))
 
@@ -73,6 +83,12 @@ compileSource filePath = do
     case runParser (many parseDecl) filePath tokens of
       Left err -> Left (errorBundlePretty err)
       Right ds -> Right ds
+  let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+  case typeErrs of
+    [] -> return ()
+    errs -> do
+      mapM_ (\e -> putStr (displayTypeError e (lines src))) errs
+      exitFailure
   case compileProgram (Program decls) of
     Left err -> do
       putStr (displayError err (lines src))
@@ -143,6 +159,39 @@ reset = esc "0"
 bold = esc "1"
 red = esc "31"
 cyan = esc "36"
+
+-- ---------------------------------------------------------------------------
+-- Type error display (mirrors Compiler.Error.displayError style)
+
+displayTypeError :: TypeCheckError -> [String] -> String
+displayTypeError err sourceLines =
+  let span' = tcErrSpan err
+      startPos = spanStart span'
+      lineNo = unLine (posLine startPos)
+      colStart = unColumn (posColumn startPos)
+      colEnd = unColumn (posColumn (spanEnd span'))
+      lineStr = show lineNo
+      pad = replicate (length lineStr) ' '
+      srcLine =
+        if lineNo >= 1 && lineNo <= length sourceLines
+          then sourceLines !! (lineNo - 1)
+          else ""
+      caretLen = max 1 (if colEnd > colStart then colEnd - colStart else 1)
+      caret =
+        replicate (colStart - 1) ' '
+          ++ bold
+          ++ red
+          ++ replicate caretLen '^'
+          ++ reset
+      loc = T.unpack (displaySpan span')
+      msg = tcErrMessage err
+   in unlines
+        [ bold ++ red ++ "error[type]" ++ reset ++ ": " ++ bold ++ msg ++ reset,
+          " " ++ bold ++ cyan ++ pad ++ " --> " ++ reset ++ loc,
+          " " ++ bold ++ cyan ++ pad ++ "  |" ++ reset,
+          " " ++ bold ++ cyan ++ lineStr ++ "  |" ++ reset ++ " " ++ srcLine,
+          " " ++ bold ++ cyan ++ pad ++ "  |" ++ reset ++ " " ++ caret
+        ]
 
 -- ---------------------------------------------------------------------------
 -- Helpers
