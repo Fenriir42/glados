@@ -239,7 +239,10 @@ execInstr = \case
         heap <- gets vmHeap
         case Map.lookup aid heap of
           Nothing -> throwError $ VMRuntimeError $ "Array #" ++ show aid ++ " not found"
-          Just arr -> push (Map.findWithDefault VUnit (fromIntegral i) arr) >> return Nothing
+          Just arr ->
+            case Map.lookup (fromIntegral i) arr of
+              Nothing -> throwError $ VMOutOfBounds (fromIntegral i) (Map.size arr)
+              Just v -> push v >> return Nothing
       _ -> throwError $ VMTypeMismatch $ "IArrayGet: bad types " ++ show ref ++ " " ++ show idx
   IArrayGetOrNew -> do
     idx <- pop "IArrayGetOrNew (index)"
