@@ -2,7 +2,8 @@ module Main (main) where
 
 import AST.Types.AST (Program (..))
 import Compiler.Codegen (compileProgram)
-import Data.List (isPrefixOf)
+import Compiler.Import (resolveImports)
+import Data.List (isInfixOf, isPrefixOf)
 import Lib (lexString)
 import Parser.Decl (parseDecl)
 import Test.Hspec
@@ -17,6 +18,7 @@ import VM (runProgram)
 data PipelineResult
   = LexError String
   | ParseError String
+  | ImportError String
   | TypeErrors [TypeCheckError]
   | CompileError String
   | RunOk
@@ -40,6 +42,34 @@ runPipeline src =
                 return $ case result of
                   Left err -> RunError (show err)
                   Right _ -> RunOk
+
+-- | Path to stdlib relative to the cli/ package root (where cabal runs tests).
+stdlibPath :: FilePath
+stdlibPath = "../std"
+
+-- | Like 'runPipeline' but resolves imports from the standard library first.
+runPipelineWithImports :: String -> IO PipelineResult
+runPipelineWithImports src =
+  case lexString src of
+    Left err -> return $ LexError err
+    Right tokens ->
+      case runParser (many parseDecl) "<test>" tokens of
+        Left bundle -> return $ ParseError (errorBundlePretty bundle)
+        Right rawDecls -> do
+          declsOrErr <- resolveImports stdlibPath rawDecls
+          case declsOrErr of
+            Left importErr -> return $ ImportError importErr
+            Right decls -> do
+              let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+              if not (null typeErrs)
+                then return $ TypeErrors typeErrs
+                else case compileProgram (Program decls) of
+                  Left err -> return $ CompileError (show err)
+                  Right bcs -> do
+                    result <- runProgram bcs
+                    return $ case result of
+                      Left err -> RunError (show err)
+                      Right _ -> RunOk
 
 -- ---------------------------------------------------------------------------
 -- Main
@@ -153,10 +183,90 @@ main = hspec $ do
         RunOk -> expectationFailure "Should have been rejected by type checker"
         other -> expectationFailure $ "Expected TypeErrors, got: " ++ show other
 
+  describe "Pipeline — imports" $ do
+    it "resolves 'import math' and calls math.sqrt" $ do
+      let src =
+            unlines
+              [ "import math",
+                "fn main() -> void {",
+                "  x: float = math.sqrt(16.0);",
+                "  println(x);",
+                "}"
+              ]
+      runPipelineWithImports src >>= (`shouldBe` RunOk)
+
+    it "resolves 'from math import sqrt' as bare name" $ do
+      let src =
+            unlines
+              [ "from math import sqrt",
+                "fn main() -> void {",
+                "  x: float = sqrt(9.0);",
+                "  println(x);",
+                "}"
+              ]
+      runPipelineWithImports src >>= (`shouldBe` RunOk)
+
+    it "resolves 'from math import *' and calls multiple bare names" $ do
+      let src =
+            unlines
+              [ "from math import *",
+                "fn main() -> void {",
+                "  x: float = sqrt(4.0);",
+                "  n: int = abs(-7);",
+                "  println(x);",
+                "  println(n);",
+                "}"
+              ]
+      runPipelineWithImports src >>= (`shouldBe` RunOk)
+
+    it "resolves 'from math import sqrt, pow' — multiple selective names" $ do
+      let src =
+            unlines
+              [ "from math import sqrt, pow",
+                "fn main() -> void {",
+                "  x: float = sqrt(25.0);",
+                "  y: float = pow(2.0, 8.0);",
+                "  println(x);",
+                "  println(y);",
+                "}"
+              ]
+      runPipelineWithImports src >>= (`shouldBe` RunOk)
+
+    it "resolves 'from string import len' overriding array builtin" $ do
+      let src =
+            unlines
+              [ "from string import len",
+                "fn main() -> void {",
+                "  n: int = len(\"hello\");",
+                "  println(n);",
+                "}"
+              ]
+      runPipelineWithImports src >>= (`shouldBe` RunOk)
+
+    it "resolves 'from string import to_upper, concat'" $ do
+      let src =
+            unlines
+              [ "from string import to_upper, concat",
+                "fn main() -> void {",
+                "  s: str = to_upper(\"hello\");",
+                "  t: str = concat(s, \"!\");",
+                "  println(t);",
+                "}"
+              ]
+      runPipelineWithImports src >>= (`shouldBe` RunOk)
+
+    it "reports ImportError for an unknown module" $ do
+      let src = "import nonexistent\nfn main() -> void { }"
+      result <- runPipelineWithImports src
+      case result of
+        ImportError msg -> msg `shouldSatisfy` ("nonexistent" `isInfixOf`)
+        other -> expectationFailure $ "Expected ImportError, got: " ++ show other
+
 instance Show PipelineResult where
   show RunOk = "RunOk"
   show (LexError e) = "LexError: " ++ e
   show (ParseError e) = "ParseError: " ++ e
+  show (ImportError e) = "ImportError: " ++ e
   show (TypeErrors es) = "TypeErrors[" ++ show (length es) ++ "]"
   show (CompileError e) = "CompileError: " ++ e
   show (RunError e) = "RunError: " ++ e
@@ -165,6 +275,7 @@ instance Eq PipelineResult where
   RunOk == RunOk = True
   LexError a == LexError b = a == b
   ParseError a == ParseError b = a == b
+  ImportError a == ImportError b = a == b
   CompileError a == CompileError b = a == b
   RunError a == RunError b = a == b
   _ == _ = False
