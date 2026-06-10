@@ -19,7 +19,8 @@ data Options = Options
   { optFile :: Maybe FilePath,
     optDump :: Bool,
     optOutput :: Maybe FilePath,
-    optLoad :: Maybe FilePath
+    optLoad :: Maybe FilePath,
+    optStdlib :: FilePath
   }
   deriving (Show)
 
@@ -30,6 +31,7 @@ options =
     <*> switch (long "dump" <> short 'd' <> help "Print disassembly instead of executing")
     <*> optional (strOption (long "output" <> short 'o' <> metavar "FILE" <> help "Write compiled bytecode to FILE"))
     <*> optional (strOption (long "load" <> short 'l' <> metavar "FILE" <> help "Load and run a pre-compiled .qbc FILE"))
+    <*> strOption (long "stdlib" <> metavar "DIR" <> value "./std" <> showDefault <> help "Path to the Quant standard library directory")
 
 prologue :: String
 prologue = "Compile and run a Quant source file"

@@ -10,6 +10,7 @@ import AST.Types.Common (FuncName (..), VarName (..), displaySpan)
 import Compiler.Bytecode (Bytecode, bytecodeFunction)
 import Compiler.Codegen (compileProgram)
 import Compiler.Error (displayError)
+import Compiler.Import (resolveImports)
 import Control.Exception (SomeException, catch)
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
@@ -42,7 +43,8 @@ import VM.Interpreter (VMError (..))
 data ReplConfig = ReplConfig
   { replPrompt :: String,
     replWelcome :: String,
-    replGoodbye :: String
+    replGoodbye :: String,
+    replStdlib :: FilePath
   }
 
 defaultReplConfig :: ReplConfig
@@ -62,7 +64,8 @@ defaultReplConfig =
               ++ reset
               ++ " to execute main()."
           ],
-      replGoodbye = "Goodbye!"
+      replGoodbye = "Goodbye!",
+      replStdlib = "./std"
     }
 
 -- ---------------------------------------------------------------------------
@@ -121,7 +124,7 @@ braceBalance = foldl (\n c -> if c == '{' then n + 1 else if c == '}' then n - 1
 
 -- | Returns Nothing to quit, Just newEnv to continue.
 handleInput :: ReplConfig -> Env -> String -> InputT IO (Maybe Env)
-handleInput _ env input
+handleInput config env input
   | input `elem` [":quit", ":q"] = return Nothing
   | input `elem` [":help", ":h", ":?"] = showHelp >> return (Just env)
   | input `elem` [":reset", ":clear", ":c"] = resetEnv >> return (Just Map.empty)
@@ -129,13 +132,13 @@ handleInput _ env input
   | ":run" `isPrefixOf` input = runMain env >> return (Just env)
   | ":load " `isPrefixOf` input = do
       let path = drop 6 input
-      env' <- loadFile env path
+      env' <- loadFile config env path
       return (Just env')
   | ":load" == input = do
       outputStrLn "Usage: :load <file>"
       return (Just env)
   | otherwise = do
-      env' <- evalInput env input
+      env' <- evalInput config env input
       return (Just env')
 
 -- ---------------------------------------------------------------------------
@@ -143,9 +146,9 @@ handleInput _ env input
 
 -- | Try to parse as function declaration(s); if that fails, try as a
 -- statement wrapped in fn __repl__() -> void { ... }.
-evalInput :: Env -> String -> InputT IO Env
-evalInput env src = do
-  let result = tryCompile src (Map.elems env)
+evalInput :: ReplConfig -> Env -> String -> InputT IO Env
+evalInput config env src = do
+  result <- liftIO $ tryCompile config src (Map.elems env)
   case result of
     Left errMsg -> outputStrLn errMsg >> return env
     Right newBcs ->
@@ -159,19 +162,25 @@ evalInput env src = do
             return newEnv
 
 -- | Compile @src@ together with already-compiled @existing@ functions.
-tryCompile :: String -> [Bytecode] -> Either String [Bytecode]
-tryCompile src existing = do
-  tokens <- lexString src
-  decls <- case runParser (many parseDecl) "<repl>" tokens of
-    Left err -> Left (errorBundlePretty err)
-    Right ds -> Right ds
-  let TypeCheckResult typeErrs _ = typeCheck (Program decls)
-  case typeErrs of
-    [] -> Right ()
-    errs -> Left (concatMap formatTypeErr errs)
-  case compileProgram (Program decls) of
-    Left err -> Left (displayError err (lines src))
-    Right bcs -> Right (existing ++ bcs)
+tryCompile :: ReplConfig -> String -> [Bytecode] -> IO (Either String [Bytecode])
+tryCompile config src existing = do
+  case lexString src of
+    Left lexErr -> return (Left lexErr)
+    Right tokens ->
+      case runParser (many parseDecl) "<repl>" tokens of
+        Left err -> return (Left (errorBundlePretty err))
+        Right rawDecls -> do
+          declsOrErr <- resolveImports (replStdlib config) rawDecls
+          case declsOrErr of
+            Left importErr -> return (Left importErr)
+            Right decls -> do
+              let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+              case typeErrs of
+                errs@(_ : _) -> return (Left (concatMap formatTypeErr errs))
+                [] ->
+                  return $ case compileProgram (Program decls) of
+                    Left err -> Left (displayError err (lines src))
+                    Right bcs -> Right (existing ++ bcs)
 
 -- ---------------------------------------------------------------------------
 -- :run
@@ -189,16 +198,17 @@ runMain env =
 -- ---------------------------------------------------------------------------
 -- :load
 
-loadFile :: Env -> FilePath -> InputT IO Env
-loadFile env path = do
+loadFile :: ReplConfig -> Env -> FilePath -> InputT IO Env
+loadFile config env path = do
   srcOrErr <-
     liftIO $
       (Right <$> readFile path) `catch` \e ->
         return $ Left (show (e :: SomeException))
   case srcOrErr of
     Left err -> outputStrLn (warn ("cannot open " ++ path ++ ": " ++ err)) >> return env
-    Right src ->
-      case tryCompile src [] of
+    Right src -> do
+      result <- liftIO $ tryCompile config src []
+      case result of
         Left errMsg -> outputStrLn errMsg >> return env
         Right bcs -> do
           let newEnv = foldl (\e bc -> Map.insert (bytecodeFunction bc) bc e) env bcs

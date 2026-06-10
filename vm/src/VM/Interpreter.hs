@@ -166,34 +166,44 @@ execInstr = \case
     return Nothing
   ICall (FunctionRef fname) argc -> do
     strings <- gets vmStrings
-    if isHeapBuiltin (unFuncName fname)
-      then do
-        args <- popN argc
-        result <- callHeapBuiltin (unFuncName fname) args
-        push result
+    funcs <- gets vmFunctions
+    -- User-defined and imported functions take priority over builtins so that
+    -- `from string import len` can shadow the array heap-builtin `len`.
+    case Map.lookup fname funcs of
+      Just bc -> do
+        saveFrame
+        -- Resolve VStringRef values in the arguments before switching to the
+        -- callee's string pool; indices are only valid in the caller's pool
+        -- and would be out-of-bounds in the callee's.
+        stk <- gets vmStack
+        pool <- gets vmStrings
+        let (callArgs, rest) = splitAt argc stk
+            resolvedArgs = map (resolveStringRef pool) callArgs
+        modify $ \s ->
+          s
+            { vmStack = resolvedArgs ++ rest,
+              vmLocals = Map.empty,
+              vmIP = 0,
+              vmInstrs = bytecodeInstructions bc,
+              vmStrings = bytecodeStrings bc,
+              vmCurrentFunc = fname
+            }
         return Nothing
-      else
-        if isBuiltin (unFuncName fname)
+      Nothing ->
+        if isHeapBuiltin (unFuncName fname)
           then do
             args <- popN argc
-            result <- S.liftIO $ callBuiltin (unFuncName fname) strings args
+            result <- callHeapBuiltin (unFuncName fname) args
             push result
             return Nothing
-          else do
-            funcs <- gets vmFunctions
-            case Map.lookup fname funcs of
-              Nothing -> throwError $ VMUndefinedFunction fname
-              Just bc -> do
-                saveFrame
-                modify $ \s ->
-                  s
-                    { vmLocals = Map.empty,
-                      vmIP = 0,
-                      vmInstrs = bytecodeInstructions bc,
-                      vmStrings = bytecodeStrings bc,
-                      vmCurrentFunc = fname
-                    }
+          else
+            if isBuiltin (unFuncName fname)
+              then do
+                args <- popN argc
+                result <- S.liftIO $ callBuiltin (unFuncName fname) strings args
+                push result
                 return Nothing
+              else throwError $ VMUndefinedFunction fname
   IRet -> do
     retVal <- pop "IRet"
     frames <- gets vmCallStack
@@ -364,6 +374,11 @@ heapPush aid val = do
     Just arr -> do
       let nextIdx = if Map.null arr then 0 else fst (Map.findMax arr) + 1
       modify $ \s -> s {vmHeap = Map.adjust (Map.insert nextIdx val) aid (vmHeap s)}
+
+resolveStringRef :: [Text] -> Value -> Value
+resolveStringRef strings (VStringRef i)
+  | i < length strings = VString (strings !! i)
+resolveStringRef _ v = v
 
 resolveValue :: [Text] -> Value -> Text
 resolveValue strings (VStringRef i) = strings !! i

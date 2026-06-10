@@ -18,20 +18,90 @@ import qualified Data.Text as T
 -- (e.g. array.pop returns the element type, which requires generics).
 builtinReturnType :: FuncName -> Maybe Type
 builtinReturnType (FuncName n)
-  | n `elem` printFuncs = voidT
-  | n `elem` ["len", "array.len"] = intT
-  | n `elem` ["push", "array.push", "sys.exit"] = voidT
+  -- void
+  | n `elem` voidFuncs = voidT
+  -- int
+  | n `elem` intFuncs = intT
+  -- float
+  | n == "string.to_float" = floatT
+  -- bool
+  | n `elem` boolFuncs = boolT
+  -- string
+  | n `elem` stringFuncs = stringT
+  -- math: a handful return int, the rest return float
+  | n `elem` mathIntFuncs = intT
   | "math." `T.isPrefixOf` n = floatT
-  | "string." `T.isPrefixOf` n = stringT
+  -- sys: a handful return string
+  | n `elem` ["sys.env", "sys.platform", "sys.hostname", "sys.getcwd"] = stringT
+  -- sys.args returns [str] — not representable without generics; treat as unknown
+  | n == "sys.args" = Nothing
+  -- remaining sys.* return int (time, argc, system, chdir as int 0/1, etc.)
+  | "sys." `T.isPrefixOf` n = intT
+  -- io.read
+  | n == "io.read" = stringT
+  -- remaining io.* (io.print, io.println) already in voidFuncs above
   | "io." `T.isPrefixOf` n = voidT
-  | "sys." `T.isPrefixOf` n = voidT
   | otherwise = Nothing
   where
-    printFuncs = ["print", "println", "io.print", "io.println"]
+    voidFuncs =
+      [ "print",
+        "println",
+        "io.print",
+        "io.println",
+        "push",
+        "array.push",
+        "sys.exit",
+        "sys.sleep"
+      ]
+    intFuncs =
+      [ "len",
+        "array.len",
+        "string.len",
+        "string.index_of",
+        "string.last_index_of",
+        "string.to_int",
+        "sys.time",
+        "sys.time_millis",
+        "sys.argc",
+        "sys.system"
+      ]
+    boolFuncs =
+      [ "string.contains",
+        "string.starts_with",
+        "string.ends_with",
+        "string.is_empty",
+        "sys.set_env",
+        "sys.chdir"
+      ]
+    stringFuncs =
+      [ "string.concat",
+        "string.substring",
+        "string.char_at",
+        "string.to_upper",
+        "string.to_lower",
+        "string.trim",
+        "string.trim_left",
+        "string.trim_right",
+        "string.reverse",
+        "string.replace",
+        "string.replace_first",
+        "string.repeat",
+        "string.from_int",
+        "string.from_float"
+      ]
+    mathIntFuncs =
+      [ "math.abs",
+        "math.floor",
+        "math.ceil",
+        "math.round",
+        "math.min",
+        "math.max"
+      ]
     voidT = Just (TypePrimitive PrimNone)
     intT = Just (TypePrimitive (PrimInt defaultIntType))
     floatT = Just (TypePrimitive (PrimFloat defaultFloatType))
     stringT = Just (TypePrimitive PrimString)
+    boolT = Just (TypePrimitive PrimBool)
 
 -- | True for any function name that the VM/runtime knows about, including
 -- the std-module prefix convention (math.*, string.*, io.*, sys.*, array.*).

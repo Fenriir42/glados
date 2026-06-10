@@ -14,6 +14,7 @@ import qualified Compiler (Bytecode, Options (..), options, prologue)
 import Compiler.Codegen (compileProgram)
 import Compiler.Disasm (disassemble)
 import Compiler.Error (displayError)
+import Compiler.Import (resolveImports)
 import Compiler.Serialize (decodeBytecodes, encodeBytecodes)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Text as T
@@ -57,7 +58,7 @@ main :: IO ()
 main = execParser opts >>= runCompiler
 
 runCompiler :: Compiler.Options -> IO ()
-runCompiler (Compiler.Options mFile dump mOut mLoad) =
+runCompiler (Compiler.Options mFile dump mOut mLoad stdlibDir) =
   case mLoad of
     Just bcFile -> do
       bs <- BSL.readFile bcFile
@@ -65,7 +66,7 @@ runCompiler (Compiler.Options mFile dump mOut mLoad) =
       execute bytecodes
     Nothing -> do
       filePath <- maybe (die "Specify a source file or --load FILE") return mFile
-      bytecodes <- compileSource filePath
+      bytecodes <- compileSource stdlibDir filePath
       if dump
         then putStr (disassemble bytecodes)
         else case mOut of
@@ -75,14 +76,15 @@ runCompiler (Compiler.Options mFile dump mOut mLoad) =
 -- ---------------------------------------------------------------------------
 -- Compilation pipeline
 
-compileSource :: FilePath -> IO [Compiler.Bytecode]
-compileSource filePath = do
+compileSource :: FilePath -> FilePath -> IO [Compiler.Bytecode]
+compileSource stdlibDir filePath = do
   src <- readFile filePath
   tokens <- lexFile filePath >>= orDie "Lex error"
-  decls <- orDie "Parse error" $
+  rawDecls <- orDie "Parse error" $
     case runParser (many parseDecl) filePath tokens of
       Left err -> Left (errorBundlePretty err)
       Right ds -> Right ds
+  decls <- resolveImports stdlibDir rawDecls >>= orDie "Import error"
   let TypeCheckResult typeErrs _ = typeCheck (Program decls)
   case typeErrs of
     [] -> return ()

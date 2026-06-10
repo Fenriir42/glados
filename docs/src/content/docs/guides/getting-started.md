@@ -5,104 +5,105 @@ description: Learn how to write your first Quant program
 
 ## Introduction
 
-Quant is a statically-typed programming language with C-like syntax. It features a powerful type system, module imports, and modern programming constructs.
+Quant is a statically-typed, compiled language with C-like syntax. It features a powerful type system, standard library modules, and modern programming constructs.
 
 ## Your First Program
 
-Let's start with a simple "Hello, World!" program:
+A simple "Hello, World!" program:
 
 ```quant
-from std import print
-
-fn main() -> int {
-    print("Hello, World!\n");
-    return 0;
+fn main() -> void {
+    println("Hello, World!");
 }
 ```
 
 ### Breaking It Down
 
-- **`from std import print`**: Imports the `print` function from the standard library
-- **`fn main() -> int`**: Declares the main function that returns an integer
-- **`print("Hello, World!\n");`**: Prints a message
-- **`return 0;`**: Returns 0 to indicate successful execution
+- **`fn main() -> void`**: Entry point — every program starts here
+- **`println(...)`**: Built-in print function with a trailing newline
+- **`;`**: All statements end with a semicolon
 
 ## Basic Program Structure
 
-Every Quant program consists of:
-
-1. **Imports** (optional): Import functions or modules you need
-2. **Function Definitions**: Define functions with the `fn` keyword
-3. **Main Function**: The entry point of your program (unless it's a library)
+Every Quant program consists of optional imports followed by function definitions:
 
 ```quant
 import math
 
-from std import print
-
-fn main() -> int {
-    // Your code here
-    return 0;
+fn main() -> void {
+    r: float = math.sqrt(16.0);
+    println(r);   // 4.0
 }
 ```
 
 ## Import Styles
 
-Quant supports two import styles:
+Quant supports two import styles.
 
 ### Module Import
 
 ```quant
 import math
 
-fn main() -> int {
-    x: int = int(math.sqrt(16));
-    return 0;
+fn main() -> void {
+    x: float = math.sqrt(9.0);   // 3.0
+    n: int = math.abs(-7);        // 7
+    println(x);
 }
 ```
+
+Module functions are called with the `module.function` prefix.
 
 ### Selective Import
 
 ```quant
-from std import print
+from math import sqrt, abs
 
-fn main() -> int {
-    print("Direct function call\n");
-    return 0;
+fn main() -> void {
+    x: float = sqrt(9.0);   // call without prefix
+    n: int = abs(-7);
+    println(x);
 }
 ```
 
-## Comments
+`from M import f1, f2` brings specific names into scope without the prefix.
 
-Quant supports two types of comments:
+```quant
+from math import *   // import every function from math
+```
+
+## Standard Library Modules
+
+| Module | Contents |
+|--------|----------|
+| `math` | `sqrt`, `pow`, `sin`, `cos`, `abs`, `floor`, `ceil`, … |
+| `string` | `len`, `concat`, `to_upper`, `contains`, `substring`, … |
+| `array` | `len`, `push`, `pop`, `reverse`, … |
+| `sys` | `exit`, `time`, `argc`, `platform`, `getcwd`, … |
+| `io` | `print`, `println`, `read` |
+
+See the [Standard Library reference](/reference/stdlib/) for the full list.
+
+## Comments
 
 ```quant
 // Single-line comment
-
-/* 
-   Multi-line comment
-   can span multiple lines
-*/
-
-# Alternative single-line comment (Python-style)
+# Also a single-line comment (Python-style)
 ```
 
 ## Statements and Semicolons
 
-All statements in Quant must end with a semicolon (`;`):
+All statements end with a semicolon (`;`):
 
 ```quant
-fn main() -> int {
-    x: int = 10;        // Variable declaration
-    print("%d\n", x);   // Function call
-    return 0;           // Return statement
+fn main() -> void {
+    x: int = 10;              // variable declaration
+    println("%d", x);         // function call
 }
 ```
 
 ## Next Steps
 
-Now that you understand the basics, explore:
-
-- [Language Basics](/guides/language-basics/) - Variables, types, and expressions
-- [Types Reference](/reference/types/) - Comprehensive type system documentation
-- [Control Flow](/guides/control-flow/) - Conditionals and loops
+- [Language Basics](/guides/language-basics/) — Variables, types, and expressions
+- [Control Flow](/guides/control-flow/) — Conditionals and loops
+- [Standard Library](/reference/stdlib/) — Complete function reference
