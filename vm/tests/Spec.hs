@@ -217,6 +217,85 @@ main = hspec $ do
     it "casts bool to int" $
       run "fn main() -> int { return int(True); }" >>= (`shouldBe` Right (VInt 1))
 
+  describe "For loops" $ do
+    it "counts to 5 with C-style for" $ do
+      let src =
+            unlines
+              [ "fn main() -> int {",
+                "  s: int = 0;",
+                "  for (i: int = 1; i <= 5; i = i + 1) { s = s + i; };",
+                "  return s;",
+                "}"
+              ]
+      run src >>= (`shouldBe` Right (VInt 15))
+
+    it "for loop with break exits early" $ do
+      let src =
+            unlines
+              [ "fn main() -> int {",
+                "  steps: int = 0;",
+                "  for (i: int = 0; i < 10; i = i + 1) {",
+                "    if (i == 5) { break; };",
+                "    steps = steps + 1;",
+                "  };",
+                "  return steps;",
+                "}"
+              ]
+      run src >>= (`shouldBe` Right (VInt 5))
+
+    it "for loop with continue skips iterations" $ do
+      let src =
+            unlines
+              [ "fn main() -> int {",
+                "  s: int = 0;",
+                "  for (i: int = 0; i < 10; i = i + 1) {",
+                "    if (i % 2 == 0) { continue; };",
+                "    s = s + i;",
+                "  };",
+                "  return s;",
+                "}"
+              ]
+      run src >>= (`shouldBe` Right (VInt 25))
+
+    it "while loop with break" $ do
+      let src =
+            unlines
+              [ "fn main() -> int {",
+                "  x: int = 0;",
+                "  while (True) { x = x + 1; if (x == 7) { break; }; };",
+                "  return x;",
+                "}"
+              ]
+      run src >>= (`shouldBe` Right (VInt 7))
+
+  describe "Compound assignment" $ do
+    it "+= on a variable" $
+      run "fn main() -> int { x: int = 10; x += 5; return x; }"
+        >>= (`shouldBe` Right (VInt 15))
+
+    it "-= on a variable" $
+      run "fn main() -> int { x: int = 10; x -= 3; return x; }"
+        >>= (`shouldBe` Right (VInt 7))
+
+    it "*= on a variable" $
+      run "fn main() -> int { x: int = 4; x *= 3; return x; }"
+        >>= (`shouldBe` Right (VInt 12))
+
+    it "/= on a variable" $
+      run "fn main() -> int { x: int = 20; x /= 4; return x; }"
+        >>= (`shouldBe` Right (VInt 5))
+
+    it "+= on an array element" $ do
+      let src =
+            unlines
+              [ "fn main() -> int {",
+                "  arr: [int] = [1, 2, 3];",
+                "  arr[1] += 10;",
+                "  return arr[1];",
+                "}"
+              ]
+      run src >>= (`shouldBe` Right (VInt 12))
+
   describe "Error paths" $ do
     it "reports VMUndefinedFunction when main is missing" $ do
       result <- run "fn other() -> int { return 1; }"
