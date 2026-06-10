@@ -20,7 +20,6 @@ import Data.Binary.Get (Get, getByteString, runGetOrFail)
 import Data.Binary.Put (putByteString, runPut)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Text as T
 import Data.Word (Word8)
 
 -- ---------------------------------------------------------------------------
@@ -99,6 +98,7 @@ instance Binary Value where
   put (VStringRef i) = put (3 :: Word8) >> put i
   put (VArrayRef i) = put (4 :: Word8) >> put i
   put VUnit = put (5 :: Word8)
+  put (VString t) = put (6 :: Word8) >> put t
   get =
     (get :: Get Word8) >>= \case
       0 -> VInt <$> get
@@ -107,6 +107,7 @@ instance Binary Value where
       3 -> VStringRef <$> get
       4 -> VArrayRef <$> get
       5 -> pure VUnit
+      6 -> VString <$> get
       t -> fail $ "Unknown Value tag: " ++ show t
 
 instance Binary BinaryOp where

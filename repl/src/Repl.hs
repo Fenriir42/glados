@@ -25,7 +25,6 @@ import System.Console.Haskeline
     completeWord,
     defaultSettings,
     getInputLine,
-    outputStr,
     outputStrLn,
     runInputT,
     setComplete,
@@ -122,7 +121,7 @@ braceBalance = foldl (\n c -> if c == '{' then n + 1 else if c == '}' then n - 1
 
 -- | Returns Nothing to quit, Just newEnv to continue.
 handleInput :: ReplConfig -> Env -> String -> InputT IO (Maybe Env)
-handleInput config env input
+handleInput _ env input
   | input `elem` [":quit", ":q"] = return Nothing
   | input `elem` [":help", ":h", ":?"] = showHelp >> return (Just env)
   | input `elem` [":reset", ":clear", ":c"] = resetEnv >> return (Just Map.empty)
@@ -212,8 +211,6 @@ loadFile env path = do
               ++ unwords newNames
               ++ reset
           return newEnv
-  where
-    bytecodeFunction = Compiler.Bytecode.bytecodeFunction
 
 -- ---------------------------------------------------------------------------
 -- UI helpers

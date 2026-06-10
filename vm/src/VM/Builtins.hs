@@ -11,7 +11,7 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, try)
 import Control.Monad (when)
 import Data.Char (toLower, toUpper)
-import Data.List (intercalate, isInfixOf, isPrefixOf, isSuffixOf)
+import Data.List (isPrefixOf)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO

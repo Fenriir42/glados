@@ -37,3 +37,20 @@ executable cli
     , text
     , typechecker
     , vm
+
+test-suite cli-test
+  import:         lang
+  import:         warnings
+  type:           exitcode-stdio-1.0
+  main-is:        Spec.hs
+  hs-source-dirs: tests
+  build-depends:
+    , ast
+    , base
+    , compiler
+    , hspec
+    , megaparsec
+    , parser
+    , text
+    , typechecker
+    , vm

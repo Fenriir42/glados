@@ -1,0 +1,170 @@
+module Main (main) where
+
+import AST.Types.AST (Program (..))
+import Compiler.Codegen (compileProgram)
+import Data.List (isPrefixOf)
+import Lib (lexString)
+import Parser.Decl (parseDecl)
+import Test.Hspec
+import Text.Megaparsec (errorBundlePretty, many, runParser)
+import TypeChecker (TypeCheckResult (..), typeCheck)
+import TypeChecker.Error (TypeCheckError (..))
+import VM (runProgram)
+
+-- ---------------------------------------------------------------------------
+-- Pipeline helpers
+
+data PipelineResult
+  = LexError String
+  | ParseError String
+  | TypeErrors [TypeCheckError]
+  | CompileError String
+  | RunOk
+  | RunError String
+
+runPipeline :: String -> IO PipelineResult
+runPipeline src =
+  case lexString src of
+    Left err -> return $ LexError err
+    Right tokens ->
+      case runParser (many parseDecl) "<test>" tokens of
+        Left bundle -> return $ ParseError (errorBundlePretty bundle)
+        Right decls -> do
+          let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+          if not (null typeErrs)
+            then return $ TypeErrors typeErrs
+            else case compileProgram (Program decls) of
+              Left err -> return $ CompileError (show err)
+              Right bcs -> do
+                result <- runProgram bcs
+                return $ case result of
+                  Left err -> RunError (show err)
+                  Right _ -> RunOk
+
+-- ---------------------------------------------------------------------------
+-- Main
+
+main :: IO ()
+main = hspec $ do
+  describe "Pipeline — valid programs" $ do
+    it "runs a simple main returning void" $ do
+      let src = "fn main() -> void { }"
+      runPipeline src >>= \r -> r `shouldBe` RunOk
+
+    it "runs integer arithmetic without type errors" $ do
+      let src =
+            unlines
+              [ "fn main() -> void {",
+                "  x: int = 2 + 3;",
+                "  println(x);",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "runs float arithmetic without type errors" $ do
+      let src =
+            unlines
+              [ "fn main() -> void {",
+                "  f: float = 1.5 + 2.5;",
+                "  println(f);",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "runs a recursive function" $ do
+      let src =
+            unlines
+              [ "fn fact(n: int) -> int {",
+                "  if (n <= 1) { return 1; };",
+                "  return n * fact(n - 1);",
+                "}",
+                "fn main() -> void {",
+                "  println(fact(5));",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "passes a well-typed function call" $ do
+      let src =
+            unlines
+              [ "fn add(a: int, b: int) -> int { return a + b; }",
+                "fn main() -> void { println(add(3, 4)); }"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+  describe "Pipeline — type errors caught before codegen" $ do
+    it "rejects float literal assigned to int variable" $ do
+      let src = "fn f() -> void { x: int = 3.14; }"
+      result <- runPipeline src
+      case result of
+        TypeErrors errs -> length errs `shouldBe` 1
+        other -> expectationFailure $ "Expected TypeErrors, got: " ++ show other
+
+    it "rejects wrong argument count" $ do
+      let src =
+            unlines
+              [ "fn add(a: int, b: int) -> int { return a + b; }",
+                "fn main() -> void { add(1); }"
+              ]
+      result <- runPipeline src
+      case result of
+        TypeErrors _ -> return ()
+        other -> expectationFailure $ "Expected TypeErrors, got: " ++ show other
+
+    it "rejects return type mismatch" $ do
+      let src = "fn f() -> int { return 3.14; }"
+      result <- runPipeline src
+      case result of
+        TypeErrors _ -> return ()
+        other -> expectationFailure $ "Expected TypeErrors, got: " ++ show other
+
+    it "rejects undefined variable" $ do
+      let src = "fn f() -> int { return undeclared; }"
+      result <- runPipeline src
+      case result of
+        TypeErrors (TCUndefinedVar {} : _) -> return ()
+        other -> expectationFailure $ "Expected TCUndefinedVar, got: " ++ show other
+
+    it "rejects non-bool condition in if" $ do
+      let src = "fn f() -> void { if (42) { }; }"
+      result <- runPipeline src
+      case result of
+        TypeErrors _ -> return ()
+        other -> expectationFailure $ "Expected TypeErrors, got: " ++ show other
+
+  describe "Pipeline — parse errors" $ do
+    it "reports parse error for unbalanced braces" $ do
+      let src = "fn f() -> void { "
+      result <- runPipeline src
+      case result of
+        ParseError msg -> "unexpected" `isPrefixOf` msg || not (null msg) `shouldBe` True
+        other -> expectationFailure $ "Expected ParseError, got: " ++ show other
+
+  describe "Pipeline — type errors shadow codegen" $ do
+    it "stops at type errors, never reaches codegen" $ do
+      let src =
+            unlines
+              [ "fn bad() -> void { x: int = 3.14; }",
+                "fn main() -> void { bad(); }"
+              ]
+      result <- runPipeline src
+      case result of
+        TypeErrors _ -> return ()
+        RunOk -> expectationFailure "Should have been rejected by type checker"
+        other -> expectationFailure $ "Expected TypeErrors, got: " ++ show other
+
+instance Show PipelineResult where
+  show RunOk = "RunOk"
+  show (LexError e) = "LexError: " ++ e
+  show (ParseError e) = "ParseError: " ++ e
+  show (TypeErrors es) = "TypeErrors[" ++ show (length es) ++ "]"
+  show (CompileError e) = "CompileError: " ++ e
+  show (RunError e) = "RunError: " ++ e
+
+instance Eq PipelineResult where
+  RunOk == RunOk = True
+  LexError a == LexError b = a == b
+  ParseError a == ParseError b = a == b
+  CompileError a == CompileError b = a == b
+  RunError a == RunError b = a == b
+  _ == _ = False

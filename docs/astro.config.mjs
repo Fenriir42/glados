@@ -40,6 +40,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Types', slug: 'reference/types' },
 						{ label: 'Operators', slug: 'reference/operators' },
+						{ label: 'Standard Library', slug: 'reference/stdlib' },
 					],
 				},
 				{

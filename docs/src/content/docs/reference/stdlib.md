@@ -1,0 +1,161 @@
+---
+title: Standard Library
+description: Complete reference for all built-in modules and functions
+---
+
+The Quant standard library is split into five modules. Built-in functions are accessed via dotted module prefixes (`math.sqrt`, `string.len`, etc.) or via the top-level aliases defined in the `std/` source files.
+
+## math
+
+Mathematical operations on numeric values.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `math.sqrt` | `(int\|float) -> float` | Square root |
+| `math.abs` | `(int) -> int` | Integer absolute value |
+| `math.fabs` | `(float) -> float` | Float absolute value |
+| `math.floor` | `(float) -> int` | Round down to nearest integer |
+| `math.ceil` | `(float) -> int` | Round up to nearest integer |
+| `math.round` | `(float) -> int` | Round to nearest integer |
+| `math.pow` | `(float, float) -> float` | Exponentiation (`b ** e`) |
+| `math.exp` | `(float) -> float` | Natural exponential (`e^x`) |
+| `math.log` | `(float) -> float` | Natural logarithm |
+| `math.sin` | `(float) -> float` | Sine (radians) |
+| `math.cos` | `(float) -> float` | Cosine (radians) |
+| `math.tan` | `(float) -> float` | Tangent (radians) |
+| `math.asin` | `(float) -> float` | Arc sine |
+| `math.acos` | `(float) -> float` | Arc cosine |
+| `math.atan` | `(float) -> float` | Arc tangent |
+| `math.atan2` | `(float, float) -> float` | Two-argument arc tangent (`y, x`) |
+| `math.min` | `(int, int) -> int` | Minimum of two integers |
+| `math.max` | `(int, int) -> int` | Maximum of two integers |
+| `math.fmin` | `(float, float) -> float` | Minimum of two floats |
+| `math.fmax` | `(float, float) -> float` | Maximum of two floats |
+
+```quant
+fn main() -> void {
+    r: float = math.sqrt(16.0);   // 4.0
+    n: int = math.abs(-7);         // 7
+    x: float = math.pow(2.0, 10.0); // 1024.0
+    println(r);
+}
+```
+
+## string
+
+String inspection and manipulation. All functions operate on `str` values.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `string.len` | `(str) -> int` | Number of characters |
+| `string.concat` | `(str, str) -> str` | Concatenate two strings |
+| `string.substring` | `(str, int, int) -> str` | Substring from `start` (inclusive) to `end` (exclusive) |
+| `string.char_at` | `(str, int) -> str` | Single-character string at index |
+| `string.contains` | `(str, str) -> bool` | True if second string is a substring |
+| `string.starts_with` | `(str, str) -> bool` | True if string starts with prefix |
+| `string.ends_with` | `(str, str) -> bool` | True if string ends with suffix |
+| `string.index_of` | `(str, str) -> int` | First occurrence index, or -1 |
+| `string.last_index_of` | `(str, str) -> int` | Last occurrence index, or -1 |
+| `string.to_upper` | `(str) -> str` | Convert to upper case |
+| `string.to_lower` | `(str) -> str` | Convert to lower case |
+| `string.trim` | `(str) -> str` | Remove leading and trailing whitespace |
+| `string.trim_left` | `(str) -> str` | Remove leading whitespace |
+| `string.trim_right` | `(str) -> str` | Remove trailing whitespace |
+| `string.reverse` | `(str) -> str` | Reverse the string |
+| `string.replace` | `(str, str, str) -> str` | Replace all occurrences |
+| `string.replace_first` | `(str, str, str) -> str` | Replace first occurrence only |
+| `string.repeat` | `(str, int) -> str` | Repeat string `n` times |
+| `string.is_empty` | `(str) -> bool` | True if string has length 0 |
+| `string.from_int` | `(int) -> str` | Integer to string |
+| `string.from_float` | `(float) -> str` | Float to string |
+| `string.to_int` | `(str) -> int` | Parse integer (0 on failure) |
+| `string.to_float` | `(str) -> float` | Parse float (0.0 on failure) |
+
+```quant
+fn main() -> void {
+    s: str = "Hello, World!";
+    println(string.len(s));                   // 13
+    println(string.to_upper("hello"));        // HELLO
+    println(string.substring(s, 0, 5));       // Hello
+    println(string.contains(s, "World"));     // True
+}
+```
+
+## array
+
+Array operations. The built-in array functions operate on `[int]` arrays at the runtime level; the `std/array.qa` wrappers provide typed aliases.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `array.len` / `len` | `([int]) -> int` | Number of elements |
+| `array.push` / `push` | `([int], int) -> void` | Append element (mutates in place) |
+| `array.pop` / `pop` | `([int]) -> int` | Remove and return last element |
+
+```quant
+fn main() -> void {
+    nums: [int];
+    array.push(nums, 10);
+    array.push(nums, 20);
+    array.push(nums, 30);
+    println(array.len(nums));   // 3
+    x: int = array.pop(nums);
+    println(x);                  // 30
+}
+```
+
+## sys
+
+System and environment functions.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `sys.exit` | `(int) -> void` | Exit process with status code |
+| `sys.time` | `() -> int` | Unix timestamp (seconds since epoch) |
+| `sys.time_millis` | `() -> int` | CPU time in milliseconds |
+| `sys.sleep` | `(int) -> void` | Sleep for `ms` milliseconds |
+| `sys.argc` | `() -> int` | Number of command-line arguments |
+| `sys.args` | `() -> [str]` | Command-line arguments as string array |
+| `sys.env` | `(str) -> str` | Read environment variable (empty string if unset) |
+| `sys.set_env` | `(str, str) -> bool` | Set environment variable |
+| `sys.platform` | `() -> str` | OS name: `"linux"`, `"macos"`, or `"windows"` |
+| `sys.hostname` | `() -> str` | Machine hostname |
+| `sys.getcwd` | `() -> str` | Current working directory |
+| `sys.chdir` | `(str) -> bool` | Change working directory; true on success |
+| `sys.system` | `(str) -> int` | Run shell command; returns exit code |
+
+```quant
+fn main() -> void {
+    println(sys.platform());   // linux
+    println(sys.getcwd());
+    sys.exit(0);
+}
+```
+
+## io
+
+Input/output functions beyond the top-level `print`/`println`.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `io.print` | `(str, ...) -> void` | Print without newline (supports `%d`, `%s`, `%f`) |
+| `io.println` | `(str, ...) -> void` | Print with trailing newline |
+| `io.read` | `() -> str` | Read one line from stdin (flushes stdout first) |
+
+## Top-level print / println
+
+`print` and `println` are available without any module prefix and are the most common output functions. They support C-style format specifiers:
+
+| Specifier | Meaning |
+|-----------|---------|
+| `%d` | Format as integer |
+| `%s` | Format as string |
+| `%f` | Format as float |
+| `%%` | Literal `%` |
+
+```quant
+fn main() -> void {
+    name: str = "Quant";
+    version: int = 1;
+    println("Hello from %s v%d!", name, version);
+}
+```

@@ -68,6 +68,7 @@ showVal :: Value -> String
 showVal (VInt n) = show n
 showVal (VFloat f) = show f
 showVal (VBool b) = if b then "true" else "false"
+showVal (VString s) = show s
 showVal (VStringRef i) = "str[" ++ show i ++ "]"
 showVal (VArrayRef i) = "arr[" ++ show i ++ "]"
 showVal VUnit = "unit"

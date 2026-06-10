@@ -309,9 +309,9 @@ callHeapBuiltin name args = case (name, args) of
     S.liftIO $ exitWith (if code == 0 then ExitSuccess else ExitFailure (fromIntegral code))
   -- sys.args : () -> [str]
   ("sys.args", []) -> do
-    args <- S.liftIO getArgs
+    sysArgs <- S.liftIO getArgs
     aid <- allocArray
-    mapM_ (heapPush aid . VString . T.pack) args
+    mapM_ (heapPush aid . VString . T.pack) sysArgs
     return $ VArrayRef aid
 
   -- string.split : str -> str -> [str]

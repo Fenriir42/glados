@@ -27,6 +27,7 @@ import Text.Megaparsec
   ( ParseErrorBundle (..),
     ShowErrorComponent,
     TraversableStream,
+    VisualStream,
     errorOffset,
     parseErrorTextPretty,
     pstateSourcePos,
@@ -52,7 +53,7 @@ analyzeText fp text =
            in (diags, tcTypes result)
 
 bundleToDiags ::
-  (TraversableStream s, ShowErrorComponent e) =>
+  (TraversableStream s, VisualStream s, ShowErrorComponent e) =>
   ParseErrorBundle s e ->
   [Diagnostic]
 bundleToDiags (ParseErrorBundle errs initPS) =
