@@ -105,11 +105,14 @@ analyzeText fp text = do
               diags = map tcErrToDiag (tcErrors result)
               userDocs = extractDocs text
               funcSymbols =
-                [ ( unLocated (funcDeclName fd),
-                    FunctionType (funcDeclParams fd) (funcDeclReturnType fd),
-                    locSpan (funcDeclName fd),
-                    blockSpan (funcDeclBody fd)
-                  )
+                [ let nameSpan = locSpan (funcDeclName fd)
+                      bodySpan = blockSpan (funcDeclBody fd)
+                      fullSpan = SourceSpan (spanStart nameSpan) (spanEnd bodySpan)
+                   in ( unLocated (funcDeclName fd),
+                        FunctionType (funcDeclParams fd) (funcDeclReturnType fd),
+                        nameSpan,
+                        fullSpan
+                      )
                   | Located _ (DeclFunction _ fd) <- rawDecls
                 ]
               foldingRanges = collectFoldingRanges rawDecls
