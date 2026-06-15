@@ -19,7 +19,7 @@ error while loading shared libraries: libzstd.so.1: cannot open shared object fi
 **Tried:**
 - `ldconfig` with Nix zstd paths added to `/etc/ld.so.conf.d/`
 - `extra-lib-dirs` in `cabal.project`
-- `constraints: zlib installed` (fails — no pre-installed zlib for GHC 9.8.4)
+- `constraints: zlib installed` (fails, no pre-installed zlib for GHC 9.8.4)
 
 **Likely fix:** Wrap the Nix GCC `cc` command (used by hsc2hs) to inject `-Wl,-rpath,/nix/store/2m97xlq3lpfawmvnp9ii2kk1j0yfzy6q-zstd-1.5.7/lib` so the compiled `Stream_hsc_make` binary has the correct RPATH at link time. Alternatively, set `NIX_LDFLAGS` to include the zstd path before invoking `cabal build`.
 

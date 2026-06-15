@@ -53,7 +53,7 @@ defaultReplConfig =
     { replPrompt = "quant> ",
       replWelcome =
         unlines
-          [ bold ++ cyan ++ "Quant REPL" ++ reset ++ " — type " ++ bold ++ ":help" ++ reset ++ " for commands",
+          [ bold ++ cyan ++ "Quant REPL" ++ reset ++ ", type " ++ bold ++ ":help" ++ reset ++ " for commands",
             "Define functions with "
               ++ bold
               ++ "fn name(...) -> T { ... }"
@@ -115,7 +115,7 @@ getMultilineInput prompt = do
             Nothing -> return $ Just (unlines (reverse acc))
             Just line -> accumulate (balance + braceBalance line) (line : acc)
 
--- | Count unclosed '{' minus closed '}' — used to detect multi-line blocks.
+-- | Count unclosed '{' minus closed '}', used to detect multi-line blocks.
 braceBalance :: String -> Int
 braceBalance = foldl (\n c -> if c == '{' then n + 1 else if c == '}' then n - 1 else n) 0
 
@@ -188,7 +188,7 @@ tryCompile config src existing = do
 runMain :: Env -> InputT IO ()
 runMain env =
   case Map.lookup (FuncName "main") env of
-    Nothing -> outputStrLn $ warn "no main() defined — use :load or define fn main() -> void { ... }"
+    Nothing -> outputStrLn $ warn "no main() defined, use :load or define fn main() -> void { ... }"
     Just _ -> do
       result <- liftIO $ runProgram (Map.elems env)
       case result of

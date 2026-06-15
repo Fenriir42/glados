@@ -110,7 +110,7 @@ main = hspec $ do
               ]
       run src >>= (`shouldBe` Right (VInt 12))
 
-  describe "Control flow — if/else" $ do
+  describe "Control flow, if/else" $ do
     it "takes true branch" $
       run "fn main() -> int { if (True) { return 1; } else { return 2; }; return 0; }"
         >>= (`shouldBe` Right (VInt 1))
@@ -130,7 +130,7 @@ main = hspec $ do
               ]
       run src >>= (`shouldBe` Right (VInt 1))
 
-  describe "Control flow — while loop" $ do
+  describe "Control flow, while loop" $ do
     it "counts to 5" $ do
       let src =
             unlines
