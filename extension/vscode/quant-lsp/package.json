@@ -47,6 +47,12 @@
         "path": "./syntaxes/quant.tmLanguage.json"
       }
     ],
+    "snippets": [
+      {
+        "language": "quant",
+        "path": "./snippets/quant.json"
+      }
+    ],
     "configuration": {
       "title": "Quant Language Server",
       "properties": {
@@ -75,15 +81,17 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc --watch -p ./",
-    "vscode:prepublish": "npm run compile",
-    "package": "npx @vscode/vsce package"
+    "compile": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "npm run compile -- --watch",
+    "vscode:prepublish": "npm run compile -- --minify",
+    "lint": "tsc --noEmit",
+    "package": "npx @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.82.0",
     "@vscode/vsce": "^2.0.0",
+    "esbuild": "^0.21.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {

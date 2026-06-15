@@ -45,7 +45,7 @@
       ]
     },
     "function-definition": {
-      "comment": "fn <name>( — highlight keyword + function name together",
+      "comment": "fn <name>( , highlight keyword + function name together",
       "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()",
       "captures": {
         "1": { "name": "keyword.declaration.function.quant" },
@@ -56,7 +56,7 @@
       "patterns": [
         {
           "name": "keyword.control.quant",
-          "match": "\\b(return|if|else|for|while|break|continue|must)\\b"
+          "match": "\\b(return|if|elif|else|for|while|break|continue|must|try)\\b"
         },
         {
           "name": "keyword.declaration.quant",
@@ -91,7 +91,7 @@
       "match": "\\b(True|False)\\b"
     },
     "module-call": {
-      "comment": "module.function( — e.g. math.sin, io.read, array.len",
+      "comment": "module.function( , e.g. math.sin, io.read, array.len",
       "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()",
       "captures": {
         "1": { "name": "entity.name.namespace.quant" },
@@ -99,7 +99,7 @@
       }
     },
     "function-call": {
-      "comment": "identifier followed by ( — function call",
+      "comment": "identifier followed by ( , function call",
       "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()",
       "captures": {
         "1": { "name": "entity.name.function.quant" }

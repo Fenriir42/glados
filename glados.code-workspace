@@ -71,6 +71,9 @@
       "*.qa": "quant",
       "*.bnf": "bnf"
     },
+
+    "quant-lsp.enable": true,
+    "quant-lsp.serverPath": "",
     "nixEnvSelector.nixFile": "${workspaceFolder}/flake.nix",
     "nixEnvSelector.useFlakes": true,
     "nixEnvSelector.flakeShell": "default"
@@ -268,11 +271,43 @@
         "presentation": {
           "reveal": "always"
         }
+      },
+      {
+        "label": "Build LSP Server",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["build", "lsp-server"],
+        "problemMatcher": ["$ghcModern"]
+      },
+      {
+        "label": "Install LSP Server (cabal install)",
+        "type": "shell",
+        "command": "cabal",
+        "args": ["install", "lsp-server", "--overwrite-policy=always"],
+        "problemMatcher": ["$ghcModern"],
+        "presentation": { "reveal": "always" }
+      },
+      {
+        "label": "Build VS Code Extension",
+        "type": "shell",
+        "command": "npm",
+        "args": ["run", "compile"],
+        "options": { "cwd": "${workspaceFolder}/extension/vscode/quant-lsp" },
+        "problemMatcher": ["$tsc"]
+      },
+      {
+        "label": "Package VS Code Extension (.vsix)",
+        "type": "shell",
+        "command": "npm",
+        "args": ["run", "package"],
+        "options": { "cwd": "${workspaceFolder}/extension/vscode/quant-lsp" },
+        "presentation": { "reveal": "always" }
       }
     ]
   },
   "extensions": {
     "recommendations": [
+      "quant-team.quant-lsp",
       "haskell.haskell",
       "justusadam.language-haskell",
       "hoovercj.haskell-linter",
