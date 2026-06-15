@@ -23,7 +23,7 @@ import Options.Applicative
 import Parser.Decl (parseDecl)
 import System.Exit (exitFailure)
 import Text.Megaparsec (errorBundlePretty, runParser)
-import TypeChecker (TypeCheckResult (..), typeCheck)
+import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
 import VM (runProgram)
 import VM.Interpreter (VMError (..))
@@ -85,7 +85,7 @@ compileSource stdlibDir filePath = do
       Left err -> Left (errorBundlePretty err)
       Right ds -> Right ds
   decls <- resolveImports stdlibDir rawDecls >>= orDie "Import error"
-  let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+  let typeErrs = tcErrors (typeCheck (Program decls))
   case typeErrs of
     [] -> return ()
     errs -> do

@@ -33,7 +33,7 @@ builtinReturnType (FuncName n)
   | "math." `T.isPrefixOf` n = floatT
   -- sys: a handful return string
   | n `elem` ["sys.env", "sys.platform", "sys.hostname", "sys.getcwd"] = stringT
-  -- sys.args returns [str] — not representable without generics; treat as unknown
+  -- sys.args returns [str] , not representable without generics; treat as unknown
   | n == "sys.args" = Nothing
   -- remaining sys.* return int (time, argc, system, chdir as int 0/1, etc.)
   | "sys." `T.isPrefixOf` n = intT

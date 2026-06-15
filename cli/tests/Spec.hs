@@ -8,7 +8,7 @@ import Lib (lexString)
 import Parser.Decl (parseDecl)
 import Test.Hspec
 import Text.Megaparsec (errorBundlePretty, many, runParser)
-import TypeChecker (TypeCheckResult (..), typeCheck)
+import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError (..))
 import VM (runProgram)
 
@@ -32,7 +32,7 @@ runPipeline src =
       case runParser (many parseDecl) "<test>" tokens of
         Left bundle -> return $ ParseError (errorBundlePretty bundle)
         Right decls -> do
-          let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+          let typeErrs = tcErrors (typeCheck (Program decls))
           if not (null typeErrs)
             then return $ TypeErrors typeErrs
             else case compileProgram (Program decls) of
@@ -60,7 +60,7 @@ runPipelineWithImports src =
           case declsOrErr of
             Left importErr -> return $ ImportError importErr
             Right decls -> do
-              let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+              let typeErrs = tcErrors (typeCheck (Program decls))
               if not (null typeErrs)
                 then return $ TypeErrors typeErrs
                 else case compileProgram (Program decls) of
@@ -76,7 +76,7 @@ runPipelineWithImports src =
 
 main :: IO ()
 main = hspec $ do
-  describe "Pipeline — valid programs" $ do
+  describe "Pipeline , valid programs" $ do
     it "runs a simple main returning void" $ do
       let src = "fn main() -> void { }"
       runPipeline src >>= \r -> r `shouldBe` RunOk
@@ -122,7 +122,7 @@ main = hspec $ do
               ]
       runPipeline src >>= (`shouldBe` RunOk)
 
-  describe "Pipeline — type errors caught before codegen" $ do
+  describe "Pipeline , type errors caught before codegen" $ do
     it "rejects float literal assigned to int variable" $ do
       let src = "fn f() -> void { x: int = 3.14; }"
       result <- runPipeline src
@@ -162,7 +162,7 @@ main = hspec $ do
         TypeErrors _ -> return ()
         other -> expectationFailure $ "Expected TypeErrors, got: " ++ show other
 
-  describe "Pipeline — parse errors" $ do
+  describe "Pipeline , parse errors" $ do
     it "reports parse error for unbalanced braces" $ do
       let src = "fn f() -> void { "
       result <- runPipeline src
@@ -170,7 +170,7 @@ main = hspec $ do
         ParseError msg -> "unexpected" `isPrefixOf` msg || not (null msg) `shouldBe` True
         other -> expectationFailure $ "Expected ParseError, got: " ++ show other
 
-  describe "Pipeline — type errors shadow codegen" $ do
+  describe "Pipeline , type errors shadow codegen" $ do
     it "stops at type errors, never reaches codegen" $ do
       let src =
             unlines
@@ -183,7 +183,7 @@ main = hspec $ do
         RunOk -> expectationFailure "Should have been rejected by type checker"
         other -> expectationFailure $ "Expected TypeErrors, got: " ++ show other
 
-  describe "Pipeline — imports" $ do
+  describe "Pipeline , imports" $ do
     it "resolves 'import math' and calls math.sqrt" $ do
       let src =
             unlines
@@ -219,7 +219,7 @@ main = hspec $ do
               ]
       runPipelineWithImports src >>= (`shouldBe` RunOk)
 
-    it "resolves 'from math import sqrt, pow' — multiple selective names" $ do
+    it "resolves 'from math import sqrt, pow' , multiple selective names" $ do
       let src =
             unlines
               [ "from math import sqrt, pow",

@@ -67,11 +67,13 @@ import TypeChecker.Error (TypeCheckError (..))
 
 data TCState = TCState
   { tcsErrors :: [TypeCheckError],
-    tcsTypes :: Map SourceSpan Type
+    tcsTypes :: Map SourceSpan Type,
+    tcsCallSites :: Map SourceSpan (FuncName, FunctionType),
+    tcsBuiltinCallSites :: Map SourceSpan FuncName
   }
 
 initialTCState :: TCState
-initialTCState = TCState [] Map.empty
+initialTCState = TCState [] Map.empty Map.empty Map.empty
 
 type TC = State TCState
 
@@ -80,6 +82,14 @@ recordError e = modify $ \s -> s {tcsErrors = tcsErrors s ++ [e]}
 
 recordType :: SourceSpan -> Type -> TC ()
 recordType sp t = modify $ \s -> s {tcsTypes = Map.insert sp t (tcsTypes s)}
+
+recordCallSite :: SourceSpan -> FuncName -> FunctionType -> TC ()
+recordCallSite sp fname ft =
+  modify $ \s -> s {tcsCallSites = Map.insert sp (fname, ft) (tcsCallSites s)}
+
+recordBuiltinCallSite :: SourceSpan -> FuncName -> TC ()
+recordBuiltinCallSite sp fname =
+  modify $ \s -> s {tcsBuiltinCallSites = Map.insert sp fname (tcsBuiltinCallSites s)}
 
 -- ---------------------------------------------------------------------------
 -- Expression inference
@@ -158,6 +168,7 @@ inferExpr env (Located sp expr) = do
         Just ft -> do
           let params = funcParams ft
           let retType = qualType (unLocated (funcReturnType ft))
+          recordCallSite nameSpan fname ft
           when (length args /= length params) $
             recordError (TCWrongArgCount sp fname (length params) (length args))
           forM_ (zip3 args argResults (map unLocated params)) $ \(argExpr, mArgType, p) ->
@@ -168,7 +179,9 @@ inferExpr env (Located sp expr) = do
           return (Just retType)
         Nothing ->
           if isKnownBuiltin fname
-            then return (builtinReturnType fname)
+            then do
+              recordBuiltinCallSite nameSpan fname
+              return (builtinReturnType fname)
             else do
               recordError (TCUndefinedFunc nameSpan fname)
               return Nothing
