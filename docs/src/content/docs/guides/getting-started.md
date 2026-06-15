@@ -19,7 +19,7 @@ fn main() -> void {
 
 ### Breaking It Down
 
-- **`fn main() -> void`**: Entry point — every program starts here
+- **`fn main() -> void`**: Entry point , every program starts here
 - **`println(...)`**: Built-in print function with a trailing newline
 - **`;`**: All statements end with a semicolon
 
@@ -104,6 +104,6 @@ fn main() -> void {
 
 ## Next Steps
 
-- [Language Basics](/guides/language-basics/) — Variables, types, and expressions
-- [Control Flow](/guides/control-flow/) — Conditionals and loops
-- [Standard Library](/reference/stdlib/) — Complete function reference
+- [Language Basics](/guides/language-basics/) , Variables, types, and expressions
+- [Control Flow](/guides/control-flow/) , Conditionals and loops
+- [Standard Library](/reference/stdlib/) , Complete function reference

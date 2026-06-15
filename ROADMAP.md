@@ -1,4 +1,4 @@
-# Quant Language — Roadmap
+# Quant Language - Roadmap
 
 Current state of the `feat/revival` branch as of 2026-06-10.
 
@@ -14,7 +14,8 @@ Current state of the `feat/revival` branch as of 2026-06-10.
 | Standard library | `math`, `string`, `array`, `sys`, `io` (~60 functions) |
 | REPL | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | `--stdlib`, `--dump`, `--load`, `--output` flags |
-| LSP server | Complete; blocked on Nix/zlib build issue |
+| LSP server | Complete; builds and runs via `nix develop` (Nix/zlib issue resolved) |
+| VS Code extension | `extension/vscode/quant-lsp/` , syntax highlighting, snippets, diagnostics, hover types |
 | Docs site | Astro; all pages written |
 | Tests | 546 total, 0 failures |
 
@@ -22,8 +23,8 @@ Current state of the `feat/revival` branch as of 2026-06-10.
 
 These features are parsed and stored in the AST but throw `UnsupportedConstruct` in the compiler:
 
-- **Struct field access / initialization** — `ExprField`, `ExprStructInit`, `LFieldAccess`
-- **Error handling** — `ExprTry`, `ExprMust`, `DeclError`, `DeclErrorSet`
+- **Struct field access / initialization** , `ExprField`, `ExprStructInit`, `LFieldAccess`
+- **Error handling** , `ExprTry`, `ExprMust`, `DeclError`, `DeclErrorSet`
 
 `Visibility` (`pub` / `static`) is parsed and stored but never enforced.
 
@@ -70,9 +71,9 @@ Effort: ~4–6h.
 Zig-style error unions. All codegen stubs:
 
 1. Decide representation: a `VResult (Either String Value)` tagged union, or a separate error stack
-2. `DeclError` / `DeclErrorSet` — register error types
-3. `ExprTry` — propagate error up the call stack (like `?` in Zig)
-4. `ExprMust` — assert non-error, panic otherwise
+2. `DeclError` / `DeclErrorSet` , register error types
+3. `ExprTry` , propagate error up the call stack (like `?` in Zig)
+4. `ExprMust` , assert non-error, panic otherwise
 5. Codegen + VM + type checker changes
 
 Effort: ~1 day. Requires design decision on error representation first.
@@ -81,9 +82,9 @@ Effort: ~1 day. Requires design decision on error representation first.
 
 ## Future / big-picture (not scoped)
 
-- **Package manager** — resolve external Quant packages, fetch from a registry
-- **Graphics / game library** — bindings to SDL2 or similar via FFI
-- **FFI** — call C functions from Quant
-- **Generics** — needed for typed arrays (`[T]`), error sets (`Result(T, E)`)
-- **Closures / first-class functions** — `fn` as a value
-- **Multi-file compilation** — `import` from user packages, not just stdlib
+- **Package manager** , resolve external Quant packages, fetch from a registry
+- **Graphics / game library** , bindings to SDL2 or similar via FFI
+- **FFI** , call C functions from Quant
+- **Generics** , needed for typed arrays (`[T]`), error sets (`Result(T, E)`)
+- **Closures / first-class functions** , `fn` as a value
+- **Multi-file compilation** , `import` from user packages, not just stdlib

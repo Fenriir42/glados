@@ -47,3 +47,11 @@ Always use the following commands to build, test, and maintain the project envir
 
 - Ensure the instruction set architecture remains minimal, highly decoupled, and easy to interpret.
 - Explicitly trace register allocations, stack states, or environment bindings during bytecode evaluation.
+
+### 4. Commits
+
+- NEVER put yourself as the co-author
+
+### 5. Misc
+
+- do not use em dashes (—)
