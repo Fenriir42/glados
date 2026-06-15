@@ -1,6 +1,7 @@
 # Integration examples for the Quant standard library.
 # Run with: glados compiler tests/std/examples.qa
 
+import io
 from math import sqrt, abs, factorial, gcd, floor
 from string import len, concat, to_upper, reverse, repeat, from_int
 from array import sum, min, max, sort

@@ -35,7 +35,10 @@ executable glados-lsp
   build-depends:
     , ast
     , base         >=4.11 && <5
+    , compiler
     , containers
+    , directory
+    , filepath
     , lsp          >=2.4
     , lsp-types    >=2.4
     , megaparsec
