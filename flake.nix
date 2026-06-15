@@ -64,11 +64,18 @@
       default = pkgs.mkShell {
         inherit (self.checks.${pkgs.system}.pre-commit-check) shellHook;
 
+        buildInputs = with pkgs; [
+          zlib
+          zstd
+        ];
+
         packages = with pkgs;
           [
+            alejandra
             chez
             curl
             jq
+            pkg-config
           ]
           ++ self.checks.${pkgs.system}.pre-commit-check.enabledPackages
           ++ (with haskell; [
