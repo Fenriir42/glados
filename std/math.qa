@@ -1,6 +1,8 @@
-// Quant Standard Library - Math Module
+# Quant Standard Library - Math Module
 
-// Absolute value for integers
+// Returns the absolute value of `x`.
+//
+// For the minimum representable int the result is implementation-defined.
 fn abs(x: int) -> int {
     if (x < 0) {
         return -x;
@@ -8,7 +10,7 @@ fn abs(x: int) -> int {
     return x;
 }
 
-// Absolute value for floats
+// Returns the absolute value of `x` as a float.
 fn fabs(x: float) -> float {
     if (x < 0.0) {
         return -x;
@@ -16,7 +18,7 @@ fn fabs(x: float) -> float {
     return x;
 }
 
-// Minimum of two integers
+// Returns the smaller of two integers.
 fn min(a: int, b: int) -> int {
     if (a < b) {
         return a;
@@ -24,7 +26,7 @@ fn min(a: int, b: int) -> int {
     return b;
 }
 
-// Maximum of two integers
+// Returns the larger of two integers.
 fn max(a: int, b: int) -> int {
     if (a > b) {
         return a;
@@ -32,7 +34,7 @@ fn max(a: int, b: int) -> int {
     return b;
 }
 
-// Minimum of two floats
+// Returns the smaller of two floats.
 fn fmin(a: float, b: float) -> float {
     if (a < b) {
         return a;
@@ -40,7 +42,7 @@ fn fmin(a: float, b: float) -> float {
     return b;
 }
 
-// Maximum of two floats
+// Returns the larger of two floats.
 fn fmax(a: float, b: float) -> float {
     if (a > b) {
         return a;
@@ -48,7 +50,10 @@ fn fmax(a: float, b: float) -> float {
     return b;
 }
 
-// e^x via Taylor series
+// Returns e raised to the power `x` (e^x).
+//
+// Computed via a 30-term Taylor series. Accurate to at least 10 decimal
+// places for |x| <= 10; precision degrades for very large magnitudes.
 fn exp(x: float) -> float {
     term: float = 1.0;
     sum: float = 1.0;
@@ -61,7 +66,11 @@ fn exp(x: float) -> float {
     return sum;
 }
 
-// Natural logarithm (Newton's method)
+// Returns the natural logarithm (base e) of `x`.
+//
+// Computed via Newton's method (25 iterations).
+//
+// **Panics** - exits with code 136 if `x` <= 0 (domain error).
 fn log(x: float) -> float {
     if (x <= 0.0) {
         sys.exit(136);
@@ -76,7 +85,11 @@ fn log(x: float) -> float {
     return y;
 }
 
-// base^exp for floats
+// Returns `base` raised to the power `exponent` (base^exponent) for floats.
+//
+// Implemented as `exp(exponent * log(base))`.
+//
+// **Panics** - exits with code 136 if `base` <= 0 (log domain error).
 fn pow(base: float, exponent: float) -> float {
     if (base <= 0.0) {
         sys.exit(136);
@@ -84,7 +97,12 @@ fn pow(base: float, exponent: float) -> float {
     return exp(exponent * log(base));
 }
 
-// Square root (Newton's method)
+// Returns the square root of `x`.
+//
+// Computed via Newton's method (20 iterations). Returns 0.0 exactly when
+// `x` is 0.0.
+//
+// **Panics** - exits with code 136 if `x` < 0 (domain error).
 fn sqrt(x: float) -> float {
     if (x < 0.0) {
         sys.exit(136);
@@ -101,7 +119,10 @@ fn sqrt(x: float) -> float {
     return guess;
 }
 
-// Sine via Taylor series
+// Returns the sine of `x` (in radians).
+//
+// The argument is first reduced to the range [-PI, PI], then approximated
+// via a 5-term Taylor series. Accurate to ~7 decimal places.
 fn sin(x: float) -> float {
     PI: float = 3.14159265358979323846;
     TAU: float = 6.28318530717958647692;
@@ -127,7 +148,10 @@ fn sin(x: float) -> float {
     return sum;
 }
 
-// Cosine via Taylor series
+// Returns the cosine of `x` (in radians).
+//
+// The argument is first reduced to the range [-PI, PI], then approximated
+// via a 5-term Taylor series. Accurate to ~7 decimal places.
 fn cos(x: float) -> float {
     PI: float = 3.14159265358979323846;
     TAU: float = 6.28318530717958647692;
@@ -152,7 +176,9 @@ fn cos(x: float) -> float {
     return sum;
 }
 
-// Floor - round down
+// Returns the largest integer less than or equal to `x` (floor).
+//
+// E.g. `floor(3.9)` => 3, `floor(-1.2)` => -2.
 fn floor(x: float) -> int {
     int_part: int = int(x);
     if (float(int_part) > x) {
@@ -161,7 +187,9 @@ fn floor(x: float) -> int {
     return int_part;
 }
 
-// Ceiling - round up
+// Returns the smallest integer greater than or equal to `x` (ceiling).
+//
+// E.g. `ceil(3.1)` => 4, `ceil(-1.8)` => -1.
 fn ceil(x: float) -> int {
     int_part: int = int(x);
     if (float(int_part) < x) {
@@ -170,7 +198,9 @@ fn ceil(x: float) -> int {
     return int_part;
 }
 
-// Round to nearest integer
+// Returns `x` rounded to the nearest integer.
+//
+// Halfway cases round away from zero: `round(0.5)` => 1, `round(-0.5)` => -1.
 fn round(x: float) -> int {
     int_part: int = int(x);
     frac_part: float = x - float(int_part);
@@ -183,7 +213,10 @@ fn round(x: float) -> int {
     return int_part;
 }
 
-// Clamp integer between min and max
+// Clamps `value` to the closed interval [min_val, max_val] for integers.
+//
+// Returns `min_val` if `value` < `min_val`, `max_val` if `value` > `max_val`,
+// otherwise returns `value` unchanged.
 fn clamp(value: int, min_val: int, max_val: int) -> int {
     if (value < min_val) {
         return min_val;
@@ -194,7 +227,10 @@ fn clamp(value: int, min_val: int, max_val: int) -> int {
     return value;
 }
 
-// Clamp float between min and max
+// Clamps `value` to the closed interval [min_val, max_val] for floats.
+//
+// Returns `min_val` if `value` < `min_val`, `max_val` if `value` > `max_val`,
+// otherwise returns `value` unchanged.
 fn fclamp(value: float, min_val: float, max_val: float) -> float {
     if (value < min_val) {
         return min_val;
@@ -205,7 +241,12 @@ fn fclamp(value: float, min_val: float, max_val: float) -> float {
     return value;
 }
 
-// Factorial (recursive)
+// Returns `n`! (n factorial) computed recursively.
+//
+// `factorial(0)` => 1, `factorial(1)` => 1.
+//
+// **Note** - overflows for n > 20 on 64-bit platforms.
+// Behaviour for negative `n` is undefined.
 fn factorial(n: int) -> int {
     if (n <= 1) {
         return 1;
@@ -213,7 +254,10 @@ fn factorial(n: int) -> int {
     return n * factorial(n - 1);
 }
 
-// Greatest common divisor
+// Returns the greatest common divisor of `a` and `b`.
+//
+// Handles negative inputs by taking their absolute values first.
+// `gcd(0, n)` = `gcd(n, 0)` = n.
 fn gcd(a: int, b: int) -> int {
     a = abs(a);
     b = abs(b);
@@ -225,7 +269,10 @@ fn gcd(a: int, b: int) -> int {
     return a;
 }
 
-// Least common multiple
+// Returns the least common multiple of `a` and `b`.
+//
+// Returns 0 if either argument is 0.
+// Handles negative inputs via `abs` internally.
 fn lcm(a: int, b: int) -> int {
     if (a == 0 || b == 0) {
         return 0;

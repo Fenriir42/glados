@@ -1,21 +1,25 @@
-// Quant Standard Library - Array Module
+# Quant Standard Library - Array Module
 
-// Get length of array
+// Returns the number of elements in `arr`.
 fn len(arr: [int]) -> int {
     return array.len(arr);
 }
 
-// Append element to end of array (modifies in place)
+// Appends `item` to the end of `arr`, modifying it in place.
 fn push(arr: [int], item: int) -> void {
     array.push(arr, item);
 }
 
-// Remove and return last element
+// Removes and returns the last element of `arr`.
+//
+// Behaviour is undefined if `arr` is empty.
 fn pop(arr: [int]) -> int {
     return array.pop(arr);
 }
 
-// Reverse array (returns new array)
+// Returns a new array containing the elements of `arr` in reverse order.
+//
+// Does not modify `arr`.
 fn reverse(arr: [int]) -> [int] {
     result: [int];
     i: int = array.len(arr) - 1;
@@ -26,7 +30,11 @@ fn reverse(arr: [int]) -> [int] {
     return result;
 }
 
-// Sort array ascending (bubble sort, returns new array)
+// Returns a new array containing the elements of `arr` sorted in ascending
+// order.
+//
+// Uses bubble sort - O(n^2) time. For large arrays prefer a faster algorithm.
+// Does not modify `arr`.
 fn sort(arr: [int]) -> [int] {
     n: int = array.len(arr);
     result: [int];
@@ -51,7 +59,8 @@ fn sort(arr: [int]) -> [int] {
     return result;
 }
 
-// Find first index of target (-1 if not found)
+// Returns the index of the first element equal to `target`, or -1 if not
+// found.
 fn index_of(arr: [int], target: int) -> int {
     i: int = 0;
     length: int = array.len(arr);
@@ -64,12 +73,15 @@ fn index_of(arr: [int], target: int) -> int {
     return -1;
 }
 
-// Check if array contains element
+// Returns true if any element of `arr` equals `target`.
 fn contains(arr: [int], target: int) -> bool {
     return index_of(arr, target) != -1;
 }
 
-// Slice from start (inclusive) to end (exclusive)
+// Returns a new array containing elements from index `start` (inclusive) to
+// `end` (exclusive).
+//
+// Behaviour is undefined if `start` or `end` are out of range.
 fn slice(arr: [int], start: int, end: int) -> [int] {
     result: [int];
     i: int = start;
@@ -80,7 +92,9 @@ fn slice(arr: [int], start: int, end: int) -> [int] {
     return result;
 }
 
-// Sum all elements
+// Returns the sum of all elements in `arr`.
+//
+// Returns 0 for an empty array.
 fn sum(arr: [int]) -> int {
     total: int = 0;
     i: int = 0;
@@ -92,7 +106,9 @@ fn sum(arr: [int]) -> int {
     return total;
 }
 
-// Minimum value in array
+// Returns the smallest element in `arr`.
+//
+// Returns 0 for an empty array.
 fn min(arr: [int]) -> int {
     length: int = array.len(arr);
     if (length == 0) {
@@ -109,7 +125,9 @@ fn min(arr: [int]) -> int {
     return min_val;
 }
 
-// Maximum value in array
+// Returns the largest element in `arr`.
+//
+// Returns 0 for an empty array.
 fn max(arr: [int]) -> int {
     length: int = array.len(arr);
     if (length == 0) {
@@ -126,7 +144,7 @@ fn max(arr: [int]) -> int {
     return max_val;
 }
 
-// Fill all slots with a value
+// Sets every element of `arr` to `value`, modifying it in place.
 fn fill(arr: [int], value: int) -> void {
     i: int = 0;
     length: int = array.len(arr);
@@ -136,7 +154,7 @@ fn fill(arr: [int], value: int) -> void {
     };
 }
 
-// Shallow copy
+// Returns a shallow copy of `arr` as a new array.
 fn copy(arr: [int]) -> [int] {
     result: [int];
     i: int = 0;
@@ -148,7 +166,9 @@ fn copy(arr: [int]) -> [int] {
     return result;
 }
 
-// True if all elements are positive
+// Returns true if every element in `arr` is strictly positive (> 0).
+//
+// Returns true for an empty array (vacuous truth).
 fn all_positive(arr: [int]) -> bool {
     i: int = 0;
     length: int = array.len(arr);
@@ -161,7 +181,9 @@ fn all_positive(arr: [int]) -> bool {
     return True;
 }
 
-// True if any element is positive
+// Returns true if at least one element in `arr` is strictly positive (> 0).
+//
+// Returns false for an empty array.
 fn any_positive(arr: [int]) -> bool {
     i: int = 0;
     length: int = array.len(arr);

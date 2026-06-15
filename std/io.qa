@@ -1,16 +1,19 @@
-// Quant Standard Library - I/O Module
+# Quant Standard Library - I/O Module
 
-// Print without newline
+// Writes `msg` to standard output without a trailing newline.
 fn print(msg: str) -> void {
     io.print(msg);
 }
 
-// Print with newline
+// Writes `msg` to standard output followed by a newline character.
 fn println(msg: str) -> void {
     io.println(msg);
 }
 
-// Read a line from stdin
+// Reads one line from standard input and returns it as a string.
+//
+// The trailing newline is stripped from the returned value.
+// Returns an empty string on EOF.
 fn read() -> str {
     return io.read();
 }

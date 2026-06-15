@@ -1,66 +1,89 @@
-// Quant Standard Library - System Module
+# Quant Standard Library - System Module
 
-// Exit with status code
+// Terminates the program immediately with the given exit `code`.
+//
+// By convention, 0 means success and any non-zero value signals failure.
+// This function never returns.
 fn exit(code: int) -> void {
     sys.exit(code);
 }
 
-// Get number of command-line arguments
+// Returns the number of command-line arguments, including the program name.
+//
+// `argc()` is always >= 1.
 fn argc() -> int {
     return sys.argc();
 }
 
-// Get command-line arguments as [str]
+// Returns the command-line arguments as an array of strings.
+//
+// `args()[0]` is the program name; subsequent elements are the arguments
+// passed by the caller.
 fn args() -> [str] {
     return sys.args();
 }
 
-// Get Unix timestamp (seconds since epoch)
+// Returns the current Unix timestamp in whole seconds since the epoch
+// (1970-01-01 00:00:00 UTC).
 fn time() -> int {
     return sys.time();
 }
 
-// Get current time in milliseconds
+// Returns the current Unix timestamp in milliseconds since the epoch.
+//
+// Useful for measuring elapsed time with sub-second resolution.
 fn time_millis() -> int {
     return sys.time_millis();
 }
 
-// Sleep for ms milliseconds
+// Suspends execution for `ms` milliseconds.
 fn sleep(ms: int) -> void {
     sys.sleep(ms);
 }
 
-// Get environment variable (empty string if unset)
+// Returns the value of the environment variable `name`.
+//
+// Returns an empty string `""` if the variable is not set.
 fn env(name: str) -> str {
     return sys.env(name);
 }
 
-// Set environment variable
+// Sets the environment variable `name` to `value`.
+//
+// Returns true on success, false if the OS rejects the operation.
 fn set_env(name: str, value: str) -> bool {
     return sys.set_env(name, value);
 }
 
-// Platform name: "linux", "windows", "macos"
+// Returns a string identifying the host platform.
+//
+// Possible values: `"linux"`, `"windows"`, `"macos"`.
 fn platform() -> str {
     return sys.platform();
 }
 
-// Hostname
+// Returns the hostname of the machine as reported by the OS.
 fn hostname() -> str {
     return sys.hostname();
 }
 
-// Current working directory
+// Returns the current working directory as an absolute path string.
 fn getcwd() -> str {
     return sys.getcwd();
 }
 
-// Change directory (returns True on success)
+// Changes the current working directory to `path`.
+//
+// Returns true on success, false if the directory does not exist or
+// the process lacks permission.
 fn chdir(path: str) -> bool {
     return sys.chdir(path);
 }
 
-// Execute shell command (returns exit code)
+// Executes `command` in the system shell (equivalent to C's `system(3)`).
+//
+// Returns the exit code of the child process, or -1 if the shell could
+// not be launched.
 fn system(command: str) -> int {
     return sys.system(command);
 }

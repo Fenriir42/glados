@@ -1,111 +1,142 @@
-// Quant Standard Library - String Module
+# Quant Standard Library - String Module
 
-// Length of string
+// Returns the number of bytes in `s`.
+//
+// This counts raw bytes, not Unicode code points. For ASCII strings the
+// result equals the number of visible characters.
 fn len(s: str) -> int {
     return string.len(s);
 }
 
-// Concatenate two strings
+// Returns a new string that is the concatenation of `a` followed by `b`.
 fn concat(a: str, b: str) -> str {
     return string.concat(a, b);
 }
 
-// Substring from start (inclusive) to end (exclusive)
+// Returns the substring of `s` from byte index `start` (inclusive) to `end`
+// (exclusive).
+//
+// Indices follow the same half-open convention as Python slices.
+// Behaviour is undefined if indices are out of range or split a multi-byte
+// character.
 fn substring(s: str, start: int, end: int) -> str {
     return string.substring(s, start, end);
 }
 
-// Character at index (single-char string)
+// Returns a single-character string containing the byte at `index`.
+//
+// Behaviour is undefined if `index` is out of range.
 fn char_at(s: str, index: int) -> str {
     return string.char_at(s, index);
 }
 
-// Split string by delimiter (returns [str])
+// Splits `s` on every occurrence of `delim` and returns the pieces as an
+// array of strings.
+//
+// If `delim` is not found, returns a single-element array containing `s`.
+// Adjacent delimiters produce empty-string elements.
 fn split(s: str, delim: str) -> [str] {
     return string.split(s, delim);
 }
 
-// Join array of strings with delimiter
+// Joins the elements of `arr` into a single string, inserting `delim` between
+// consecutive elements.
+//
+// Returns an empty string if `arr` is empty.
 fn join(arr: [str], delim: str) -> str {
     return string.join(arr, delim);
 }
 
-// Trim whitespace from both ends
+// Returns `s` with leading and trailing ASCII whitespace removed.
 fn trim(s: str) -> str {
     return string.trim(s);
 }
 
-// Trim whitespace from left
+// Returns `s` with leading ASCII whitespace removed.
 fn trim_left(s: str) -> str {
     return string.trim_left(s);
 }
 
-// Trim whitespace from right
+// Returns `s` with trailing ASCII whitespace removed.
 fn trim_right(s: str) -> str {
     return string.trim_right(s);
 }
 
-// Convert to uppercase
+// Returns `s` converted to uppercase (ASCII only).
 fn to_upper(s: str) -> str {
     return string.to_upper(s);
 }
 
-// Convert to lowercase
+// Returns `s` converted to lowercase (ASCII only).
 fn to_lower(s: str) -> str {
     return string.to_lower(s);
 }
 
-// Check if string contains substring
+// Returns true if `s` contains `substr` as a substring.
 fn contains(s: str, substr: str) -> bool {
     return string.contains(s, substr);
 }
 
-// Check if string starts with prefix
+// Returns true if `s` starts with `prefix`.
 fn starts_with(s: str, prefix: str) -> bool {
     return string.starts_with(s, prefix);
 }
 
-// Check if string ends with suffix
+// Returns true if `s` ends with `suffix`.
 fn ends_with(s: str, suffix: str) -> bool {
     return string.ends_with(s, suffix);
 }
 
-// First index of substring (-1 if not found)
+// Returns the byte index of the first occurrence of `substr` in `s`.
+//
+// Returns -1 if `substr` is not found.
 fn index_of(s: str, substr: str) -> int {
     return string.index_of(s, substr);
 }
 
-// Last index of substring (-1 if not found)
+// Returns the byte index of the last occurrence of `substr` in `s`.
+//
+// Returns -1 if `substr` is not found.
 fn last_index_of(s: str, substr: str) -> int {
     return string.last_index_of(s, substr);
 }
 
-// Replace all occurrences
+// Returns `s` with every occurrence of `old` replaced by `new`.
+//
+// Replacements are non-overlapping and proceed left-to-right.
 fn replace(s: str, old: str, new: str) -> str {
     return string.replace(s, old, new);
 }
 
-// Replace first occurrence
+// Returns `s` with only the first occurrence of `old` replaced by `new`.
 fn replace_first(s: str, old: str, new: str) -> str {
     return string.replace_first(s, old, new);
 }
 
-// Repeat string n times
+// Returns `s` repeated `n` times.
+//
+// Returns an empty string if `n` <= 0.
 fn repeat(s: str, n: int) -> str {
     return string.repeat(s, n);
 }
 
-// Reverse string
+// Returns the bytes of `s` in reverse order.
+//
+// Reversing a multi-byte UTF-8 string produces invalid UTF-8.
+// Use only on ASCII strings.
 fn reverse(s: str) -> str {
     return string.reverse(s);
 }
 
-// True if string is empty
+// Returns true if `s` is empty (length 0).
 fn is_empty(s: str) -> bool {
     return string.is_empty(s);
 }
 
-// Pad left to reach target length
+// Returns `s` left-padded with `pad_char` to reach at least `length` bytes.
+//
+// If `len(s)` >= `length`, `s` is returned unchanged.
+// `pad_char` should be a single-byte (ASCII) character.
 fn pad_left(s: str, length: int, pad_char: str) -> str {
     current_len: int = string.len(s);
     if (current_len >= length) {
@@ -115,7 +146,10 @@ fn pad_left(s: str, length: int, pad_char: str) -> str {
     return string.concat(padding, s);
 }
 
-// Pad right to reach target length
+// Returns `s` right-padded with `pad_char` to reach at least `length` bytes.
+//
+// If `len(s)` >= `length`, `s` is returned unchanged.
+// `pad_char` should be a single-byte (ASCII) character.
 fn pad_right(s: str, length: int, pad_char: str) -> str {
     current_len: int = string.len(s);
     if (current_len >= length) {
@@ -125,22 +159,26 @@ fn pad_right(s: str, length: int, pad_char: str) -> str {
     return string.concat(s, padding);
 }
 
-// Convert int to string
+// Returns the decimal string representation of integer `n`.
 fn from_int(n: int) -> str {
     return string.from_int(n);
 }
 
-// Convert float to string
+// Returns the string representation of float `f`.
 fn from_float(f: float) -> str {
     return string.from_float(f);
 }
 
-// Parse string to int (returns 0 on failure)
+// Parses `s` as a decimal integer and returns the value.
+//
+// Returns 0 if `s` cannot be parsed (no error is raised).
 fn to_int(s: str) -> int {
     return string.to_int(s);
 }
 
-// Parse string to float (returns 0.0 on failure)
+// Parses `s` as a floating-point number and returns the value.
+//
+// Returns 0.0 if `s` cannot be parsed (no error is raised).
 fn to_float(s: str) -> float {
     return string.to_float(s);
 }
