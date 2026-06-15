@@ -1,17 +1,23 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module LSPServer.Analyze (analyzeText) where
+module LSPServer.Analyze (AnalyzeResult (..), analyzeText, emptyResult) where
 
-import AST.Types.AST (Program (..))
+import AST.Types.AST (Block (..), Decl (..), FunctionDecl (..), Program (..), Stmt (..))
 import AST.Types.Common
   ( Column (..),
+    FilePath' (..),
     FuncName (..),
     Line (..),
+    Located (..),
+    Offset (..),
     SourcePos (..),
     SourceSpan (..),
+    VarName,
+    locSpan,
+    unLocated,
   )
-import AST.Types.Type (FunctionType, Type)
+import AST.Types.Type (FunctionType (..), Type)
 import Compiler.Import (resolveImports)
 import Control.Applicative (many)
 import Control.Exception (SomeException, catch)
@@ -31,7 +37,7 @@ import Language.LSP.Protocol.Types
 import Lexer (parseRawTokens)
 import Parser.Decl (parseDecl)
 import System.Directory (getCurrentDirectory, listDirectory)
-import System.FilePath ((</>))
+import System.FilePath (takeBaseName, (</>))
 import System.IO (IOMode (..), hGetContents, hSetEncoding, openFile, utf8)
 import Text.Megaparsec
   ( ParseErrorBundle (..),
@@ -45,26 +51,51 @@ import Text.Megaparsec
     runParser,
   )
 import qualified Text.Megaparsec as MP
-import TypeChecker (TypeCheckResult (..), tcBuiltinCallSites, tcCallSites, tcErrors, tcTypes, typeCheck)
+import TypeChecker
+  ( TypeCheckResult (..),
+    tcBuiltinCallSites,
+    tcCallSites,
+    tcCallWithArgs,
+    tcErrors,
+    tcFuncDefSites,
+    tcFuncEnv,
+    tcTypes,
+    tcVarUseSites,
+    typeCheck,
+  )
 import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
 
+data AnalyzeResult = AnalyzeResult
+  { arDiagnostics :: [Diagnostic],
+    arTypes :: Map SourceSpan Type,
+    arCallSites :: Map SourceSpan (FuncName, FunctionType),
+    arBuiltinCallSites :: Map SourceSpan FuncName,
+    arDocs :: Map FuncName Text,
+    arFuncEnv :: Map FuncName FunctionType,
+    arFuncDefSites :: Map FuncName SourceSpan,
+    arStdlibDefSites :: Map FuncName (FilePath, SourceSpan),
+    arCallWithArgs :: Map SourceSpan (FuncName, FunctionType, [SourceSpan]),
+    arFuncSymbols :: [(FuncName, FunctionType, SourceSpan, SourceSpan)],
+    arFoldingRanges :: [SourceSpan],
+    arVarUseSites :: Map SourceSpan (VarName, SourceSpan)
+  }
+
+emptyResult :: [Diagnostic] -> AnalyzeResult
+emptyResult diags =
+  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty
+
 -- | Lex, resolve imports, type-check a source file.
--- Returns diagnostics, a span→type map (for hover), a span→(name,sig) map
--- (for function-signature hover), and a name→doc map (for doc-comment hover).
-analyzeText ::
-  FilePath ->
-  Text ->
-  IO ([Diagnostic], Map SourceSpan Type, Map SourceSpan (FuncName, FunctionType), Map SourceSpan FuncName, Map FuncName Text)
+analyzeText :: FilePath -> Text -> IO AnalyzeResult
 analyzeText fp text = do
   cwd <- getCurrentDirectory
   let stdlibDir = cwd </> "std"
   case runParser parseRawTokens fp text of
     Left bundle ->
-      return (bundleToDiags bundle, Map.empty, Map.empty, Map.empty, Map.empty)
+      return (emptyResult (bundleToDiags bundle))
     Right tokens ->
       case runParser (many parseDecl) fp tokens of
         Left bundle ->
-          return (bundleToDiags bundle, Map.empty, Map.empty, Map.empty, Map.empty)
+          return (emptyResult (bundleToDiags bundle))
         Right rawDecls -> do
           resolvedOrErr <- resolveImports stdlibDir rawDecls
           let decls = case resolvedOrErr of
@@ -73,9 +104,52 @@ analyzeText fp text = do
               result = typeCheck (Program decls)
               diags = map tcErrToDiag (tcErrors result)
               userDocs = extractDocs text
+              funcSymbols =
+                [ ( unLocated (funcDeclName fd),
+                    FunctionType (funcDeclParams fd) (funcDeclReturnType fd),
+                    locSpan (funcDeclName fd),
+                    blockSpan (funcDeclBody fd)
+                  )
+                  | Located _ (DeclFunction _ fd) <- rawDecls
+                ]
+              foldingRanges = collectFoldingRanges rawDecls
           stdDocs <- extractStdlibDocs stdlibDir
+          stdDefSites <- extractStdlibDefSites stdlibDir
           let allDocs = Map.union userDocs stdDocs
-          return (diags, tcTypes result, tcCallSites result, tcBuiltinCallSites result, allDocs)
+          return $
+            AnalyzeResult
+              diags
+              (tcTypes result)
+              (tcCallSites result)
+              (tcBuiltinCallSites result)
+              allDocs
+              (tcFuncEnv result)
+              (tcFuncDefSites result)
+              stdDefSites
+              (tcCallWithArgs result)
+              funcSymbols
+              foldingRanges
+              (tcVarUseSites result)
+
+-- ---------------------------------------------------------------------------
+-- Folding range collection
+-- Collects all Block spans for fold regions (function bodies, if/while/for blocks).
+
+collectFoldingRanges :: [Located (Decl ())] -> [SourceSpan]
+collectFoldingRanges = concatMap collectDecl
+  where
+    collectDecl (Located _ (DeclFunction _ fd)) = collectBlock (funcDeclBody fd)
+    collectDecl _ = []
+
+    collectBlock (Block sp stmts) =
+      sp : concatMap (collectStmt . unLocated) stmts
+
+    collectStmt (StmtIf _ thenBlock mElse) =
+      collectBlock thenBlock ++ maybe [] collectBlock mElse
+    collectStmt (StmtWhile _ body) = collectBlock body
+    collectStmt (StmtFor _ _ _ body) = collectBlock body
+    collectStmt (StmtBlock block) = collectBlock block
+    collectStmt _ = []
 
 -- ---------------------------------------------------------------------------
 -- Doc-comment extraction
@@ -105,7 +179,6 @@ extractDocs src =
       | otherwise = Nothing
 
 -- | Load doc comments from every *.qa file in the stdlib directory.
--- Uses explicit UTF-8 encoding to avoid locale-dependent failures.
 extractStdlibDocs :: FilePath -> IO (Map FuncName Text)
 extractStdlibDocs dir = do
   files <- listDirectory dir `catch` \(_ :: SomeException) -> return []
@@ -123,8 +196,76 @@ extractStdlibDocs dir = do
       )
         `catch` \(_ :: SomeException) -> return Map.empty
 
+-- | Load function definition spans from every *.qa file in the stdlib directory.
+-- Stores under the module-qualified name (e.g. "math.sqrt") for lookup by call sites.
+extractStdlibDefSites :: FilePath -> IO (Map FuncName (FilePath, SourceSpan))
+extractStdlibDefSites dir = do
+  files <- listDirectory dir `catch` \(_ :: SomeException) -> return []
+  let qaFiles = filter (".qa" `isSuffixOf`) files
+  maps <- mapM readDefSites qaFiles
+  return (Map.unions maps)
+  where
+    readDefSites f = do
+      let fp = dir </> f
+          modName = takeBaseName f
+      textOrErr <-
+        ( do
+            h <- openFile fp ReadMode
+            hSetEncoding h utf8
+            contents <- hGetContents h
+            let !t = T.pack contents
+            return (Right t)
+          )
+          `catch` \(_ :: SomeException) -> return (Left ())
+      case textOrErr of
+        Left _ -> return Map.empty
+        Right text ->
+          case runParser parseRawTokens fp text of
+            Left _ -> return (lineScannedDefSites fp modName text)
+            Right tokens ->
+              case runParser (many parseDecl) fp tokens of
+                Left _ -> return (lineScannedDefSites fp modName text)
+                Right rawDecls ->
+                  let funcEntries =
+                        [ let bareName = unLocated (funcDeclName fd)
+                              qualName = FuncName (T.pack modName <> "." <> unFuncName bareName)
+                              sp = locSpan (funcDeclName fd)
+                           in [(qualName, (fp, sp)), (bareName, (fp, sp))]
+                          | Located _ (DeclFunction _ fd) <- rawDecls
+                        ]
+                   in return (Map.fromList (concat funcEntries))
+
+-- | Fallback for stdlib files that fail to parse: scan lines for `fn name(`.
+lineScannedDefSites :: FilePath -> String -> Text -> Map FuncName (FilePath, SourceSpan)
+lineScannedDefSites fp modName text =
+  Map.fromList $ go 1 (T.lines text)
+  where
+    go _ [] = []
+    go lineNum (l : rest) =
+      let stripped = T.strip l
+       in case parseFnNameAt stripped lineNum of
+            Just (name, sp) ->
+              let qualName = FuncName (T.pack modName <> "." <> name)
+                  bareName = FuncName name
+               in (qualName, (fp, sp)) : (bareName, (fp, sp)) : go (lineNum + 1) rest
+            Nothing -> go (lineNum + 1) rest
+
+    parseFnNameAt t lineNum
+      | T.isPrefixOf "fn " t =
+          let afterFn = T.drop 3 t
+              name = T.takeWhile (\c -> c == '_' || c `elem` ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9']) afterFn
+              col = 4
+              endCol = col + T.length name
+              fp' = FilePath' (T.pack fp)
+              startPos = SourcePos fp' (Line lineNum) (Column col) (Offset 0)
+              endPos = SourcePos fp' (Line lineNum) (Column endCol) (Offset 0)
+           in if T.null name
+                then Nothing
+                else Just (name, SourceSpan startPos endPos)
+      | otherwise = Nothing
+
 -- ---------------------------------------------------------------------------
--- Parse error → LSP diagnostic conversion
+-- Parse error -> LSP diagnostic conversion
 
 bundleToDiags ::
   (TraversableStream s, VisualStream s, ShowErrorComponent e) =>

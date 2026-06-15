@@ -24,7 +24,16 @@ executable glados-lsp
   hs-source-dirs:     src
   other-modules:
     LSPServer.Analyze
+    LSPServer.Completion
+    LSPServer.Definition
+    LSPServer.DocumentSymbol
+    LSPServer.Folding
+    LSPServer.Highlight
     LSPServer.Hover
+    LSPServer.InlayHints
+    LSPServer.References
+    LSPServer.Rename
+    LSPServer.SignatureHelp
 
   default-extensions:
     DuplicateRecordFields

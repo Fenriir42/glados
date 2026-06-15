@@ -20,6 +20,7 @@ import AST.Types.Common
   ( FuncName,
     Located (..),
     SourceSpan,
+    VarName,
     locSpan,
     unLocated,
   )
@@ -57,11 +58,11 @@ import qualified Data.Map as Map
 import TypeChecker.Builtins (builtinReturnType, isKnownBuiltin)
 import TypeChecker.Env
   ( Env (..),
-    insertVar,
+    insertVarWithSpan,
     lookupFunc,
     lookupVar,
+    lookupVarDef,
     setReturnType,
-    withVars,
   )
 import TypeChecker.Error (TypeCheckError (..))
 
@@ -69,11 +70,13 @@ data TCState = TCState
   { tcsErrors :: [TypeCheckError],
     tcsTypes :: Map SourceSpan Type,
     tcsCallSites :: Map SourceSpan (FuncName, FunctionType),
-    tcsBuiltinCallSites :: Map SourceSpan FuncName
+    tcsBuiltinCallSites :: Map SourceSpan FuncName,
+    tcsCallWithArgs :: Map SourceSpan (FuncName, FunctionType, [SourceSpan]),
+    tcsVarUseSites :: Map SourceSpan (VarName, SourceSpan)
   }
 
 initialTCState :: TCState
-initialTCState = TCState [] Map.empty Map.empty Map.empty
+initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type TC = State TCState
 
@@ -91,6 +94,14 @@ recordBuiltinCallSite :: SourceSpan -> FuncName -> TC ()
 recordBuiltinCallSite sp fname =
   modify $ \s -> s {tcsBuiltinCallSites = Map.insert sp fname (tcsBuiltinCallSites s)}
 
+recordCallWithArgs :: SourceSpan -> FuncName -> FunctionType -> [SourceSpan] -> TC ()
+recordCallWithArgs sp fname ft argSpans =
+  modify $ \s -> s {tcsCallWithArgs = Map.insert sp (fname, ft, argSpans) (tcsCallWithArgs s)}
+
+recordVarUse :: SourceSpan -> VarName -> SourceSpan -> TC ()
+recordVarUse useSp name defSp =
+  modify $ \s -> s {tcsVarUseSites = Map.insert useSp (name, defSp) (tcsVarUseSites s)}
+
 -- ---------------------------------------------------------------------------
 -- Expression inference
 
@@ -107,7 +118,10 @@ inferExpr env (Located sp expr) = do
     go (ExprLiteral lit) = inferLit lit
     go (ExprVar (Located vspan name)) =
       case lookupVar name env of
-        Just qt -> return (Just (qualType qt))
+        Just qt -> do
+          forM_ (lookupVarDef name env) $ \defSp ->
+            recordVarUse vspan name defSp
+          return (Just (qualType qt))
         Nothing -> recordError (TCUndefinedVar vspan name) >> return Nothing
     go (ExprBinary op lhs rhs) = do
       mL <- inferExpr env lhs
@@ -121,7 +135,7 @@ inferExpr env (Located sp expr) = do
         Just t -> checkUnary sp op t
         Nothing -> return Nothing
     go (ExprCall (Located nameSpan fname) args) =
-      inferCall nameSpan fname args
+      inferCall sp nameSpan fname args
     go (ExprIndex arrExpr idxExpr) = do
       mArrType <- inferExpr env arrExpr
       void $ inferExpr env idxExpr
@@ -161,14 +175,16 @@ inferExpr env (Located sp expr) = do
       mapM_ (inferExpr env) rest
       return $ fmap (TypeArray . ArrayType . QualifiedType Mutable) mT
 
-    inferCall :: SourceSpan -> FuncName -> [Located (Expr ())] -> TC (Maybe Type)
-    inferCall nameSpan fname args = do
+    inferCall :: SourceSpan -> SourceSpan -> FuncName -> [Located (Expr ())] -> TC (Maybe Type)
+    inferCall callSp nameSpan fname args = do
+      let argSpans = map locSpan args
       argResults <- mapM (inferExpr env) args
       case lookupFunc fname env of
         Just ft -> do
           let params = funcParams ft
           let retType = qualType (unLocated (funcReturnType ft))
           recordCallSite nameSpan fname ft
+          recordCallWithArgs callSp fname ft argSpans
           when (length args /= length params) $
             recordError (TCWrongArgCount sp fname (length params) (length args))
           forM_ (zip3 args argResults (map unLocated params)) $ \(argExpr, mArgType, p) ->
@@ -196,13 +212,13 @@ checkBlock env (Block _ stmts) = foldM_ checkStmt env stmts
 -- New variables declared in this statement are visible in subsequent ones.
 checkStmt :: Env -> Located (Stmt ()) -> TC Env
 checkStmt env (Located stmtSpan stmt) = case stmt of
-  StmtVarDecl (Located _ name) (Located _ qt) mInit -> do
+  StmtVarDecl (Located declSpan name) (Located _ qt) mInit -> do
     forM_ mInit $ \initExpr -> do
       mT <- inferExpr env initExpr
       forM_ mT $ \t ->
         unless (typesCompatible t (qualType qt)) $
           recordError (TCTypeMismatch (locSpan initExpr) (qualType qt) t)
-    return (insertVar name qt env)
+    return (insertVarWithSpan name qt declSpan env)
   StmtAssign lvalue _ rhs -> do
     let lvType = lvalueType env lvalue
     mRhsType <- inferExpr env rhs
@@ -233,12 +249,12 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
   StmtFor mInit mCond mStep body -> do
     env' <- case mInit of
       Nothing -> return env
-      Just (ForInitDecl (Located _ name) (Located _ qt) initExpr) -> do
+      Just (ForInitDecl (Located declSpan name) (Located _ qt) initExpr) -> do
         mT <- inferExpr env initExpr
         forM_ mT $ \t ->
           unless (typesCompatible t (qualType qt)) $
             recordError (TCTypeMismatch (locSpan initExpr) (qualType qt) t)
-        return (insertVar name qt env)
+        return (insertVarWithSpan name qt declSpan env)
       Just (ForInitExpr exprStmt) -> do
         void $ inferExpr env exprStmt
         return env
@@ -276,10 +292,12 @@ checkDecl env (Located _ decl) = case decl of
 
 checkFunction :: Env -> FunctionDecl () -> TC ()
 checkFunction baseEnv fd = do
-  let params = map unLocated (funcDeclParams fd)
   let retQt = unLocated (funcDeclReturnType fd)
-  let paramBindings = map (\p -> (paramName p, paramType p)) params
-  let env = withVars paramBindings (setReturnType retQt baseEnv)
+  let env =
+        foldr
+          (\(Located psp p) e -> insertVarWithSpan (paramName p) (paramType p) psp e)
+          (setReturnType retQt baseEnv)
+          (funcDeclParams fd)
   checkBlock env (funcDeclBody fd)
 
 -- ---------------------------------------------------------------------------

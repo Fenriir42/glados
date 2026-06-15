@@ -1,4 +1,4 @@
-module LSPServer.Hover (findHoverAtPos) where
+module LSPServer.Hover (findHoverAtPos, renderSig, showType, knownBuiltins) where
 
 import AST.Types.Common
   ( Column (..),
