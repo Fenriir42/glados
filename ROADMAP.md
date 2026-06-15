@@ -14,8 +14,8 @@ Current state of the `feat/revival` branch as of 2026-06-10.
 | Standard library | `math`, `string`, `array`, `sys`, `io` (~60 functions) |
 | REPL | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | `--stdlib`, `--dump`, `--load`, `--output` flags |
-| LSP server | Complete; builds and runs via `nix develop` (Nix/zlib issue resolved) |
-| VS Code extension | `extension/vscode/quant-lsp/` , syntax highlighting, snippets, diagnostics, hover types |
+| LSP server | Diagnostics, hover, completion, go-to-definition, signature help |
+| VS Code extension | `extension/vscode/quant-lsp/` , syntax highlighting, snippets, all LSP features wired |
 | Docs site | Astro; all pages written |
 | Tests | 546 total, 0 failures |
 
@@ -27,6 +27,30 @@ These features are parsed and stored in the AST but throw `UnsupportedConstruct`
 - **Error handling** , `ExprTry`, `ExprMust`, `DeclError`, `DeclErrorSet`
 
 `Visibility` (`pub` / `static`) is parsed and stored but never enforced.
+
+---
+
+## LSP expansion (in progress)
+
+Expanding toward Rust Analyzer / TypeScript LSP feature parity.
+
+### Phase 1 - No type-checker changes needed
+- **Document symbols** (`textDocument/documentSymbol`) - OUTLINE panel showing all `fn` declarations
+- **Document highlight** (`textDocument/documentHighlight`) - all occurrences glow on cursor
+- **Find references** (`textDocument/references`) - right-click Find All References
+- **Rename** (`textDocument/rename`) - F2 rename for user-defined functions (single-file)
+- **Folding ranges** (`textDocument/foldingRange`) - collapse function bodies / if / while / for blocks
+
+### Phase 2 - Variable tracking (requires type-checker extension)
+- Extend `Env` with variable declaration spans (`envVarDefs`)
+- Add `tcsVarUseSites` to TCState to map each `ExprVar` to its declaration
+- Unlocks: variable go-to-def, variable highlight, variable references, variable rename
+
+### Phase 3 - Inlay hints
+- **Parameter name hints** (`textDocument/inlayHint`) - show `paramName:` before each argument
+
+### Phase 4 - Semantic tokens
+- **Semantic highlighting** (`textDocument/semanticTokens`) - function calls, variables, parameters colored by role
 
 ---
 
