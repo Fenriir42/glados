@@ -5,13 +5,13 @@ module TypeChecker
   )
 where
 
-import AST.Types.AST (Decl (..), FunctionDecl (..), Program (..), programDecls)
+import AST.Types.AST (Decl (..), FunctionDecl (..), Program (..), StructDecl (..), programDecls)
 import AST.Types.Common (FuncName, Located (..), SourceSpan, VarName, locSpan, unLocated)
-import AST.Types.Type (FunctionType (..), Type)
+import AST.Types.Type (FunctionType (..), StructType (..), Type)
 import Control.Monad.State (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import TypeChecker.Env (Env, emptyEnv, envFuncs, insertFunc)
+import TypeChecker.Env (Env, emptyEnv, envFuncs, insertFunc, insertStruct)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -33,7 +33,8 @@ typeCheck :: Program () -> TypeCheckResult
 typeCheck prog =
   let decls = programDecls prog
       funcEnv = foldr collectFunc emptyEnv decls
-      finalState = execState (mapM_ (checkDecl funcEnv) decls) initialTCState
+      fullEnv = foldr collectStruct funcEnv decls
+      finalState = execState (mapM_ (checkDecl fullEnv) decls) initialTCState
       defSites =
         Map.fromList
           [ (unLocated (funcDeclName fd), locSpan (funcDeclName fd))
@@ -44,7 +45,7 @@ typeCheck prog =
         (tcsTypes finalState)
         (tcsCallSites finalState)
         (tcsBuiltinCallSites finalState)
-        (envFuncs funcEnv)
+        (envFuncs fullEnv)
         defSites
         (tcsCallWithArgs finalState)
         (tcsVarUseSites finalState)
@@ -53,6 +54,13 @@ typeCheck prog =
     collectFunc (Located _ (DeclFunction _ fd)) env =
       insertFunc (unLocated (funcDeclName fd)) (mkFuncType fd) env
     collectFunc _ env = env
+
+    collectStruct :: Located (Decl ()) -> Env -> Env
+    collectStruct (Located _ (DeclStruct _ sd)) env =
+      let tname = unLocated (structDeclName sd)
+          fields = map unLocated (structDeclFields sd)
+       in insertStruct tname (StructType tname fields) env
+    collectStruct _ env = env
 
     mkFuncType :: FunctionDecl () -> FunctionType
     mkFuncType fd = FunctionType (funcDeclParams fd) (funcDeclReturnType fd)

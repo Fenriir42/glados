@@ -42,6 +42,8 @@ import AST.Types.Type
     FunctionType (..),
     PrimitiveType (..),
     QualifiedType (..),
+    StructField (..),
+    StructType (..),
     Type (..),
     defaultFloatType,
     defaultIntType,
@@ -53,6 +55,7 @@ import AST.Types.Type
   )
 import Control.Monad (foldM_, forM_, unless, void, when)
 import Control.Monad.State (State, modify)
+import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import TypeChecker.Builtins (builtinReturnType, isKnownBuiltin)
@@ -60,6 +63,7 @@ import TypeChecker.Env
   ( Env (..),
     insertVarWithSpan,
     lookupFunc,
+    lookupStruct,
     lookupVar,
     lookupVarDef,
     setReturnType,
@@ -143,9 +147,17 @@ inferExpr env (Located sp expr) = do
         Just (TypeArray (ArrayType elemQt)) -> return (Just (qualType elemQt))
         Just t -> recordError (TCIndexNonArray (locSpan arrExpr) t) >> return Nothing
         Nothing -> return Nothing
-    go (ExprField structExpr _) = do
-      void $ inferExpr env structExpr
-      return Nothing
+    go (ExprField structExpr locField) = do
+      mStructType <- inferExpr env structExpr
+      case mStructType of
+        Just (TypeStruct tname) ->
+          case lookupStruct tname env of
+            Nothing -> return Nothing
+            Just st ->
+              let fname = unLocated locField
+                  mSf = find (\f -> fieldName f == fname) (structFields st)
+               in return (fmap (qualType . fieldType) mSf)
+        _ -> return Nothing
     go (ExprStructInit (Located _ tname) fieldExprs) = do
       forM_ fieldExprs $ \(_, e) -> inferExpr env e
       return (Just (TypeStruct tname))
@@ -311,7 +323,16 @@ lvalueType env (Located _ lv) = case lv of
     case lvalueType env inner of
       Just (TypeArray (ArrayType elemQt)) -> Just (qualType elemQt)
       _ -> Nothing
-  LFieldAccess _ _ -> Nothing
+  LFieldAccess inner locField ->
+    case lvalueType env inner of
+      Just (TypeStruct tname) ->
+        case lookupStruct tname env of
+          Nothing -> Nothing
+          Just st ->
+            let fname = unLocated locField
+                mSf = find (\f -> fieldName f == fname) (structFields st)
+             in fmap (qualType . fieldType) mSf
+      _ -> Nothing
 
 -- | Two types are compatible when they can be used interchangeably.
 -- We allow any int width with any other int width, and similarly for float,
