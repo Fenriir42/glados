@@ -19,7 +19,8 @@ module Compiler.Bytecode
 where
 
 import AST.Types.Common
-  ( FuncName,
+  ( FieldName,
+    FuncName,
     VarName,
   )
 import Data.Hashable (Hashable)
@@ -36,6 +37,8 @@ data Value
   | -- | dynamically produced string (runtime only, never serialised)
     VString Text
   | VArrayRef Int
+  | -- | reference into the struct heap
+    VStructRef Int
   | VUnit
   deriving stock (Show, Eq, Generic)
 
@@ -126,6 +129,12 @@ data Instruction
     IArraySet
   | -- | Cast top of stack to the given type
     ICast CastType
+  | -- | Allocate a new empty struct in the struct heap; push its VStructRef
+    INewStruct
+  | -- | Pop VStructRef, push the named field value
+    IFieldGet FieldName
+  | -- | Pop value then VStructRef; set the named field in the struct heap
+    IFieldSet FieldName
   deriving stock (Show, Eq, Generic)
 
 instance Hashable Instruction

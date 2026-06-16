@@ -5,7 +5,7 @@ module VM.Interpreter
   )
 where
 
-import AST.Types.Common (FuncName (..), VarName)
+import AST.Types.Common (FieldName (..), FuncName (..), VarName)
 import Compiler.Bytecode
   ( BinaryOp (..),
     Bytecode (..),
@@ -59,6 +59,7 @@ data VMState = VMState
     vmStrings :: [Text],
     vmCallStack :: [Frame],
     vmHeap :: Map Int (Map Int Value),
+    vmStructHeap :: Map Int (Map Text Value),
     vmNextId :: Int,
     vmFunctions :: Map FuncName Bytecode,
     vmCurrentFunc :: FuncName
@@ -85,6 +86,7 @@ runProgram bytecodes = do
                 vmStrings = bytecodeStrings mainBc,
                 vmCallStack = [],
                 vmHeap = Map.empty,
+                vmStructHeap = Map.empty,
                 vmNextId = 0,
                 vmFunctions = funcs,
                 vmCurrentFunc = FuncName "main"
@@ -283,6 +285,36 @@ execInstr = \case
     r <- evalCast ct v
     push r
     return Nothing
+  INewStruct -> do
+    sid <- gets vmNextId
+    modify $ \s ->
+      s
+        { vmStructHeap = Map.insert sid Map.empty (vmStructHeap s),
+          vmNextId = sid + 1
+        }
+    push (VStructRef sid)
+    return Nothing
+  IFieldGet (FieldName fname) -> do
+    ref <- pop "IFieldGet"
+    case ref of
+      VStructRef sid -> do
+        sh <- gets vmStructHeap
+        case Map.lookup sid sh of
+          Nothing -> throwError $ VMRuntimeError $ "Struct #" ++ show sid ++ " not found"
+          Just fields ->
+            case Map.lookup fname fields of
+              Nothing -> throwError $ VMRuntimeError $ "Field '" ++ T.unpack fname ++ "' not found in struct #" ++ show sid
+              Just v -> push v >> return Nothing
+      _ -> throwError $ VMTypeMismatch $ "IFieldGet: expected struct ref, got " ++ show ref
+  IFieldSet (FieldName fname) -> do
+    val <- pop "IFieldSet (value)"
+    ref <- pop "IFieldSet (ref)"
+    case ref of
+      VStructRef sid -> do
+        modify $ \s ->
+          s {vmStructHeap = Map.adjust (Map.insert fname val) sid (vmStructHeap s)}
+        return Nothing
+      _ -> throwError $ VMTypeMismatch $ "IFieldSet: expected struct ref, got " ++ show ref
 
 -- ---------------------------------------------------------------------------
 -- Heap-aware builtins (array.len, array.push, array.pop, sys.exit)

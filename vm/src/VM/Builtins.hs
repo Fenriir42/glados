@@ -95,6 +95,7 @@ renderValue _ (VInt n) _ = T.pack (show n)
 renderValue _ (VFloat f) _ = T.pack (formatFloat f)
 renderValue _ (VBool b) _ = if b then "True" else "False"
 renderValue _ (VArrayRef i) _ = T.pack ("<array#" ++ show i ++ ">")
+renderValue _ (VStructRef i) _ = T.pack ("<struct#" ++ show i ++ ">")
 renderValue _ VUnit _ = ""
 
 formatFloat :: Double -> String
