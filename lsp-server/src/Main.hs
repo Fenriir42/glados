@@ -24,6 +24,7 @@ import qualified LSPServer.Hover as Hover
 import LSPServer.InlayHints (makeInlayHints)
 import LSPServer.References (findReferences)
 import LSPServer.Rename (findRename, prepareRename)
+import LSPServer.SemanticTokens (buildSemanticTokens)
 import LSPServer.SignatureHelp (findSignatureHelp)
 import Language.LSP.Diagnostics (partitionBySource)
 import Language.LSP.Protocol.Message
@@ -286,7 +287,24 @@ mkHandlers stateVar =
         let hints = case Map.lookup nuri st of
               Nothing -> []
               Just fs -> makeInlayHints (fsCallWithArgs fs) range
-        responder (Right (LSP.InL hints))
+        responder (Right (LSP.InL hints)),
+      -- Semantic tokens (full)
+      requestHandler SMethod_TextDocumentSemanticTokensFull $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.SemanticTokensParams _ _ tdId) = req
+            LSP.TextDocumentIdentifier uri = tdId
+            nuri = LSP.toNormalizedUri uri
+        st <- liftIO $ readTVarIO stateVar
+        let result = case Map.lookup nuri st of
+              Nothing -> LSP.InR LSP.Null
+              Just fs ->
+                LSP.InL $
+                  buildSemanticTokens
+                    (fsCallSites fs)
+                    (fsBuiltinCallSites fs)
+                    (fsFuncDefSites fs)
+                    (fsVarUseSites fs)
+                    (fsFilePath fs)
+        responder (Right result)
     ]
 
 analyzeAndPublish ::

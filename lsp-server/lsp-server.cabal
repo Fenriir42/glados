@@ -33,6 +33,7 @@ executable glados-lsp
     LSPServer.InlayHints
     LSPServer.References
     LSPServer.Rename
+    LSPServer.SemanticTokens
     LSPServer.SignatureHelp
 
   default-extensions:
