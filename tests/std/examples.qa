@@ -1,45 +1,138 @@
-# Integration examples for the Quant standard library.
-# Run with: glados compiler tests/std/examples.qa
+# LSP showcase for the Quant language.
+# Open this file with the Quant LSP extension active to explore:
+#
+#   Hover              - hover any name to see its type and docs
+#   Completion         - type inside a fn body, suggestions appear
+#   Go to definition   - Ctrl+click / F12 on any fn or variable name
+#   Signature help     - open ( after a fn name to see its parameter list
+#   Document symbols   - OUTLINE panel lists every fn declared below
+#   Document highlight - click a name, all occurrences glow blue
+#   Find references    - right-click -> Find All References
+#   Rename             - F2 on any user-defined fn or local variable
+#   Folding            - chevrons in gutter collapse fn bodies and blocks
+#   Inlay hints        - parameter names appear greyed-out before each arg
+#   Semantic tokens    - fn calls and variables get theme-aware colours
 
 import io
-from math import sqrt, abs, factorial, gcd, floor
-from string import len, concat, to_upper, reverse, repeat, from_int
-from array import sum, min, max, sort
+from math import sqrt, pow, floor, abs, gcd, factorial, clamp
+from string import len, concat, to_upper, reverse, repeat, from_int, substring
+from array import sort, sum, min, max, slice, contains, index_of
 
-fn test_math() -> void {
-    println("=== Math ===");
-    println(sqrt(16.0));        # 4.0
-    println(abs(-42));          # 42
-    println(floor(sqrt(2.0) * 1000.0));  # 1414 (sqrt(2) ~= 1.4142...)
-    println(factorial(6));      # 720
-    println(gcd(48, 18));       # 6
-    println(floor(3.9));        # 3
+# ---------------------------------------------------------------------------
+# User-defined helpers (try go-to-def, highlight, references, and rename here)
+
+// Compute the hypotenuse of a right triangle using the Pythagorean theorem.
+fn hypotenuse(a: float, b: float) -> float {
+    a_sq: float = pow(a, 2.0);
+    b_sq: float = pow(b, 2.0);
+    return sqrt(a_sq + b_sq);
 }
 
-fn test_string() -> void {
-    println("=== String ===");
-    println(len("hello"));                   # 5
-    println(concat("foo", "bar"));           # foobar
-    println(to_upper("quant"));              # QUANT
-    println(reverse("abcde"));              # edcba
-    println(repeat("ha", 3));               # hahaha
-    println(from_int(42));                   # 42
+// Return the absolute difference between two integers.
+fn abs_diff(x: int, y: int) -> int {
+    diff: int = x - y;
+    return abs(diff);
 }
 
-fn test_array() -> void {
-    println("=== Array ===");
+// Build a labelled output line: "label: value".
+fn labelled(label: str, value: str) -> str {
+    sep: str = ": ";
+    return concat(concat(label, sep), value);
+}
+
+// Compute the nth triangular number: 1+2+...+n.
+fn triangular(n: int) -> int {
+    return n * (n + 1) / 2;
+}
+
+# ---------------------------------------------------------------------------
+# Demo sections (each fn appears in the OUTLINE panel via document symbols)
+
+// Demonstrate math functions and user-defined helpers.
+// Hover calls to see inlay hints for parameter names (e.g. hypotenuse(a:, b:)).
+fn demo_math() -> void {
+    h: float = hypotenuse(3.0, 4.0);
+    println(labelled("hypotenuse(3,4)", from_int(floor(h))));   # hypotenuse(3,4): 5
+
+    d: int = abs_diff(17, 5);
+    println(labelled("abs_diff(17,5)", from_int(d)));           # abs_diff(17,5): 12
+
+    g: int = gcd(48, 18);
+    println(labelled("gcd(48,18)", from_int(g)));               # gcd(48,18): 6
+
+    f: int = factorial(6);
+    println(labelled("factorial(6)", from_int(f)));             # factorial(6): 720
+
+    t: int = triangular(10);
+    println(labelled("triangular(10)", from_int(t)));           # triangular(10): 55
+}
+
+// Demonstrate string functions: concat, repeat, reverse, substring.
+fn demo_string() -> void {
+    greeting: str = concat("Hello, ", "Quant");
+    println(greeting);                                          # Hello, Quant
+
+    loud: str = to_upper(greeting);
+    println(loud);                                              # HELLO, QUANT
+
+    rev: str = reverse("abcde");
+    println(rev);                                               # edcba
+
+    sub: str = substring("language", 0, 4);
+    println(sub);                                               # lang
+
+    repeated: str = repeat("ha", 3);
+    println(repeated);                                          # hahaha
+
+    n: int = len("hello world");
+    println(labelled("len", from_int(n)));                      # len: 11
+}
+
+// Demonstrate array functions and a while loop (both blocks are foldable).
+fn demo_array() -> void {
     nums: [int] = [5, 2, 8, 1, 9, 3];
-    println(sum(nums));         # 28
-    println(min(nums));         # 1
-    println(max(nums));         # 9
+
+    println(labelled("sum", from_int(sum(nums))));              # sum: 28
+    println(labelled("min", from_int(min(nums))));              # min: 1
+    println(labelled("max", from_int(max(nums))));              # max: 9
+
     sorted: [int] = sort(nums);
-    println(sorted[0]);         # 1
-    println(sorted[5]);         # 9
+    first_three: [int] = slice(sorted, 0, 3);
+
+    i: int = 0;
+    while (i < 3) {
+        println(from_int(first_three[i]));                      # 1, 2, 3
+        i++;
+    };
+
+    found: bool = contains(nums, 8);
+    if (found) {
+        println(labelled("index of 8", from_int(index_of(nums, 8))));   # index of 8: 2
+    };
+}
+
+// Demonstrate a for loop and triangular called multiple times.
+// Try Find References on triangular to see all call sites highlighted.
+fn demo_loops() -> void {
+    for (i: int = 1; i <= 5; i++) {
+        t: int = triangular(i);
+        line: str = concat(from_int(i), concat(" -> ", from_int(t)));
+        println(line);                                          # 1->1, 2->3, 3->6, ...
+    };
+
+    total: int = 0;
+    j: int = 1;
+    while (j <= 4) {
+        total = total + abs_diff(j * j, j);
+        j++;
+    };
+    println(labelled("total", from_int(total)));                # total: 20
 }
 
 fn main() -> void {
-    test_math();
-    test_string();
-    test_array();
+    demo_math();
+    demo_string();
+    demo_array();
+    demo_loops();
     println("done");
 }
