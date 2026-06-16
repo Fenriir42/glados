@@ -47,7 +47,7 @@ import Compiler.Bytecode
     UnaryOp (..),
     Value (..),
   )
-import Control.Monad (unless, void)
+import Control.Monad (forM_, unless, void)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.State
   ( State,
@@ -56,7 +56,6 @@ import Control.Monad.State
     gets,
     modify,
     put,
-    runState,
   )
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -317,11 +316,19 @@ compileStmt = \case
             compileExpr (unLocated indexExpr)
             void $ emitInstruction (ILoad tmpVar)
             void $ emitInstruction IArraySet
-      LFieldAccess _ _ ->
-        throwError $
-          UnsupportedConstruct
-            (locSpan lvalue)
-            "Field assignment not yet supported"
+      LFieldAccess base locField ->
+        case Op.assignOpToBinaryOp assignOp of
+          Nothing -> do
+            compileLValueReadForWrite lvalue base
+            compileExpr (unLocated rhs)
+            void $ emitInstruction (IFieldSet (unLocated locField))
+          Just binOp -> do
+            compileLValueReadForWrite lvalue base
+            void $ emitInstruction IDup
+            void $ emitInstruction (IFieldGet (unLocated locField))
+            compileExpr (unLocated rhs)
+            void $ emitInstruction (IBinary (astBinaryOpToBytecode binOp))
+            void $ emitInstruction (IFieldSet (unLocated locField))
   StmtExpr expr -> do
     compileExpr (unLocated expr)
     void $ emitInstruction IPop
@@ -433,11 +440,9 @@ compileLValueReadForWrite outerLoc inner = case unLocated inner of
     compileLValueReadForWrite outerLoc base
     compileExpr (unLocated indexExpr)
     void $ emitInstruction IArrayGetOrNew
-  LFieldAccess _ _ ->
-    throwError $
-      UnsupportedConstruct
-        (locSpan outerLoc)
-        "Nested field access in assignment not yet supported"
+  LFieldAccess base locField -> do
+    compileLValueReadForWrite outerLoc base
+    void $ emitInstruction (IFieldGet (unLocated locField))
 
 -- ---------------------------------------------------------------------------
 -- Expression
@@ -474,16 +479,15 @@ compileExpr = \case
     compileExpr (unLocated arrExpr)
     compileExpr (unLocated indexExpr)
     void $ emitInstruction IArrayGet
-  ExprField structExpr field ->
-    throwError $
-      UnsupportedConstruct
-        (locSpan structExpr <> locSpan field)
-        "Struct field access not yet supported"
-  ExprStructInit typeName _ ->
-    throwError $
-      UnsupportedConstruct
-        (locSpan typeName)
-        "Struct initialisation not yet supported"
+  ExprField structExpr locField -> do
+    compileExpr (unLocated structExpr)
+    void $ emitInstruction (IFieldGet (unLocated locField))
+  ExprStructInit _ fieldExprs -> do
+    void $ emitInstruction INewStruct
+    forM_ fieldExprs $ \(locFname, locExpr) -> do
+      void $ emitInstruction IDup
+      compileExpr (unLocated locExpr)
+      void $ emitInstruction (IFieldSet (unLocated locFname))
   ExprArrayInit _typ elems -> do
     void $ emitInstruction INewArray
     mapM_

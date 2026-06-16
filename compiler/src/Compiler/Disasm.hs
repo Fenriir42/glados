@@ -1,7 +1,7 @@
 -- | Human-readable disassembly of compiled bytecode.
 module Compiler.Disasm (disassemble) where
 
-import AST.Types.Common (unFuncName, unVarName)
+import AST.Types.Common (unFieldName, unFuncName, unVarName)
 import Compiler.Bytecode
 import Data.List (intercalate)
 import qualified Data.Text as T
@@ -63,6 +63,9 @@ showInstr = \case
   IArrayGetOrNew -> "ARRAY_GET_OR_NEW"
   IArraySet -> "ARRAY_SET"
   ICast ct -> "CAST      " ++ showCast ct
+  INewStruct -> "NEW_STRUCT"
+  IFieldGet f -> "FIELD_GET  " ++ T.unpack (unFieldName f)
+  IFieldSet f -> "FIELD_SET  " ++ T.unpack (unFieldName f)
 
 showVal :: Value -> String
 showVal (VInt n) = show n
@@ -71,6 +74,7 @@ showVal (VBool b) = if b then "true" else "false"
 showVal (VString s) = show s
 showVal (VStringRef i) = "str[" ++ show i ++ "]"
 showVal (VArrayRef i) = "arr[" ++ show i ++ "]"
+showVal (VStructRef i) = "struct[" ++ show i ++ "]"
 showVal VUnit = "unit"
 
 showIP :: InstructionPointer -> String

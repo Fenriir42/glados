@@ -13,7 +13,7 @@ module Compiler.Serialize
   )
 where
 
-import AST.Types.Common (FuncName (..), VarName (..))
+import AST.Types.Common (FieldName (..), FuncName (..), VarName (..))
 import Compiler.Bytecode
 import Data.Binary (Binary (..))
 import Data.Binary.Get (Get, getByteString, runGetOrFail)
@@ -70,6 +70,10 @@ instance Binary VarName where
   put (VarName t) = put t
   get = VarName <$> get
 
+instance Binary FieldName where
+  put (FieldName t) = put t
+  get = FieldName <$> get
+
 instance Binary InstructionPointer where
   put (InstructionPointer i) = put i
   get = InstructionPointer <$> get
@@ -99,6 +103,7 @@ instance Binary Value where
   put (VArrayRef i) = put (4 :: Word8) >> put i
   put VUnit = put (5 :: Word8)
   put (VString t) = put (6 :: Word8) >> put t
+  put (VStructRef i) = put (7 :: Word8) >> put i
   get =
     (get :: Get Word8) >>= \case
       0 -> VInt <$> get
@@ -108,6 +113,7 @@ instance Binary Value where
       4 -> VArrayRef <$> get
       5 -> pure VUnit
       6 -> VString <$> get
+      7 -> VStructRef <$> get
       t -> fail $ "Unknown Value tag: " ++ show t
 
 instance Binary BinaryOp where
@@ -138,6 +144,9 @@ instance Binary Instruction where
     IArrayGetOrNew -> tag 15
     IArraySet -> tag 16
     ICast ct -> tag 17 >> put ct
+    INewStruct -> tag 18
+    IFieldGet f -> tag 19 >> put f
+    IFieldSet f -> tag 20 >> put f
     where
       tag n = put (n :: Word8)
 
@@ -161,6 +170,9 @@ instance Binary Instruction where
       15 -> pure IArrayGetOrNew
       16 -> pure IArraySet
       17 -> ICast <$> get
+      18 -> pure INewStruct
+      19 -> IFieldGet <$> get
+      20 -> IFieldSet <$> get
       t -> fail $ "Unknown Instruction tag: " ++ show t
 
 instance Binary Bytecode where
