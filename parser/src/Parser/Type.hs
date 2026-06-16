@@ -14,7 +14,7 @@ import AST.Types.Type
     PrimitiveType (..),
     QualifiedType (QualifiedType),
     Signedness (..),
-    Type (TypeArray, TypeFunction, TypePrimitive),
+    Type (TypeArray, TypeFunction, TypePrimitive, TypeStruct),
     defaultFloatType,
     defaultIntType,
   )
@@ -140,5 +140,8 @@ parseType =
   MP.choice
     [ fmap TypePrimitive <$> parsePrimitiveType,
       fmap TypeArray <$> parseArrayType,
-      fmap TypeFunction <$> parseFunctionType
+      fmap TypeFunction <$> parseFunctionType,
+      do
+        Located span (TokIdentifier name) <- MP.satisfy isIdentifier
+        return $ Located span (TypeStruct (TypeName name))
     ]

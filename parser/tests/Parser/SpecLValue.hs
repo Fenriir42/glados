@@ -86,8 +86,8 @@ lvalueSpec = do
       let result = runLValueParser parseLValue tokens
       result `shouldSatisfy` isRight
       case unLocated (fromRight result) of
-        LVarRef _ -> True `shouldBe` True
-        _ -> fail "Expected LVarRef with field access"
+        LFieldAccess _ _ -> True `shouldBe` True
+        _ -> fail "Expected LFieldAccess"
 
     it "parses array index with variable index" $ do
       let tokens = [loc (TokIdentifier "arr"), loc (TokSymbol "["), loc (TokIdentifier "i"), loc (TokSymbol "]")]

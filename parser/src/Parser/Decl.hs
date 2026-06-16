@@ -1,7 +1,7 @@
 module Parser.Decl where
 
 import AST.Types.AST
-  ( Decl (DeclFunction, DeclImport),
+  ( Decl (DeclFunction, DeclImport, DeclStruct),
     FunctionDecl
       ( FunctionDecl,
         funcDeclBody,
@@ -9,17 +9,19 @@ import AST.Types.AST
         funcDeclParams,
         funcDeclReturnType
       ),
+    StructDecl (..),
     Visibility (..),
   )
-import AST.Types.Common (FuncName (..), Located (..))
-import AST.Types.Type (FunctionType (funcParams, funcReturnType))
+import AST.Types.Common (FieldName (..), FuncName (..), Located (..), TypeName (..))
+import AST.Types.Type (FunctionType (funcParams, funcReturnType), StructField (..))
 import Parser.Import (parseImportDecl)
 import Parser.Stmt (parseBlock)
-import Parser.Type (parseFunctionType)
+import Parser.Type (parseFunctionType, parseQualifiedType)
 import Parser.Utils
   ( TokenParser,
     isIdentifier,
     matchKeyword,
+    matchSymbol,
     voidSpann,
   )
 import qualified Text.Megaparsec as MP
@@ -54,11 +56,49 @@ parseDeclFunction = do
           }
   return $ Located combinedSpan (DeclFunction visibility functionDecl)
 
+parseStructField :: TokenParser (Located StructField)
+parseStructField = do
+  Located nameSpan (TokIdentifier fname) <- MP.satisfy isIdentifier
+  _ <- matchSymbol ":"
+  Located typeSpan qt <- parseQualifiedType
+  return $ Located (nameSpan <> typeSpan) (StructField (FieldName fname) qt)
+
+parseDeclStruct :: TokenParser (Located (Decl ann))
+parseDeclStruct = do
+  Located visSpan visibility <- parseVisibility
+  Located structSpan (TokIdentifier _) <- MP.satisfy isStructKw
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  _ <- matchSymbol "{"
+  fields <- MP.sepEndBy parseStructField (matchSymbol ",")
+  Located endSpan _ <- matchSymbol "}"
+  let sd = StructDecl (Located nameSpan (TypeName name)) fields
+      combinedSpan = case visibility of
+        Static -> visSpan <> structSpan <> endSpan
+        Public -> structSpan <> endSpan
+  return $ Located combinedSpan (DeclStruct visibility sd)
+  where
+    isStructKw (Located _ (TokIdentifier "struct")) = True
+    isStructKw _ = False
+
+-- | Peek to determine if the upcoming tokens start a function or struct, then
+-- dispatch to the committed (non-backtracking) parser.  This lets us detect
+-- the discriminating keyword without consuming it, so that body-parse errors
+-- propagate as hard failures rather than being silently swallowed.
 parseDecl :: TokenParser (Located (Decl ann))
 parseDecl =
   MP.choice
-    [ parseDeclFunction,
+    [ do
+        MP.lookAhead (MP.try functionStart)
+        parseDeclFunction,
+      do
+        MP.lookAhead (MP.try structStart)
+        parseDeclStruct,
       do
         Located span importDecl <- parseImportDecl
         return $ Located span (DeclImport importDecl)
     ]
+  where
+    functionStart = MP.optional (matchKeyword "static") >> matchKeyword "fn"
+    structStart = MP.optional (matchKeyword "static") >> MP.satisfy isStructKw
+    isStructKw (Located _ (TokIdentifier "struct")) = True
+    isStructKw _ = False

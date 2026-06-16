@@ -170,16 +170,16 @@ exprSpec = do
       let result = runExprParser parseExpr tokens
       result `shouldSatisfy` isRight
       case unLocated (fromRight result) of
-        ExprVar _ -> True `shouldBe` True
-        _ -> fail "Expected ExprVar"
+        ExprField _ _ -> True `shouldBe` True
+        _ -> fail "Expected ExprField"
 
     it "parses chained field access" $ do
       let tokens = [loc (TokIdentifier "obj.field1.field2")]
       let result = runExprParser parseExpr tokens
       result `shouldSatisfy` isRight
       case unLocated (fromRight result) of
-        ExprVar _ -> True `shouldBe` True
-        _ -> fail "Expected ExprVar"
+        ExprField (Located _ (ExprField _ _)) _ -> True `shouldBe` True
+        _ -> fail "Expected nested ExprField"
 
   -- describe "Parser.Expr - Array Index" $ do
   --   it "parses simple array index" $ do

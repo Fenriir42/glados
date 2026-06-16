@@ -3,9 +3,10 @@ module Parser.Expr where
 import AST.Types.AST
   ( Expr (..),
   )
-import AST.Types.Common (FuncName (..), Located (..), VarName (..), getSpan, unLocated)
+import AST.Types.Common (FieldName (..), FuncName (..), Located (..), TypeName (..), VarName (..), getSpan, unLocated)
 import AST.Types.Operator (binaryOpPrecedence)
 import AST.Types.Type (Type (..))
+import Data.List (foldl')
 import qualified Data.Text as T
 import Parser.Literal (parseLiteral)
 import Parser.Operator (parseBinaryOp, parseUnaryOp)
@@ -25,10 +26,21 @@ parseExprLiteral = do
   lit <- parseLiteral parseExpr
   return $ Located (getSpan lit) (ExprLiteral (unLocated lit))
 
+-- | Parse an identifier, splitting @a.b.c@ tokens into nested @ExprField@
+-- nodes (the lexer combines dotted names into a single token).
 parseExprVar :: TokenParser (Located (Expr ann))
 parseExprVar = do
   Located span (TokIdentifier name) <- MP.satisfy isIdentifier
-  return $ Located span (ExprVar (Located span (VarName name)))
+  case T.splitOn "." name of
+    [single] -> return $ Located span (ExprVar (Located span (VarName single)))
+    (base : fields) ->
+      let baseExpr = Located span (ExprVar (Located span (VarName base)))
+       in return $
+            foldl'
+              (\e f -> Located span (ExprField e (Located span (FieldName f))))
+              baseExpr
+              fields
+    _ -> return $ Located span (ExprVar (Located span (VarName name)))
 
 parseExprCall :: TokenParser (Located (Expr ann))
 parseExprCall = do
@@ -51,20 +63,42 @@ parseExprDottedCall = do
   let qualName = FuncName (modName <> T.singleton '.' <> fnName)
   return $ Located (modSpan <> endSpan) (ExprCall (Located (modSpan <> fnSpan) qualName) args)
 
-parseExprIndex :: TokenParser (Located (Expr ann))
-parseExprIndex = do
-  expr <- (parseExprVar MP.<|> parseExprParen) :: TokenParser (Located (Expr ann))
-  indexExpr <- MP.many $ do
-    Located startSpan _ <- matchSymbol "["
-    i <- parseExpr
-    Located endSpan _ <- matchSymbol "]"
-    return (Located startSpan (), i, Located endSpan ())
-  return $ foldl addIndex expr indexExpr
+-- | Parse a struct initialiser: @TypeName { field: expr, ... }@
+parseExprStructInit :: TokenParser (Located (Expr ann))
+parseExprStructInit = do
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  _ <- matchSymbol "{"
+  fields <- MP.sepEndBy parseFieldInit (matchSymbol ",")
+  Located endSpan _ <- matchSymbol "}"
+  return $
+    Located
+      (nameSpan <> endSpan)
+      (ExprStructInit (Located nameSpan (TypeName name)) fields)
   where
-    addIndex :: Located (Expr ann) -> (Located (), Located (Expr ann), Located ()) -> Located (Expr ann)
-    addIndex expr (Located startSpan (), i, Located endSpan ()) =
-      let combinedSpan = getSpan expr <> startSpan <> getSpan i <> endSpan
-       in Located combinedSpan (ExprIndex expr i)
+    parseFieldInit = do
+      Located fnSpan (TokIdentifier fname) <- MP.satisfy isIdentifier
+      _ <- matchSymbol ":"
+      expr <- parseExpr
+      return (Located fnSpan (FieldName fname), expr)
+
+-- | Parse a primary expression followed by zero or more @[i]@ or @.field@ suffixes.
+parseExprAccessChain :: TokenParser (Located (Expr ann))
+parseExprAccessChain = do
+  base <- parseExprVar MP.<|> parseExprParen
+  suffixes <- MP.many (MP.try parseFieldSuffix MP.<|> parseIndexSuffix)
+  return $ foldl (\e f -> f e) base suffixes
+  where
+    parseFieldSuffix = do
+      _ <- matchSymbol "."
+      Located fieldSpan (TokIdentifier fname) <- MP.satisfy isIdentifier
+      return $ \e ->
+        Located (getSpan e <> fieldSpan) (ExprField e (Located fieldSpan (FieldName fname)))
+    parseIndexSuffix = do
+      Located startSpan _ <- matchSymbol "["
+      i <- parseExpr
+      Located endSpan _ <- matchSymbol "]"
+      return $ \e ->
+        Located (getSpan e <> startSpan <> getSpan i <> endSpan) (ExprIndex e i)
 
 parseExprCast :: TokenParser (Located (Expr ann))
 parseExprCast = do
@@ -95,8 +129,8 @@ parsePrimary =
       MP.try parseExprCall,
       parseExprCast,
       parseExprParen,
-      MP.try parseExprIndex,
-      parseExprVar
+      MP.try parseExprStructInit,
+      parseExprAccessChain
     ]
 
 parseUnary :: TokenParser (Located (Expr ann))
