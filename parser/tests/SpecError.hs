@@ -57,8 +57,7 @@ errorSpec = do
       let result = showErrorComponent (ErrInvalidChar '`')
       result `shouldContain` "Unexpected character"
       result `shouldContain` "`"
-      result `shouldContain` "Backticks are not valid"
-      result `shouldContain` "single quote"
+      result `shouldContain` "not recognized"
 
     it "shows error message for single quote" $ do
       let result = showErrorComponent (ErrInvalidChar '\'')

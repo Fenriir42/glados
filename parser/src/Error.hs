@@ -61,7 +61,6 @@ instance ShowErrorComponent GLaDOSError where
       ]
   showErrorComponent (ErrInvalidChar c) =
     let hintMsg = case c of
-          '`' -> "Backticks are not valid. Did you mean a single quote " ++ codeSym "'" ++ cyan ++ "?"
           '\'' -> "It looks like an empty or broken character. characters look like " ++ codeSym "'a'" ++ cyan ++ "."
           ';' -> "Semicolons are valid, but appeared where an expression was expected."
           _ -> "This character is not recognized in the language syntax."
