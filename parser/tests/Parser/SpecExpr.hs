@@ -3,13 +3,14 @@
 module Parser.SpecExpr (exprSpec) where
 
 import AST.Types.AST (Expr (..))
-import AST.Types.Common (Located (..), unLocated)
-import AST.Types.Literal (IntBase (..))
+import AST.Types.Common (FuncName (..), Located (..), unLocated)
+import AST.Types.Literal (IntBase (..), Literal (..), StringLiteral (..))
 import Error (ParseError)
 import Parser.Expr
   ( parseExpr,
     parseExprCall,
     parseExprCast,
+    parseExprInterp,
     parseExprLiteral,
     parseExprMust,
     parseExprParen,
@@ -417,3 +418,52 @@ exprSpec = do
       case unLocated (fromRight result) of
         ExprMust (Located _ (ExprCall _ args)) -> length args `shouldBe` 2
         _ -> fail "Expected ExprMust with ExprCall with 2 args"
+
+  describe "Parser.Expr - parseExprInterp" $ do
+    it "parses a plain backtick string as a string literal" $ do
+      let tokens = [loc (TokInterpChunk "hello"), loc TokInterpEnd]
+      let result = runExprParser parseExprInterp tokens
+      result `shouldSatisfy` isRight
+      case unLocated (fromRight result) of
+        ExprLiteral (LitString (StringLiteral "hello")) -> True `shouldBe` True
+        _ -> fail "Expected ExprLiteral string"
+
+    it "parses an empty backtick string" $ do
+      let tokens = [loc (TokInterpChunk ""), loc TokInterpEnd]
+      let result = runExprParser parseExprInterp tokens
+      result `shouldSatisfy` isRight
+
+    it "desugars single interpolation to string.to_str call" $ do
+      let tokens =
+            [ loc (TokInterpChunk ""),
+              loc (TokSymbol "{"),
+              loc (TokIdentifier "x"),
+              loc (TokSymbol "}"),
+              loc (TokInterpChunk ""),
+              loc TokInterpEnd
+            ]
+      let result = runExprParser parseExprInterp tokens
+      result `shouldSatisfy` isRight
+      case unLocated (fromRight result) of
+        ExprCall (Located _ (FuncName "string.to_str")) [_] -> True `shouldBe` True
+        _ -> fail "Expected ExprCall string.to_str"
+
+    it "desugars text+expr to string.concat" $ do
+      let tokens =
+            [ loc (TokInterpChunk "Hello "),
+              loc (TokSymbol "{"),
+              loc (TokIdentifier "name"),
+              loc (TokSymbol "}"),
+              loc (TokInterpChunk "!"),
+              loc TokInterpEnd
+            ]
+      let result = runExprParser parseExprInterp tokens
+      result `shouldSatisfy` isRight
+      case unLocated (fromRight result) of
+        ExprCall (Located _ (FuncName "string.concat")) [_, _] -> True `shouldBe` True
+        _ -> fail "Expected ExprCall string.concat with 2 args"
+
+    it "parses via parseExpr dispatch" $ do
+      let tokens = [loc (TokInterpChunk "hi"), loc TokInterpEnd]
+      let result = runExprParser parseExpr tokens
+      result `shouldSatisfy` isRight

@@ -10,6 +10,8 @@ module Parser.Utils
     isSign,
     isInt,
     isIntDec,
+    isInterpChunk,
+    isInterpEnd,
   )
 where
 
@@ -65,3 +67,11 @@ isInt _ = False
 isIntDec :: Located TokenContent -> Bool
 isIntDec (Located _ (TokInt _ BaseDec)) = True
 isIntDec _ = False
+
+isInterpChunk :: Located TokenContent -> Bool
+isInterpChunk (Located _ (TokInterpChunk _)) = True
+isInterpChunk _ = False
+
+isInterpEnd :: Located TokenContent -> Bool
+isInterpEnd (Located _ TokInterpEnd) = True
+isInterpEnd _ = False

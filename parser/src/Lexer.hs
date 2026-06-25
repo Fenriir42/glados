@@ -222,6 +222,102 @@ validToken =
     <|> tokWord
     <|> tokSymbol
 
+-- | Lex a backtick-delimited interpolated string, returning a flat token list:
+--   TokInterpChunk text  literal text segment
+--   TokSymbol "{"        start of expression hole (whitespace already consumed)
+--   <expr tokens>        normal expression tokens
+--   TokSymbol "}"        end of expression hole
+--   TokInterpEnd         closing backtick
+tokInterp :: Parser [Token]
+tokInterp = do
+  void (char '`')
+  collectChunks
+  where
+    collectChunks :: Parser [Token]
+    collectChunks = do
+      chunkStartPos <- MP.getSourcePos
+      chunkStartOff <- getOffset
+      textChars <- many (MP.satisfy (\c -> c /= '{' && c /= '`'))
+      chunkEndPos <- MP.getSourcePos
+      chunkEndOff <- getOffset
+      let chunkSpan = SourceSpan (toMyPos chunkStartPos chunkStartOff) (toMyPos chunkEndPos chunkEndOff)
+          chunkTok = Located chunkSpan (TokInterpChunk (T.pack textChars))
+      isEof <- checkEOF
+      if isEof
+        then customFailure ErrUnclosedString
+        else do
+          c <- lookAhead anySingle
+          case c of
+            '`' -> do
+              endStartPos <- MP.getSourcePos
+              endStartOff <- getOffset
+              void anySingle
+              sc
+              endEndPos <- MP.getSourcePos
+              endEndOff <- getOffset
+              let endSpan = SourceSpan (toMyPos endStartPos endStartOff) (toMyPos endEndPos endEndOff)
+              return [chunkTok, Located endSpan TokInterpEnd]
+            '{' -> do
+              openStartPos <- MP.getSourcePos
+              openStartOff <- getOffset
+              void anySingle
+              sc
+              openEndPos <- MP.getSourcePos
+              openEndOff <- getOffset
+              let openSpan = SourceSpan (toMyPos openStartPos openStartOff) (toMyPos openEndPos openEndOff)
+                  openTok = Located openSpan (TokSymbol "{")
+              exprToks <- collectExprTokens 1
+              rest <- collectChunks
+              return (chunkTok : openTok : exprToks ++ rest)
+            _ -> customFailure (ErrInvalidChar c)
+
+    collectExprTokens :: Int -> Parser [Token]
+    collectExprTokens depth = do
+      isEof <- checkEOF
+      if isEof
+        then customFailure ErrUnclosedString
+        else do
+          c <- lookAhead anySingle
+          case c of
+            '}' -> do
+              closeStartPos <- MP.getSourcePos
+              closeStartOff <- getOffset
+              void anySingle
+              closeEndPos <- MP.getSourcePos
+              closeEndOff <- getOffset
+              let closeSpan = SourceSpan (toMyPos closeStartPos closeStartOff) (toMyPos closeEndPos closeEndOff)
+                  closeTok = Located closeSpan (TokSymbol "}")
+              if depth == 1
+                then return [closeTok]
+                else do
+                  sc
+                  rest <- collectExprTokens (depth - 1)
+                  return (closeTok : rest)
+            '{' -> do
+              openStartPos <- MP.getSourcePos
+              openStartOff <- getOffset
+              void anySingle
+              sc
+              openEndPos <- MP.getSourcePos
+              openEndOff <- getOffset
+              let openSpan = SourceSpan (toMyPos openStartPos openStartOff) (toMyPos openEndPos openEndOff)
+                  openTok = Located openSpan (TokSymbol "{")
+              rest <- collectExprTokens (depth + 1)
+              return (openTok : rest)
+            '"' -> do
+              tok <- tokString
+              rest <- collectExprTokens depth
+              return (tok : rest)
+            _ -> do
+              res <- optional validToken
+              case res of
+                Nothing -> do
+                  bad <- anySingle
+                  customFailure (ErrInvalidChar bad)
+                Just tok -> do
+                  rest <- collectExprTokens depth
+                  return (tok : rest)
+
 -- | Main Parse Loop
 parseRawTokens :: Parser [Token]
 parseRawTokens = between sc eof loop
@@ -232,15 +328,13 @@ parseRawTokens = between sc eof loop
         then return []
         else do
           c <- lookAhead anySingle
-
-          tok <- case c of
-            '"' -> tokString
+          case c of
+            '"' -> (:) <$> tokString <*> loop
+            '`' -> (++) <$> tokInterp <*> loop
             _ -> do
               res <- optional validToken
-              maybe tokIllegal return res
-
-          toks <- loop
-          return (tok : toks)
+              tok <- maybe tokIllegal return res
+              (tok :) <$> loop
 
 checkEOF :: Parser Bool
 checkEOF = do

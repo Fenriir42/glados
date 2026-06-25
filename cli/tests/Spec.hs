@@ -6,6 +6,7 @@ import Compiler.Import (resolveImports)
 import Data.List (isInfixOf, isPrefixOf)
 import Lib (lexString)
 import Parser.Decl (parseDecl)
+import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
 import Text.Megaparsec (errorBundlePretty, many, runParser)
 import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
@@ -70,6 +71,33 @@ runPipelineWithImports src =
                     return $ case result of
                       Left err -> RunError (show err)
                       Right _ -> RunOk
+
+-- | Run pipeline with a custom in-memory module named @modName@.
+-- The module source is written to a temp dir used as the stdlib path.
+runPipelineWithModule :: String -> String -> String -> IO PipelineResult
+runPipelineWithModule modName modSrc mainSrc =
+  withSystemTempDirectory "quant-test" $ \tmpDir -> do
+    writeFile (tmpDir ++ "/" ++ modName ++ ".qa") modSrc
+    case lexString mainSrc of
+      Left err -> return $ LexError err
+      Right tokens ->
+        case runParser (many parseDecl) "<test>" tokens of
+          Left bundle -> return $ ParseError (errorBundlePretty bundle)
+          Right rawDecls -> do
+            declsOrErr <- resolveImports tmpDir rawDecls
+            case declsOrErr of
+              Left importErr -> return $ ImportError importErr
+              Right decls -> do
+                let typeErrs = tcErrors (typeCheck (Program decls))
+                if not (null typeErrs)
+                  then return $ TypeErrors typeErrs
+                  else case compileProgram (Program decls) of
+                    Left err -> return $ CompileError (show err)
+                    Right bcs -> do
+                      result <- runProgram bcs
+                      return $ case result of
+                        Left err -> RunError (show err)
+                        Right _ -> RunOk
 
 -- ---------------------------------------------------------------------------
 -- Main
@@ -261,6 +289,56 @@ main = hspec $ do
       case result of
         ImportError msg -> msg `shouldSatisfy` ("nonexistent" `isInfixOf`)
         other -> expectationFailure $ "Expected ImportError, got: " ++ show other
+
+  describe "Pipeline - string interpolation" $ do
+    it "compiles and runs a plain backtick string" $ do
+      let src = unlines ["fn main() -> void { println(`hello`); }"]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "compiles and runs interpolation with an int variable" $ do
+      let src = unlines ["fn main() -> void { n: int = 42; println(`n={n}`); }"]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "compiles and runs interpolation with arithmetic" $ do
+      let src = unlines ["fn main() -> void { println(`{1 + 2}`); }"]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "compiles interpolation returned from a user function" $ do
+      let src =
+            unlines
+              [ "fn label(name: str, val: int) -> str { return `{name}={val}`; }",
+                "fn main() -> void { println(label(\"x\", 7)); }"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+  describe "Pipeline - pub/static visibility" $ do
+    let modSrc =
+          unlines
+            [ "static fn helper(x: int) -> int { return x * 2; }",
+              "fn double(x: int) -> int { return helper(x); }"
+            ]
+
+    it "wildcard import does not expose static functions" $ do
+      let src = unlines ["from mymod import *", "fn main() -> void { helper(1); }"]
+      result <- runPipelineWithModule "mymod" modSrc src
+      case result of
+        TypeErrors _ -> return ()
+        other -> expectationFailure $ "Expected TypeErrors (static hidden), got: " ++ show other
+
+    it "explicit named import of static function is blocked" $ do
+      let src = unlines ["from mymod import helper", "fn main() -> void { helper(1); }"]
+      result <- runPipelineWithModule "mymod" modSrc src
+      case result of
+        TypeErrors _ -> return ()
+        other -> expectationFailure $ "Expected TypeErrors (static blocked), got: " ++ show other
+
+    it "wildcard import exposes public functions" $ do
+      let src = unlines ["from mymod import *", "fn main() -> void { double(3); }"]
+      runPipelineWithModule "mymod" modSrc src >>= (`shouldBe` RunOk)
+
+    it "qualified import allows calling public functions" $ do
+      let src = unlines ["import mymod", "fn main() -> void { mymod.double(3); }"]
+      runPipelineWithModule "mymod" modSrc src >>= (`shouldBe` RunOk)
 
 instance Show PipelineResult where
   show RunOk = "RunOk"

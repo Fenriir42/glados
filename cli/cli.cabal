@@ -51,6 +51,7 @@ test-suite cli-test
     , hspec
     , megaparsec
     , parser
+    , temporary
     , text
     , typechecker
     , vm

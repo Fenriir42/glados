@@ -201,6 +201,7 @@ callString "replace_first" ss [s, old, new'] =
 callString "repeat" ss [s, VInt n] =
   return $ VString (T.concat (replicate (fromIntegral n) (resolveStr ss s)))
 callString "is_empty" ss [s] = return $ VBool (T.null (resolveStr ss s))
+callString "to_str" ss [v] = return $ VString (resolveStr ss v)
 callString "from_int" _ [VInt n] = return $ VString (T.pack (show n))
 callString "from_float" _ [VFloat f] = return $ VString (T.pack (formatFloat f))
 callString "to_int" ss [s] =

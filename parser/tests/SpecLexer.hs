@@ -307,3 +307,68 @@ lexerSpec = do
       let result = runLexer "int x = 42;"
       result `shouldSatisfy` isRight
       getContents (fromRight result) `shouldBe` [TokKeyword "int", TokIdentifier "x", TokSymbol "=", TokInt 42 BaseDec, TokSymbol ";"]
+
+  describe "Lexer - Interpolated strings" $ do
+    it "lexes a plain backtick string (no interpolation)" $ do
+      let result = runLexer "`hello`"
+      result `shouldSatisfy` isRight
+      getContents (fromRight result) `shouldBe` [TokInterpChunk "hello", TokInterpEnd]
+
+    it "lexes an empty backtick string" $ do
+      let result = runLexer "``"
+      result `shouldSatisfy` isRight
+      getContents (fromRight result) `shouldBe` [TokInterpChunk "", TokInterpEnd]
+
+    it "lexes a single-expression interpolation" $ do
+      let result = runLexer "`{x}`"
+      result `shouldSatisfy` isRight
+      getContents (fromRight result)
+        `shouldBe` [ TokInterpChunk "",
+                     TokSymbol "{",
+                     TokIdentifier "x",
+                     TokSymbol "}",
+                     TokInterpChunk "",
+                     TokInterpEnd
+                   ]
+
+    it "lexes text before and after expression" $ do
+      let result = runLexer "`Hello {name}!`"
+      result `shouldSatisfy` isRight
+      getContents (fromRight result)
+        `shouldBe` [ TokInterpChunk "Hello ",
+                     TokSymbol "{",
+                     TokIdentifier "name",
+                     TokSymbol "}",
+                     TokInterpChunk "!",
+                     TokInterpEnd
+                   ]
+
+    it "lexes multiple interpolations" $ do
+      let result = runLexer "`{a}+{b}`"
+      result `shouldSatisfy` isRight
+      getContents (fromRight result)
+        `shouldBe` [ TokInterpChunk "",
+                     TokSymbol "{",
+                     TokIdentifier "a",
+                     TokSymbol "}",
+                     TokInterpChunk "+",
+                     TokSymbol "{",
+                     TokIdentifier "b",
+                     TokSymbol "}",
+                     TokInterpChunk "",
+                     TokInterpEnd
+                   ]
+
+    it "lexes expression with arithmetic in interpolation" $ do
+      let result = runLexer "`{1 + 2}`"
+      result `shouldSatisfy` isRight
+      getContents (fromRight result)
+        `shouldBe` [ TokInterpChunk "",
+                     TokSymbol "{",
+                     TokInt 1 BaseDec,
+                     TokSymbol "+",
+                     TokInt 2 BaseDec,
+                     TokSymbol "}",
+                     TokInterpChunk "",
+                     TokInterpEnd
+                   ]

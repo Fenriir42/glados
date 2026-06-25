@@ -32,6 +32,8 @@ data TokenContent
   | TokBool Bool
   | TokString Text
   | TokChar Char
+  | TokInterpChunk Text
+  | TokInterpEnd
   | TokEOF
   deriving (Eq, Ord)
 
@@ -47,6 +49,8 @@ instance Show TokenContent where
   show (TokBool b) = showCon "TokBool" [show b]
   show (TokString str) = showCon "TokString" [show str]
   show (TokChar c) = showCon "TokChar" [show c]
+  show (TokInterpChunk t) = showCon "TokInterpChunk" [show t]
+  show TokInterpEnd = "TokInterpEnd"
   show TokEOF = "TokEOF"
 
 showIntWithBase :: Integer -> IntBase -> String
@@ -101,6 +105,8 @@ instance VisualStream [Token] where
         TokBool b -> tokenBlue ++ "boolean " ++ show b ++ tokenMagenta
         TokString str -> tokenGreen ++ "string " ++ show str ++ tokenMagenta
         TokChar c -> tokenGreen ++ "char " ++ show c ++ tokenMagenta
+        TokInterpChunk t -> tokenGreen ++ "interp-chunk " ++ show t ++ tokenMagenta
+        TokInterpEnd -> tokenBlue ++ "interp-end" ++ tokenMagenta
         TokEOF -> tokenRed ++ "end-of-file" ++ tokenMagenta
 
 instance TraversableStream [Token] where

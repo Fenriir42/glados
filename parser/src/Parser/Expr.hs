@@ -3,7 +3,8 @@ module Parser.Expr where
 import AST.Types.AST
   ( Expr (..),
   )
-import AST.Types.Common (FieldName (..), FuncName (..), Located (..), TypeName (..), VarName (..), getSpan, unLocated)
+import AST.Types.Common (FieldName (..), FuncName (..), Located (..), SourceSpan, TypeName (..), VarName (..), getSpan, unLocated)
+import AST.Types.Literal (Literal (..), StringLiteral (..))
 import AST.Types.Operator (binaryOpPrecedence)
 import AST.Types.Type (Type (..))
 import Data.List (foldl')
@@ -14,6 +15,8 @@ import Parser.Type (parsePrimitiveType)
 import Parser.Utils
   ( TokenParser,
     isIdentifier,
+    isInterpChunk,
+    isInterpEnd,
     matchKeyword,
     matchSymbol,
   )
@@ -100,6 +103,51 @@ parseExprAccessChain = do
       return $ \e ->
         Located (getSpan e <> startSpan <> getSpan i <> endSpan) (ExprIndex e i)
 
+-- | Parse a backtick interpolated string: \`text {expr} text\`
+-- Desugars to nested @string.concat@ calls with @string.to_str@ wrapping each
+-- interpolated expression, so no new AST node or VM instruction is needed.
+parseExprInterp :: TokenParser (Located (Expr ann))
+parseExprInterp = do
+  Located startSpan (TokInterpChunk firstText) <- MP.satisfy isInterpChunk
+  parts <- collectParts
+  let allParts = mkTextPart startSpan firstText ++ parts
+  return $ Located startSpan (buildConcat startSpan allParts)
+  where
+    collectParts :: TokenParser [Located (Expr ann)]
+    collectParts = do
+      mEnd <- MP.optional (MP.satisfy isInterpEnd)
+      case mEnd of
+        Just _ -> return []
+        Nothing -> do
+          _ <- matchSymbol "{"
+          expr <- parseExpr
+          _ <- matchSymbol "}"
+          Located chunkSpan (TokInterpChunk text) <- MP.satisfy isInterpChunk
+          let exprStr = wrapToStr expr
+              textParts = mkTextPart chunkSpan text
+          rest <- collectParts
+          return (exprStr : textParts ++ rest)
+
+    mkTextPart :: SourceSpan -> T.Text -> [Located (Expr ann)]
+    mkTextPart sp text
+      | T.null text = []
+      | otherwise = [Located sp (ExprLiteral (LitString (StringLiteral text)))]
+
+    wrapToStr :: Located (Expr ann) -> Located (Expr ann)
+    wrapToStr expr =
+      let sp = getSpan expr
+       in Located sp (ExprCall (Located sp (FuncName "string.to_str")) [expr])
+
+    buildConcat :: SourceSpan -> [Located (Expr ann)] -> Expr ann
+    buildConcat _ [] = ExprLiteral (LitString (StringLiteral ""))
+    buildConcat _ [x] = unLocated x
+    buildConcat _ (x : xs) = unLocated (foldl' mkConcat x xs)
+
+    mkConcat :: Located (Expr ann) -> Located (Expr ann) -> Located (Expr ann)
+    mkConcat l r =
+      let sp = getSpan l <> getSpan r
+       in Located sp (ExprCall (Located sp (FuncName "string.concat")) [l, r])
+
 parseExprCast :: TokenParser (Located (Expr ann))
 parseExprCast = do
   Located startSpan primitiv <- parsePrimitiveType
@@ -124,7 +172,8 @@ parseExprMust = do
 parsePrimary :: TokenParser (Located (Expr ann))
 parsePrimary =
   MP.choice
-    [ parseExprLiteral,
+    [ parseExprInterp,
+      parseExprLiteral,
       MP.try parseExprDottedCall,
       MP.try parseExprCall,
       parseExprCast,

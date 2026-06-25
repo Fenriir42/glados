@@ -174,7 +174,7 @@ tryCompile config src existing = do
           case declsOrErr of
             Left importErr -> return (Left importErr)
             Right decls -> do
-              let TypeCheckResult typeErrs _ = typeCheck (Program decls)
+              let typeErrs = tcErrors (typeCheck (Program decls))
               case typeErrs of
                 errs@(_ : _) -> return (Left (concatMap formatTypeErr errs))
                 [] ->
