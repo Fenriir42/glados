@@ -14,19 +14,19 @@ Current state of the `feat/revival` branch as of 2026-06-10.
 | Standard library | `math`, `string`, `array`, `sys`, `io` (~60 functions) |
 | REPL | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | `--stdlib`, `--dump`, `--load`, `--output` flags |
-| LSP server | Diagnostics, hover, completion, go-to-definition, signature help |
+| LSP server | Diagnostics, hover, completion, go-to-def, signature help, symbols, highlight, references, rename, folding, inlay hints, semantic tokens |
 | VS Code extension | `extension/vscode/quant-lsp/` , syntax highlighting, snippets, all LSP features wired |
+| Structs | Declare, init, field access/assignment; fully typed and compiled |
+| String interpolation | Backtick strings `` `hello {name}` ``; desugars to `string.concat` + `string.to_str` |
+| Visibility enforcement | `static fn` hides functions from wildcard/explicit imports |
 | Docs site | Astro; all pages written |
-| Tests | 546 total, 0 failures |
+| Tests | 545 total, 0 failures |
 
 ## Known stubs
 
 These features are parsed and stored in the AST but throw `UnsupportedConstruct` in the compiler:
 
-- **Struct field access / initialization** , `ExprField`, `ExprStructInit`, `LFieldAccess`
 - **Error handling** , `ExprTry`, `ExprMust`, `DeclError`, `DeclErrorSet`
-
-`Visibility` (`pub` / `static`) is parsed and stored but never enforced.
 
 ---
 
@@ -54,42 +54,9 @@ Expanding toward Rust Analyzer / TypeScript LSP feature parity.
 
 ---
 
-## Near-term features (medium scope)
-
-### String interpolation
-Syntax: `` `Hello {name}, you are {age} years old` ``
-
-- **Lexer** (`parser/src/Lexer.hs`): new token type for interpolated string segments
-- **Parser**: emit an `ExprCall "string.concat"` tree or a dedicated `ExprInterp` node
-- **Codegen**: flatten into consecutive `string.concat` calls
-- No VM changes needed.
-
-Effort: ~2–3h. High UX value.
-
-### `pub` / `static` visibility enforcement
-`Visibility` is on every `DeclFunction` and `DeclStruct`. The type checker (`typechecker/src/TypeChecker.hs`) could:
-
-- Reject calls to private (non-`pub`) imported functions
-- Warn on `pub` in single-file programs (no effect without a caller)
-
-After import resolution, all imported names are already module-prefixed, so enforcement is mostly an additional check in the type checker's function-call rule.
-
-Effort: ~1–2h. Correctness feature.
-
 ---
 
 ## Larger features
-
-### Structs
-All three codegen cases stub out (`ExprField`, `ExprStructInit`, `LFieldAccess`). Full implementation needs:
-
-1. `VStruct (Map FieldName Value)` added to `Compiler.Bytecode` (`compiler/src/Compiler/Bytecode.hs`)
-2. Two new instructions: `IFieldGet FieldName`, `IFieldSet FieldName` in `Instruction`
-3. Codegen in `compiler/src/Compiler/Codegen.hs` for the three stubs
-4. VM handler in `vm/src/VM/Interpreter.hs` for the new instructions
-5. Type checker: track struct field types, validate `ExprField` and `ExprStructInit`
-
-Effort: ~4–6h.
 
 ### Error handling (`try` / `must`)
 Zig-style error unions. All codegen stubs:
