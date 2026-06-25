@@ -16,6 +16,7 @@ import AST.Types.AST
     LValue (..),
     ModulePath (..),
     Stmt (..),
+    Visibility (..),
   )
 import AST.Types.Common
   ( FuncName (..),
@@ -91,13 +92,16 @@ pickDecls modName target rawDecls
       -- Wrapper modules (string, array, sys, io): bare-named functions that
       -- call VM builtins.  Prefix-renaming would cause infinite recursion, so
       -- we only add bare aliases for explicit imports.
+      -- Static functions are not exposed (they are module-private helpers).
       case target of
         ImportAll -> [] -- builtins already available as module.fn
-        ImportWildcard -> rawDecls
+        ImportWildcard -> filterPublic rawDecls
         ImportNames names -> filterByNames (Set.fromList (map unLocated names)) rawDecls
   | otherwise =
       -- Real implementation modules (math): compile with module prefix so that
       -- internal cross-calls work correctly.
+      -- All prefixed forms are kept (needed for cross-calls), but bare aliases
+      -- are only generated for Public functions.
       let prefixed = prefixModule modName rawDecls
        in case target of
             ImportAll -> prefixed
@@ -268,15 +272,22 @@ renameExpr names prefix = \case
 -- ---------------------------------------------------------------------------
 -- Bare alias generation
 
--- | Create bare-named copies of all prefixed functions.
+-- | Keep only Public function declarations, dropping Static ones.
+filterPublic :: [Located (Decl ())] -> [Located (Decl ())]
+filterPublic decls = [loc | loc@(Located _ (DeclFunction Public _)) <- decls]
+
+-- | Create bare-named copies of all Public prefixed functions.
+-- Static (private) functions are not re-exported as bare names.
 -- e.g. @math.sqrt@ → copy with name @sqrt@ (body unchanged, still calls @math.*@).
 bareAliases :: Text -> [Located (Decl ())] -> [Located (Decl ())]
 bareAliases modName prefixed =
   [ Located sp (DeclFunction vis (stripPrefixFromName modName fd))
-    | Located sp (DeclFunction vis fd) <- prefixed
+    | Located sp (DeclFunction vis fd) <- filterPublic prefixed
   ]
 
--- | Create bare-named copies only for the requested function names.
+-- | Create bare-named copies only for the requested Public function names.
+-- Static functions are silently omitted; they will produce an undefined-function
+-- error at the type-checker stage, which is the correct behaviour.
 filterBareAliases ::
   Text ->
   Set VarName ->
@@ -284,7 +295,7 @@ filterBareAliases ::
   [Located (Decl ())]
 filterBareAliases modName wantedVars prefixed =
   [ Located sp (DeclFunction vis (stripPrefixFromName modName fd))
-    | Located sp (DeclFunction vis fd) <- prefixed,
+    | Located sp (DeclFunction vis fd) <- filterPublic prefixed,
       let bareName = strippedName modName (unLocated (funcDeclName fd)),
       VarName (unFuncName bareName) `Set.member` wantedVars
   ]
@@ -301,13 +312,15 @@ strippedName modName (FuncName n) =
 -- ---------------------------------------------------------------------------
 -- Bare-name filtering (for wrapper modules)
 
+-- | Keep only Public functions whose bare name is in the requested set.
+-- Static functions are silently omitted even if explicitly named.
 filterByNames ::
   Set VarName ->
   [Located (Decl ())] ->
   [Located (Decl ())]
 filterByNames wanted decls =
   [ loc
-    | loc@(Located _ (DeclFunction _ fd)) <- decls,
+    | loc@(Located _ (DeclFunction Public fd)) <- decls,
       VarName (unFuncName (unLocated (funcDeclName fd))) `Set.member` wanted
   ]
 

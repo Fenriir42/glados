@@ -34,7 +34,7 @@ declSpec :: Spec
 declSpec = do
   describe "Parser.Decl - parseVisibility" $ do
     it "parses static visibility" $ do
-      let tokens = [loc (TokKeyword "static")]
+      let tokens = [loc (TokIdentifier "static")]
       let result = runDeclParser parseVisibility tokens
       result `shouldSatisfy` isRight
       unLocated (fromRight result) `shouldBe` Static
@@ -55,7 +55,7 @@ declSpec = do
         _ -> fail "Expected public DeclFunction"
 
     it "parses static function with no parameters" $ do
-      let tokens = [loc (TokKeyword "static"), loc (TokKeyword "fn"), loc (TokIdentifier "foo"), loc (TokSymbol "("), loc (TokSymbol ")"), loc (TokSymbol "->"), loc (TokKeyword "void"), loc (TokSymbol "{"), loc (TokSymbol "}")]
+      let tokens = [loc (TokIdentifier "static"), loc (TokKeyword "fn"), loc (TokIdentifier "foo"), loc (TokSymbol "("), loc (TokSymbol ")"), loc (TokSymbol "->"), loc (TokKeyword "void"), loc (TokSymbol "{"), loc (TokSymbol "}")]
       let result = runDeclParser parseDeclFunction tokens
       result `shouldSatisfy` isRight
       case unLocated (fromRight result) of

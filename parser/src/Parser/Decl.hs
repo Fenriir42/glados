@@ -30,10 +30,13 @@ import Prelude hiding (span)
 
 parseVisibility :: TokenParser (Located Visibility)
 parseVisibility = do
-  maybeStatic <- MP.optional (matchKeyword "static")
+  maybeStatic <- MP.optional (MP.satisfy isStaticId)
   case maybeStatic of
     Just (Located span _) -> return $ Located span Static
     Nothing -> return $ Located voidSpann Public
+  where
+    isStaticId (Located _ (TokIdentifier "static")) = True
+    isStaticId _ = False
 
 parseDeclFunction :: TokenParser (Located (Decl ann))
 parseDeclFunction = do
@@ -98,7 +101,9 @@ parseDecl =
         return $ Located span (DeclImport importDecl)
     ]
   where
-    functionStart = MP.optional (matchKeyword "static") >> matchKeyword "fn"
-    structStart = MP.optional (matchKeyword "static") >> MP.satisfy isStructKw
+    functionStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "fn"
+    structStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isStructKw
+    isStaticId (Located _ (TokIdentifier "static")) = True
+    isStaticId _ = False
     isStructKw (Located _ (TokIdentifier "struct")) = True
     isStructKw _ = False
