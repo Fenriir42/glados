@@ -3,9 +3,10 @@
 
 module LSPServer.Analyze (AnalyzeResult (..), analyzeText, emptyResult) where
 
-import AST.Types.AST (Block (..), Decl (..), FunctionDecl (..), Program (..), Stmt (..))
+import AST.Types.AST (Block (..), Decl (..), ErrorDecl (..), FunctionDecl (..), Program (..), Stmt (..))
 import AST.Types.Common
   ( Column (..),
+    ErrorName (..),
     FilePath' (..),
     FuncName (..),
     Line (..),
@@ -77,12 +78,13 @@ data AnalyzeResult = AnalyzeResult
     arCallWithArgs :: Map SourceSpan (FuncName, FunctionType, [SourceSpan]),
     arFuncSymbols :: [(FuncName, FunctionType, SourceSpan, SourceSpan)],
     arFoldingRanges :: [SourceSpan],
-    arVarUseSites :: Map SourceSpan (VarName, SourceSpan)
+    arVarUseSites :: Map SourceSpan (VarName, SourceSpan),
+    arErrorNames :: [ErrorName]
   }
 
 emptyResult :: [Diagnostic] -> AnalyzeResult
 emptyResult diags =
-  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty
+  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty []
 
 -- | Lex, resolve imports, type-check a source file.
 analyzeText :: FilePath -> Text -> IO AnalyzeResult
@@ -116,6 +118,10 @@ analyzeText fp text = do
                   | Located _ (DeclFunction _ fd) <- rawDecls
                 ]
               foldingRanges = collectFoldingRanges rawDecls
+              errorNames =
+                [ unLocated (errorDeclName ed)
+                  | Located _ (DeclError _ ed) <- rawDecls
+                ]
           stdDocs <- extractStdlibDocs stdlibDir
           stdDefSites <- extractStdlibDefSites stdlibDir
           let allDocs = Map.union userDocs stdDocs
@@ -133,6 +139,7 @@ analyzeText fp text = do
               funcSymbols
               foldingRanges
               (tcVarUseSites result)
+              errorNames
 
 -- ---------------------------------------------------------------------------
 -- Folding range collection

@@ -5,13 +5,13 @@ module TypeChecker
   )
 where
 
-import AST.Types.AST (Decl (..), FunctionDecl (..), Program (..), StructDecl (..), programDecls)
+import AST.Types.AST (Decl (..), ErrorDecl (..), FunctionDecl (..), Program (..), StructDecl (..), programDecls)
 import AST.Types.Common (FuncName, Located (..), SourceSpan, VarName, locSpan, unLocated)
-import AST.Types.Type (FunctionType (..), StructType (..), Type)
+import AST.Types.Type (ErrorType (..), FunctionType (..), StructType (..), Type)
 import Control.Monad.State (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import TypeChecker.Env (Env, emptyEnv, envFuncs, insertFunc, insertStruct)
+import TypeChecker.Env (Env, emptyEnv, envFuncs, insertError, insertFunc, insertStruct)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -33,7 +33,8 @@ typeCheck :: Program () -> TypeCheckResult
 typeCheck prog =
   let decls = programDecls prog
       funcEnv = foldr collectFunc emptyEnv decls
-      fullEnv = foldr collectStruct funcEnv decls
+      structEnv = foldr collectStruct funcEnv decls
+      fullEnv = foldr collectError structEnv decls
       finalState = execState (mapM_ (checkDecl fullEnv) decls) initialTCState
       defSites =
         Map.fromList
@@ -61,6 +62,13 @@ typeCheck prog =
           fields = map unLocated (structDeclFields sd)
        in insertStruct tname (StructType tname fields) env
     collectStruct _ env = env
+
+    collectError :: Located (Decl ()) -> Env -> Env
+    collectError (Located _ (DeclError _ ed)) env =
+      let ename = unLocated (errorDeclName ed)
+          fields = map unLocated (errorDeclFields ed)
+       in insertError ename (ErrorType ename fields) env
+    collectError _ env = env
 
     mkFuncType :: FunctionDecl () -> FunctionType
     mkFuncType fd = FunctionType (funcDeclParams fd) (funcDeclReturnType fd)

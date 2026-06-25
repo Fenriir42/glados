@@ -3,7 +3,7 @@ module Parser.Expr where
 import AST.Types.AST
   ( Expr (..),
   )
-import AST.Types.Common (FieldName (..), FuncName (..), Located (..), SourceSpan, TypeName (..), VarName (..), getSpan, unLocated)
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), Located (..), SourceSpan, TypeName (..), VarName (..), getSpan, unLocated)
 import AST.Types.Literal (Literal (..), StringLiteral (..))
 import AST.Types.Operator (binaryOpPrecedence)
 import AST.Types.Type (Type (..))
@@ -169,6 +169,33 @@ parseExprMust = do
   expr <- parseExpr
   return $ Located (startSpan <> getSpan expr) (ExprMust expr)
 
+parseExprTry :: TokenParser (Located (Expr ann))
+parseExprTry = do
+  Located startSpan _ <- matchKeyword "try"
+  expr <- parseExpr
+  return $ Located (startSpan <> getSpan expr) (ExprTry expr)
+
+parseExprError :: TokenParser (Located (Expr ann))
+parseExprError = do
+  Located startSpan _ <- matchKeyword "error"
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  maybeFields <- MP.optional $ do
+    _ <- matchSymbol "{"
+    fields <- MP.sepEndBy parseErrorFieldInit (matchSymbol ",")
+    Located endSpan _ <- matchSymbol "}"
+    return (fields, endSpan)
+  let (fields, endSpan) = case maybeFields of
+        Nothing -> ([], nameSpan)
+        Just (fs, es) -> (fs, es)
+  return $ Located (startSpan <> endSpan) (ExprError (Located nameSpan (ErrorName name)) fields)
+
+parseErrorFieldInit :: TokenParser (Located FieldName, Located (Expr ann))
+parseErrorFieldInit = do
+  Located fspan (TokIdentifier n) <- MP.satisfy isIdentifier
+  _ <- matchSymbol ":"
+  val <- parseExpr
+  return (Located fspan (FieldName n), val)
+
 parsePrimary :: TokenParser (Located (Expr ann))
 parsePrimary =
   MP.choice
@@ -186,6 +213,8 @@ parseUnary :: TokenParser (Located (Expr ann))
 parseUnary =
   MP.choice
     [ parseExprMust,
+      parseExprTry,
+      parseExprError,
       do
         op <- parseUnaryOp
         expr <- parseUnary

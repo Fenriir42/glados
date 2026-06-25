@@ -3,7 +3,7 @@ title: Language Basics
 description: Learn the fundamental concepts of Quant programming
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Variables
 
@@ -290,3 +290,55 @@ fn main() -> void {
     // println(y);  // Error: y not in scope
 }
 ```
+
+## Error Handling
+
+Quant uses `orerror(T, E)` — a built-in result type — instead of exceptions. A function either returns a value of type `T` or a named error `E`.
+
+### Declaring Errors
+
+```quant
+error DivisionError;
+error ParseError;
+```
+
+### Writing Fallible Functions
+
+```quant
+fn safe_div(a: int, b: int) -> orerror(int, DivisionError) {
+    if (b == 0) {
+        return error DivisionError;
+    };
+    return a / b;
+}
+```
+
+### Handling the Result
+
+<Tabs>
+  <TabItem label="must">
+    Unwrap the success value, **panic** at runtime on error:
+
+    ```quant
+    x: int = must safe_div(10, 2);   // x = 5
+    ```
+
+    Use when you know the call will succeed, or want a hard crash on failure.
+  </TabItem>
+  <TabItem label="try">
+    Unwrap the success value, **propagate** the error if the call fails:
+
+    ```quant
+    fn calc(a: int, b: int, c: int) -> orerror(int, DivisionError) {
+        x: int = try safe_div(a, b);
+        return try safe_div(x, c);
+    }
+    ```
+
+    The surrounding function must also return `orerror`. If `safe_div` fails, `try` immediately exits the current function with that error.
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+  See the [Types reference](/reference/types/#error-types) for the full `orerror` specification including payload fields.
+</Aside>

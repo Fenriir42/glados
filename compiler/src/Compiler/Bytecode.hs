@@ -19,7 +19,8 @@ module Compiler.Bytecode
 where
 
 import AST.Types.Common
-  ( FieldName,
+  ( ErrorName (..),
+    FieldName,
     FuncName,
     VarName,
   )
@@ -39,6 +40,8 @@ data Value
   | VArrayRef Int
   | -- | reference into the struct heap
     VStructRef Int
+  | -- | error value: name + optional field payload
+    VErrorVal ErrorName [(FieldName, Value)]
   | VUnit
   deriving stock (Show, Eq, Generic)
 
@@ -135,6 +138,12 @@ data Instruction
     IFieldGet FieldName
   | -- | Pop value then VStructRef; set the named field in the struct heap
     IFieldSet FieldName
+  | -- | Build a VErrorVal: pop N (FieldName, Value) pairs, push VErrorVal
+    INewError ErrorName [FieldName]
+  | -- | If TOS is VErrorVal, return it from the current function; else no-op
+    ITryOp
+  | -- | If TOS is VErrorVal, panic; else no-op
+    IMustOp
   deriving stock (Show, Eq, Generic)
 
 instance Hashable Instruction

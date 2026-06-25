@@ -42,6 +42,7 @@ import AST.Types.Type
     FunctionType (..),
     PrimitiveType (..),
     QualifiedType (..),
+    ResultType (..),
     StructField (..),
     StructType (..),
     Type (..),
@@ -62,6 +63,7 @@ import TypeChecker.Builtins (builtinReturnType, isKnownBuiltin)
 import TypeChecker.Env
   ( Env (..),
     insertVarWithSpan,
+    lookupError,
     lookupFunc,
     lookupStruct,
     lookupVar,
@@ -164,8 +166,22 @@ inferExpr env (Located sp expr) = do
     go (ExprArrayInit (Located _ elemType) elems) = do
       mapM_ (inferExpr env) elems
       return (Just (TypeArray (ArrayType (QualifiedType Mutable elemType))))
-    go (ExprTry inner) = inferExpr env inner
-    go (ExprMust inner) = inferExpr env inner
+    go (ExprError (Located _ ename) fieldExprs) = do
+      forM_ fieldExprs $ \(_, e) -> void (inferExpr env e)
+      case lookupError ename env of
+        Nothing -> recordError (TCUnknownError sp ename) >> return Nothing
+        Just _ ->
+          return (Just (TypeResult (ResultType (TypePrimitive PrimNone) ename)))
+    go (ExprTry inner) = do
+      mInner <- inferExpr env inner
+      case mInner of
+        Just (TypeResult (ResultType successType _)) -> return (Just successType)
+        other -> return other
+    go (ExprMust inner) = do
+      mInner <- inferExpr env inner
+      case mInner of
+        Just (TypeResult (ResultType successType _)) -> return (Just successType)
+        other -> return other
     go (ExprParen inner) = inferExpr env inner
     go (ExprCast inner (Located _ castTo)) = do
       mFrom <- inferExpr env inner
@@ -230,6 +246,7 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
       forM_ mT $ \t ->
         unless (typesCompatible t (qualType qt)) $
           recordError (TCTypeMismatch (locSpan initExpr) (qualType qt) t)
+    recordVarUse declSpan name declSpan
     return (insertVarWithSpan name qt declSpan env)
   StmtAssign lvalue _ rhs -> do
     let lvType = lvalueType env lvalue
@@ -266,6 +283,7 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
         forM_ mT $ \t ->
           unless (typesCompatible t (qualType qt)) $
             recordError (TCTypeMismatch (locSpan initExpr) (qualType qt) t)
+        recordVarUse declSpan name declSpan
         return (insertVarWithSpan name qt declSpan env)
       Just (ForInitExpr exprStmt) -> do
         void $ inferExpr env exprStmt
@@ -305,11 +323,13 @@ checkDecl env (Located _ decl) = case decl of
 checkFunction :: Env -> FunctionDecl () -> TC ()
 checkFunction baseEnv fd = do
   let retQt = unLocated (funcDeclReturnType fd)
+  let params = funcDeclParams fd
   let env =
         foldr
           (\(Located psp p) e -> insertVarWithSpan (paramName p) (paramType p) psp e)
           (setReturnType retQt baseEnv)
-          (funcDeclParams fd)
+          params
+  mapM_ (\(Located psp p) -> recordVarUse psp (paramName p) psp) params
   checkBlock env (funcDeclBody fd)
 
 -- ---------------------------------------------------------------------------
@@ -342,6 +362,10 @@ typesCompatible t1 t2 = case (t1, t2) of
   _ | t1 == t2 -> True
   (TypePrimitive (PrimInt _), TypePrimitive (PrimInt _)) -> True
   (TypePrimitive (PrimFloat _), TypePrimitive (PrimFloat _)) -> True
+  -- error value (ExprError) is compatible with any orerror(..., E) sharing the same error name
+  (TypeResult (ResultType _ e1), TypeResult (ResultType _ e2)) -> e1 == e2
+  -- returning a plain success value into an orerror return type
+  (t, TypeResult (ResultType expected _)) -> typesCompatible t expected
   _ -> False
 
 -- | All casts between primitive types are considered valid.

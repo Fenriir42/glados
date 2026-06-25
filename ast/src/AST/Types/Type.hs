@@ -276,7 +276,7 @@ instance Hashable ResultType
 
 instance Show ResultType where
   show (ResultType success err) =
-    show success ++ " | " ++ T.unpack (unErrorName err)
+    "orerror(" ++ show success ++ ", " ++ T.unpack (unErrorName err) ++ ")"
 
 data Constness
   = Mutable

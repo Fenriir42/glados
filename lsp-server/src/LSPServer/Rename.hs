@@ -1,12 +1,11 @@
 module LSPServer.Rename (prepareRename, findRename) where
 
-import AST.Types.Common (Column (..), FuncName (..), Line (..), SourcePos (..), SourceSpan (..), VarName (..))
+import AST.Types.Common (FuncName (..), SourceSpan, VarName (..))
 import AST.Types.Type (FunctionType)
-import Data.List (minimumBy)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Ord (comparing)
 import Data.Text (Text)
+import LSPServer.Span (findFuncAtPos, smallest, spanToRange)
 import qualified Language.LSP.Protocol.Types as LSP
 
 -- | Return the name range if the cursor is on a renameable symbol, else Nothing.
@@ -24,9 +23,14 @@ prepareRename callSites defSites varUseSites lspLine lspCol =
       | Map.member fname defSites ->
           Just (spanToRange sp, unFuncName fname)
     _ ->
-      case smallest varUseSites lspLine lspCol of
-        Just (sp, (vname, _)) -> Just (spanToRange sp, unVarName vname)
-        Nothing -> Nothing
+      case findFuncAtPos defSites lspLine lspCol of
+        Just fname ->
+          let sp = defSites Map.! fname
+           in Just (spanToRange sp, unFuncName fname)
+        Nothing ->
+          case smallest varUseSites lspLine lspCol of
+            Just (sp, (vname, _)) -> Just (spanToRange sp, unVarName vname)
+            Nothing -> Nothing
 
 -- | Build a WorkspaceEdit renaming the symbol at cursor everywhere in the file.
 findRename ::
@@ -42,15 +46,20 @@ findRename callSites defSites varUseSites currentFile lspLine lspCol newName =
   funcRename `orElse` varRename
   where
     funcRename =
-      case smallest callSites lspLine lspCol of
+      case resolveFuncName of
         Nothing -> Nothing
-        Just (_, (fname, _)) ->
+        Just fname ->
           case Map.lookup fname defSites of
             Nothing -> Nothing
             Just defSpan ->
               let callSpans = [sp | (sp, (fn, _)) <- Map.toList callSites, fn == fname]
                   allSpans = defSpan : callSpans
                in Just (mkEdit currentFile allSpans newName)
+
+    resolveFuncName =
+      case smallest callSites lspLine lspCol of
+        Just (_, (fname, _)) | Map.member fname defSites -> Just fname
+        _ -> findFuncAtPos defSites lspLine lspCol
 
     varRename =
       case smallest varUseSites lspLine lspCol of
@@ -67,35 +76,3 @@ mkEdit fp spans newName =
   let edits = map (\sp -> LSP.TextEdit (spanToRange sp) newName) spans
       uri = LSP.filePathToUri fp
    in LSP.WorkspaceEdit (Just (Map.singleton uri edits)) Nothing Nothing
-
-smallest :: Map SourceSpan a -> Int -> Int -> Maybe (SourceSpan, a)
-smallest m lspLine lspCol =
-  case filter (containsPos lspLine lspCol . fst) (Map.toList m) of
-    [] -> Nothing
-    pairs -> Just (minimumBy (comparing (spanLen . fst)) pairs)
-
-containsPos :: Int -> Int -> SourceSpan -> Bool
-containsPos line col sp =
-  let startLine = unLine (posLine (spanStart sp)) - 1
-      startCol = unColumn (posColumn (spanStart sp)) - 1
-      endLine = unLine (posLine (spanEnd sp)) - 1
-      endCol = unColumn (posColumn (spanEnd sp)) - 1
-   in (startLine < line || (startLine == line && startCol <= col))
-        && (line < endLine || (line == endLine && col < endCol))
-
-spanLen :: SourceSpan -> Int
-spanLen sp =
-  (unLine (posLine (spanEnd sp)) - unLine (posLine (spanStart sp))) * 10000
-    + (unColumn (posColumn (spanEnd sp)) - unColumn (posColumn (spanStart sp)))
-
-spanToRange :: SourceSpan -> LSP.Range
-spanToRange sp =
-  LSP.Range
-    ( LSP.Position
-        ((fromIntegral (unLine (posLine (spanStart sp))) - 1) :: LSP.UInt)
-        ((fromIntegral (unColumn (posColumn (spanStart sp))) - 1) :: LSP.UInt)
-    )
-    ( LSP.Position
-        ((fromIntegral (unLine (posLine (spanEnd sp))) - 1) :: LSP.UInt)
-        ((fromIntegral (unColumn (posColumn (spanEnd sp))) - 1) :: LSP.UInt)
-    )

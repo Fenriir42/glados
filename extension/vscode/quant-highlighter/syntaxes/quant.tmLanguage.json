@@ -22,6 +22,18 @@
       ]
     },
     {
+      "comment": "Backtick string interpolation",
+      "begin": "`",
+      "end": "`",
+      "name": "string.template",
+      "patterns": [
+        {
+          "match": "\\{[^}]*\\}",
+          "name": "variable.other.readwrite"
+        }
+      ]
+    },
+    {
       "comment": "Strings",
       "patterns": [
         {
@@ -37,6 +49,24 @@
       ]
     },
     {
+      "comment": "Error declaration (error Name)",
+      "match": "\\b(error)\\s+([A-Z][a-zA-Z_]\\w*)",
+      "captures": {
+        "1": { "name": "keyword.control.error" },
+        "2": { "name": "entity.name.type.error" }
+      }
+    },
+    {
+      "comment": "orerror type constructor",
+      "match": "\\b(orerror)\\b",
+      "name": "keyword.control.orerror"
+    },
+    {
+      "comment": "Error handling operators",
+      "match": "\\b(try|must)\\b",
+      "name": "keyword.control.error-handling"
+    },
+    {
       "comment": "Function Definition (fn name)",
       "match": "\\b(fn)\\s+([a-zA-Z_]\\w*)",
       "captures": {
@@ -45,8 +75,16 @@
       }
     },
     {
-      "comment": "Keywords",
-      "match": "\\b(fn|return|if|else|for|while|continue|break|import|from|const)\\b",
+      "comment": "Struct Definition (struct Name)",
+      "match": "\\b(struct)\\s+([A-Z][a-zA-Z_]\\w*)",
+      "captures": {
+        "1": { "name": "keyword.control" },
+        "2": { "name": "entity.name.type" }
+      }
+    },
+    {
+      "comment": "Control keywords",
+      "match": "\\b(fn|return|if|else|for|while|continue|break|import|from|const|static)\\b",
       "name": "keyword.control"
     },
     {
@@ -55,8 +93,13 @@
       "name": "storage.type"
     },
     {
+      "comment": "Error type names (PascalCase identifiers after orerror or error)",
+      "match": "(?<=orerror\\([^,]+,\\s*)([A-Z][a-zA-Z_]\\w*)",
+      "name": "entity.name.type.error"
+    },
+    {
       "comment": "Booleans",
-      "match": "\\b(True|False)\\b",
+      "match": "\\b(true|false|True|False)\\b",
       "name": "constant.language.boolean"
     },
     {

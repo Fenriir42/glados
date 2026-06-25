@@ -1,6 +1,6 @@
 module Main (main) where
 
-import AST.Types.Common (FuncName, SourceSpan, VarName)
+import AST.Types.Common (ErrorName, FuncName, SourceSpan, VarName)
 import AST.Types.Type (FunctionType, Type)
 import Control.Concurrent.STM
   ( TVar,
@@ -45,6 +45,7 @@ data FileState = FileState
     fsFuncSymbols :: [(FuncName, FunctionType, SourceSpan, SourceSpan)],
     fsFoldingRanges :: [SourceSpan],
     fsVarUseSites :: Map SourceSpan (VarName, SourceSpan),
+    fsErrorNames :: [ErrorName],
     fsFilePath :: FilePath,
     fsFileText :: Text
   }
@@ -134,6 +135,7 @@ mkHandlers stateVar =
                 makeCompletionItems
                   (fsFuncEnv fs)
                   (fsDocs fs)
+                  (fsErrorNames fs)
                   (fsFileText fs)
                   (fromIntegral lspLine)
                   (fromIntegral lspChar)
@@ -333,6 +335,7 @@ analyzeAndPublish stateVar nuri version = do
               (arFuncSymbols result)
               (arFoldingRanges result)
               (arVarUseSites result)
+              (arErrorNames result)
               filePath
               text
       liftIO $ atomically $ modifyTVar' stateVar (Map.insert nuri fs)

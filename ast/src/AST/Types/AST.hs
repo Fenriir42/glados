@@ -197,6 +197,9 @@ data Expr ann
   | ExprArrayInit
       (Located Type)
       [Located (Expr ann)]
+  | ExprError
+      (Located ErrorName)
+      [(Located FieldName, Located (Expr ann))]
   | ExprTry (Located (Expr ann))
   | ExprMust (Located (Expr ann))
   | -- Parenthesized expression (for preserving source structure if needed)

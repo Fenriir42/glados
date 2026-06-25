@@ -5,7 +5,7 @@ module TypeChecker.Error
   )
 where
 
-import AST.Types.Common (FuncName (..), SourceSpan, VarName (..))
+import AST.Types.Common (ErrorName (..), FuncName (..), SourceSpan, VarName (..))
 import AST.Types.Operator (BinaryOp, UnaryOp)
 import AST.Types.Type (Type)
 import qualified Data.Text as T
@@ -24,6 +24,7 @@ data TypeCheckError
   | TCIndexNonArray SourceSpan Type
   | TCInvalidCast SourceSpan Type Type
   | TCConditionNotBool SourceSpan Type
+  | TCUnknownError SourceSpan ErrorName
   deriving stock (Show, Eq)
 
 tcErrSpan :: TypeCheckError -> SourceSpan
@@ -37,6 +38,7 @@ tcErrSpan (TCReturnMismatch s _ _) = s
 tcErrSpan (TCIndexNonArray s _) = s
 tcErrSpan (TCInvalidCast s _ _) = s
 tcErrSpan (TCConditionNotBool s _) = s
+tcErrSpan (TCUnknownError s _) = s
 
 tcErrMessage :: TypeCheckError -> String
 tcErrMessage (TCUndefinedVar _ v) =
@@ -64,3 +66,5 @@ tcErrMessage (TCInvalidCast _ from to) =
   "cannot cast `" ++ show from ++ "` to `" ++ show to ++ "`"
 tcErrMessage (TCConditionNotBool _ t) =
   "condition must be `bool`, got `" ++ show t ++ "`"
+tcErrMessage (TCUnknownError _ e) =
+  "unknown error type `" ++ T.unpack (unErrorName e) ++ "`"

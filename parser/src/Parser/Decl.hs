@@ -1,7 +1,9 @@
 module Parser.Decl where
 
 import AST.Types.AST
-  ( Decl (DeclFunction, DeclImport, DeclStruct),
+  ( Decl (DeclError, DeclErrorSet, DeclFunction, DeclImport, DeclStruct),
+    ErrorDecl (..),
+    ErrorSetDecl (..),
     FunctionDecl
       ( FunctionDecl,
         funcDeclBody,
@@ -12,11 +14,11 @@ import AST.Types.AST
     StructDecl (..),
     Visibility (..),
   )
-import AST.Types.Common (FieldName (..), FuncName (..), Located (..), TypeName (..))
-import AST.Types.Type (FunctionType (funcParams, funcReturnType), StructField (..))
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), Located (..), TypeName (..))
+import AST.Types.Type (ErrorField (..), ErrorSetMember (..), FunctionType (funcParams, funcReturnType), StructField (..))
 import Parser.Import (parseImportDecl)
 import Parser.Stmt (parseBlock)
-import Parser.Type (parseFunctionType, parseQualifiedType)
+import Parser.Type (parseFunctionType, parseQualifiedType, parseType)
 import Parser.Utils
   ( TokenParser,
     isIdentifier,
@@ -83,6 +85,56 @@ parseDeclStruct = do
     isStructKw (Located _ (TokIdentifier "struct")) = True
     isStructKw _ = False
 
+parseErrorField :: TokenParser (Located ErrorField)
+parseErrorField = do
+  Located nameSpan (TokIdentifier fname) <- MP.satisfy isIdentifier
+  _ <- matchSymbol ":"
+  Located typeSpan typ <- parseType
+  return $ Located (nameSpan <> typeSpan) (ErrorField (FieldName fname) typ)
+
+parseDeclError :: TokenParser (Located (Decl ann))
+parseDeclError = do
+  Located visSpan visibility <- parseVisibility
+  Located errSpan _ <- matchKeyword "error"
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  maybeFields <- MP.optional $ do
+    _ <- matchSymbol "{"
+    fields <- MP.sepEndBy parseErrorField (matchSymbol ",")
+    Located endSpan _ <- matchSymbol "}"
+    return (fields, endSpan)
+  Located semiSpan _ <- matchSymbol ";"
+  let (fields, lastSpan) = case maybeFields of
+        Nothing -> ([], semiSpan)
+        Just (fs, es) -> (fs, es <> semiSpan)
+      combinedSpan = case visibility of
+        Static -> visSpan <> errSpan <> nameSpan <> lastSpan
+        Public -> errSpan <> nameSpan <> lastSpan
+      ed = ErrorDecl (Located nameSpan (ErrorName name)) fields
+  return $ Located combinedSpan (DeclError visibility ed)
+
+parseErrorSetMember :: TokenParser (Located ErrorSetMember)
+parseErrorSetMember = do
+  Located span (TokIdentifier name) <- MP.satisfy isIdentifier
+  return $ Located span (ErrorMemberSingle (ErrorName name))
+
+parseDeclErrorSet :: TokenParser (Located (Decl ann))
+parseDeclErrorSet = do
+  Located visSpan visibility <- parseVisibility
+  Located errsetSpan _ <- MP.satisfy isErrorsetKw
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  _ <- matchSymbol "{"
+  members <- MP.sepEndBy parseErrorSetMember (matchSymbol ",")
+  Located endSpan _ <- matchSymbol "}"
+  _ <- matchSymbol ";"
+  let combinedSpan = case visibility of
+        Static -> visSpan <> errsetSpan <> nameSpan <> endSpan
+        Public -> errsetSpan <> nameSpan <> endSpan
+      esd = ErrorSetDecl (Located nameSpan (ErrorName name)) members
+  return $ Located combinedSpan (DeclErrorSet visibility esd)
+  where
+    isErrorsetKw (Located _ (TokIdentifier "errorset")) = True
+    isErrorsetKw _ = False
+
 -- | Peek to determine if the upcoming tokens start a function or struct, then
 -- dispatch to the committed (non-backtracking) parser.  This lets us detect
 -- the discriminating keyword without consuming it, so that body-parse errors
@@ -91,11 +143,17 @@ parseDecl :: TokenParser (Located (Decl ann))
 parseDecl =
   MP.choice
     [ do
-        MP.lookAhead (MP.try functionStart)
+        _ <- MP.lookAhead (MP.try functionStart)
         parseDeclFunction,
       do
-        MP.lookAhead (MP.try structStart)
+        _ <- MP.lookAhead (MP.try structStart)
         parseDeclStruct,
+      do
+        _ <- MP.lookAhead (MP.try errorStart)
+        parseDeclError,
+      do
+        _ <- MP.lookAhead (MP.try errorsetStart)
+        parseDeclErrorSet,
       do
         Located span importDecl <- parseImportDecl
         return $ Located span (DeclImport importDecl)
@@ -103,7 +161,11 @@ parseDecl =
   where
     functionStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "fn"
     structStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isStructKw
+    errorStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "error"
+    errorsetStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isErrorsetKw
     isStaticId (Located _ (TokIdentifier "static")) = True
     isStaticId _ = False
     isStructKw (Located _ (TokIdentifier "struct")) = True
     isStructKw _ = False
+    isErrorsetKw (Located _ (TokIdentifier "errorset")) = True
+    isErrorsetKw _ = False

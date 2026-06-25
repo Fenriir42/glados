@@ -1,6 +1,6 @@
 module LSPServer.Completion (makeCompletionItems) where
 
-import AST.Types.Common (FuncName (..), Located (..), VarName (..))
+import AST.Types.Common (ErrorName (..), FuncName (..), Located (..), VarName (..), unErrorName)
 import AST.Types.Type (FunctionType (..), paramName)
 import Data.Char (isAlphaNum)
 import Data.Map (Map)
@@ -10,16 +10,17 @@ import qualified Data.Text as T
 import LSPServer.Hover (knownBuiltins, renderSig)
 import qualified Language.LSP.Protocol.Types as LSP
 
--- | Build completion items from all known functions and keywords.
+-- | Build completion items from all known functions, keywords, and error names.
 -- Filters by the identifier prefix at the cursor before constructing items.
 makeCompletionItems ::
   Map FuncName FunctionType ->
   Map FuncName Text ->
+  [ErrorName] ->
   Text ->
   Int ->
   Int ->
   [LSP.CompletionItem]
-makeCompletionItems funcEnv docs fileText lspLine lspCol =
+makeCompletionItems funcEnv docs errorNames fileText lspLine lspCol =
   let prefix = getPrefix fileText lspLine lspCol
       prefixLower = T.toLower prefix
       matches lbl = prefixLower `T.isPrefixOf` T.toLower lbl
@@ -33,8 +34,9 @@ makeCompletionItems funcEnv docs fileText lspLine lspCol =
           | kv@(FuncName lbl, _) <- Map.toList knownBuiltins,
             matches lbl
         ]
-      keywordItems = [mkKeywordItem kw | kw <- quantKeywords, matches kw]
-   in funcItems ++ builtinItems ++ keywordItems
+      keywordItems = [mkKeywordSnippetItem kw | kw <- quantKeywords, matches kw]
+      errorItems = [mkErrorNameItem e | e <- errorNames, matches (unErrorName e)]
+   in funcItems ++ builtinItems ++ keywordItems ++ errorItems
 
 -- | Extract the identifier prefix at the cursor (may include a single '.').
 getPrefix :: Text -> Int -> Int -> Text
@@ -93,16 +95,40 @@ mkBuiltinItem (fname, (sig, doc)) =
     Nothing
     Nothing
 
-mkKeywordItem :: Text -> LSP.CompletionItem
-mkKeywordItem kw =
+mkKeywordSnippetItem :: Text -> LSP.CompletionItem
+mkKeywordSnippetItem kw =
+  let (insertText, insertKind) = case Map.lookup kw keywordSnippets of
+        Just snippet -> (snippet, LSP.InsertTextFormat_Snippet)
+        Nothing -> (kw, LSP.InsertTextFormat_PlainText)
+   in LSP.CompletionItem
+        kw
+        Nothing
+        (Just LSP.CompletionItemKind_Keyword)
+        Nothing
+        Nothing
+        Nothing
+        Nothing
+        Nothing
+        Nothing
+        Nothing
+        (Just insertText)
+        (Just insertKind)
+        Nothing
+        Nothing
+        Nothing
+        Nothing
+        Nothing
+        Nothing
+        Nothing
+
+mkErrorNameItem :: ErrorName -> LSP.CompletionItem
+mkErrorNameItem (ErrorName name) =
   LSP.CompletionItem
-    kw
+    name
     Nothing
-    (Just LSP.CompletionItemKind_Keyword)
+    (Just LSP.CompletionItemKind_Class)
     Nothing
-    Nothing
-    Nothing
-    Nothing
+    (Just "error type")
     Nothing
     Nothing
     Nothing
@@ -115,6 +141,22 @@ mkKeywordItem kw =
     Nothing
     Nothing
     Nothing
+    Nothing
+    Nothing
+
+keywordSnippets :: Map Text Text
+keywordSnippets =
+  Map.fromList
+    [ ("fn", "fn ${1:name}(${2:params}) -> ${3:void} {\n\t$0\n}"),
+      ("if", "if (${1:condition}) {\n\t$0\n}"),
+      ("while", "while (${1:condition}) {\n\t$0\n}"),
+      ("for", "for (${1:init}; ${2:cond}; ${3:step}) {\n\t$0\n}"),
+      ("return", "return $1"),
+      ("error", "error ${1:ErrorName};"),
+      ("orerror", "orerror(${1:T}, ${2:ErrorName})"),
+      ("try", "try $1"),
+      ("must", "must $1")
+    ]
 
 -- | Snippet insert text for a user-defined function: `name($1:param1, $2:param2)`.
 insertSnippet :: FuncName -> FunctionType -> Text
@@ -151,12 +193,21 @@ quantKeywords =
     "while",
     "for",
     "return",
+    "break",
+    "continue",
     "import",
     "from",
+    "const",
+    "static",
     "true",
     "false",
     "int",
     "float",
-    "string",
-    "bool"
+    "str",
+    "bool",
+    "void",
+    "error",
+    "orerror",
+    "try",
+    "must"
   ]

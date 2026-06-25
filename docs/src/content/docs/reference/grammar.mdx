@@ -53,27 +53,34 @@ Terminals are written in `"double quotes"` or described by a rule name in **bold
 
 ---
 
+## Error declarations
+
+```bnf
+<error-decl>       ::= "error" <identifier> ";"
+                      | "error" <identifier> "{" <error-field-list>? "}" ";"
+
+<error-field-list> ::= <error-field> ("," <error-field>)*
+
+<error-field>      ::= <identifier> ":" <type>
+```
+
+---
+
 ## Types
 
 ```bnf
 <type>           ::= <primitive-type>
-                   | "[" <qualified-type> "]"       -- array type
-                   | <identifier>                    -- named / struct type
-                   | "!" <error-set>                 -- error set
-                   | <type> "!" <error-set>          -- result type  (T!E)
+                   | "[" <qualified-type> "]"        -- array type
+                   | <identifier>                     -- named / struct type
+                   | "orerror" "(" <type> "," <identifier> ")"  -- result type
 
 <qualified-type> ::= "const"? <type>
 
-<primitive-type> ::= "int"
-                   | "i8" | "i16" | "i32" | "i64"
-                   | "u8" | "u16" | "u32" | "u64"
-                   | "float" | "f32" | "f64"
+<primitive-type> ::= "int" | "int" "<" <int-size> ("," <signedness>)? ">"
+                   | "float" | "float" "<" <float-size> ">"
                    | "bool"
                    | "str"
-                   | "char"
                    | "void"
-
-<error-set>      ::= <identifier> ("|" <identifier>)*
 ```
 
 ---
@@ -137,8 +144,12 @@ Expressions are listed from **lowest** to **highest** precedence.
 <binary-expr> ::= <unary-expr> (<binary-op> <unary-expr>)*
 
 <unary-expr>  ::= <unary-op> <unary-expr>
-               |  "must" <unary-expr>
+               |  "must" <unary-expr>              -- unwrap or panic
+               |  "try"  <unary-expr>              -- unwrap or propagate
+               |  "error" <identifier> ("{" <error-field-init-list>? "}")?  -- create error value
                |  <primary>
+
+<error-field-init-list> ::= <identifier> ":" <expr> ("," <identifier> ":" <expr>)*
 
 <primary>     ::= <literal>
                | <identifier> "{" <field-init-list>? "}"            -- struct init
@@ -239,12 +250,12 @@ Expressions are listed from **lowest** to **highest** precedence.
 ### Keywords
 
 ```
-bool  break  char  const  continue  else  f32  f64  float  fn  for
-from  i16  i32  i64  i8  if  import  int  must  return  str
-struct  try  u16  u32  u64  u8  void  while
+bool  break  const  continue  else  error  float  fn  for
+from  if  import  int  must  orerror  return  str
+try  void  while
 
 Contextual keyword (parsed as identifier, not reserved):
-static
+static  struct  errorset
 ```
 
 ---

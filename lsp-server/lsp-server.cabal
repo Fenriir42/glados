@@ -35,6 +35,7 @@ executable glados-lsp
     LSPServer.Rename
     LSPServer.SemanticTokens
     LSPServer.SignatureHelp
+    LSPServer.Span
 
   default-extensions:
     DuplicateRecordFields

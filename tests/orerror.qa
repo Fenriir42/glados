@@ -1,0 +1,38 @@
+from string import to_str
+
+error DivisionError;
+error OutOfBounds;
+
+fn safe_div(a: int, b: int) -> orerror(int, DivisionError) {
+  if (b == 0) {
+    return error DivisionError;
+  };
+  return a / b;
+}
+
+fn safe_index(arr: [int], i: int) -> orerror(int, OutOfBounds) {
+  if (i < 0) {
+    return error OutOfBounds;
+  };
+  return arr[i];
+}
+
+fn double_div(a: int, b: int, c: int) -> orerror(int, DivisionError) {
+  x: int = try safe_div(a, b);
+  return try safe_div(x, c);
+}
+
+fn main() -> void {
+  ok1: int = must safe_div(10, 2);
+  println(`10 / 2 = {ok1}`);
+
+  ok2: int = must safe_div(100, 4);
+  println(`100 / 4 = {ok2}`);
+
+  ok3: int = must double_div(100, 5, 4);
+  println(`double_div(100, 5, 4) = {ok3}`);
+
+  arr: [int] = [10, 20, 30];
+  v: int = must safe_index(arr, 1);
+  println(`arr[1] = {v}`);
+}

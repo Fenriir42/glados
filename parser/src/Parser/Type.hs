@@ -1,6 +1,6 @@
 module Parser.Type where
 
-import AST.Types.Common (Located (..), TypeName (..), VarName (..), getSpan)
+import AST.Types.Common (ErrorName (..), Located (..), TypeName (..), VarName (..), getSpan)
 import AST.Types.Literal (IntBase (BaseDec))
 import AST.Types.Type
   ( ArrayType (ArrayType),
@@ -13,8 +13,9 @@ import AST.Types.Type
     Parameter (Parameter),
     PrimitiveType (..),
     QualifiedType (QualifiedType),
+    ResultType (ResultType),
     Signedness (..),
-    Type (TypeArray, TypeFunction, TypePrimitive, TypeStruct),
+    Type (TypeArray, TypeFunction, TypePrimitive, TypeResult, TypeStruct),
     defaultFloatType,
     defaultIntType,
   )
@@ -135,10 +136,21 @@ parseTypeNamed = do
   Located span (TokIdentifier name) <- MP.satisfy isIdentifier
   return $ Located span (TypeName name)
 
+parseErrorOrType :: TokenParser (Located Type)
+parseErrorOrType = do
+  Located startSpan _ <- matchKeyword "orerror"
+  _ <- matchSymbol "("
+  Located _ successType <- parseType
+  _ <- matchSymbol ","
+  Located errSpan (TokIdentifier errName) <- MP.satisfy isIdentifier
+  Located endSpan _ <- matchSymbol ")"
+  return $ Located (startSpan <> errSpan <> endSpan) (TypeResult (ResultType successType (ErrorName errName)))
+
 parseType :: TokenParser (Located Type)
 parseType =
   MP.choice
-    [ fmap TypePrimitive <$> parsePrimitiveType,
+    [ parseErrorOrType,
+      fmap TypePrimitive <$> parsePrimitiveType,
       fmap TypeArray <$> parseArrayType,
       fmap TypeFunction <$> parseFunctionType,
       do

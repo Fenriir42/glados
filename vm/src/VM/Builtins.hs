@@ -6,6 +6,7 @@ module VM.Builtins
   )
 where
 
+import AST.Types.Common (ErrorName (..), unErrorName)
 import Compiler.Bytecode (Value (..))
 import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, try)
@@ -96,6 +97,7 @@ renderValue _ (VFloat f) _ = T.pack (formatFloat f)
 renderValue _ (VBool b) _ = if b then "True" else "False"
 renderValue _ (VArrayRef i) _ = T.pack ("<array#" ++ show i ++ ">")
 renderValue _ (VStructRef i) _ = T.pack ("<struct#" ++ show i ++ ">")
+renderValue _ (VErrorVal name _) _ = T.pack ("error " ++ T.unpack (unErrorName name))
 renderValue _ VUnit _ = ""
 
 formatFloat :: Double -> String

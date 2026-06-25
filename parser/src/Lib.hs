@@ -5,6 +5,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Lexer (parseRawTokens)
+import System.IO (hIsTerminalDevice, stdout)
 import Text.Megaparsec (errorBundlePretty, runParser)
 import Tokens (Token)
 
@@ -42,20 +43,21 @@ styleOutput raw = unlines $ map colorizeLine (lines raw)
       | otherwise = isSubsequenceOf a ys
 
 -- | Public API
-lexInternal :: String -> String -> Either String [Token]
-lexInternal sourceName input =
+lexInternal :: Bool -> String -> String -> Either String [Token]
+lexInternal useColor sourceName input =
   case runParser parseRawTokens sourceName (T.pack input) of
     Right tokens -> Right tokens
-    Left bundle -> Left (styleOutput $ errorBundlePretty bundle)
+    Left bundle ->
+      let msg = errorBundlePretty bundle
+       in Left (if useColor then styleOutput msg else msg)
 
 lexString :: String -> Either String [Token]
-lexString = lexInternal "<string>"
+lexString = lexInternal False "<string>"
 
 lexFile :: FilePath -> IO (Either String [Token])
 lexFile path = do
+  isTTY <- hIsTerminalDevice stdout
   contentOrErr <- try (TIO.readFile path) :: IO (Either IOException Text)
   case contentOrErr of
     Left ioErr -> return $ Left ("File Error: " ++ show ioErr)
-    Right content -> return $ case runParser parseRawTokens path content of
-      Right tokens -> Right tokens
-      Left bundle -> Left (styleOutput $ errorBundlePretty bundle)
+    Right content -> return (lexInternal isTTY path (T.unpack content))

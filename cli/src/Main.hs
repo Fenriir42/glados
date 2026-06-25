@@ -22,6 +22,7 @@ import Lib (lexFile)
 import Options.Applicative
 import Parser.Decl (parseDecl)
 import System.Exit (exitFailure)
+import System.IO (hIsTerminalDevice, stdout)
 import Text.Megaparsec (errorBundlePretty, runParser)
 import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
@@ -89,11 +90,11 @@ compileSource stdlibDir filePath = do
   case typeErrs of
     [] -> return ()
     errs -> do
-      mapM_ (\e -> putStr (displayTypeError e (lines src))) errs
+      mapM_ (\e -> printErr (displayTypeError e (lines src))) errs
       exitFailure
   case compileProgram (Program decls) of
     Left err -> do
-      putStr (displayError err (lines src))
+      printErr (displayError err (lines src))
       exitFailure
     Right bc -> return bc
 
@@ -104,7 +105,7 @@ execute :: [Compiler.Bytecode] -> IO ()
 execute bytecodes = do
   result <- runProgram bytecodes
   case result of
-    Left err -> putStr (prettyVMError err) >> exitFailure
+    Left err -> printErr (prettyVMError err) >> exitFailure
     Right _ -> return ()
 
 -- ---------------------------------------------------------------------------
@@ -152,6 +153,18 @@ vmErrorMsg (VMInContext _ _ inner) = vmErrorMsg inner
 
 -- ---------------------------------------------------------------------------
 -- ANSI
+
+-- | Print an error string, stripping ANSI escape codes when stdout is not a TTY.
+printErr :: String -> IO ()
+printErr s = do
+  isTTY <- hIsTerminalDevice stdout
+  putStr (if isTTY then s else stripAnsi s)
+
+-- | Remove ANSI SGR escape sequences from a string.
+stripAnsi :: String -> String
+stripAnsi [] = []
+stripAnsi ('\ESC' : '[' : rest) = stripAnsi (drop 1 (dropWhile (/= 'm') rest))
+stripAnsi (c : cs) = c : stripAnsi cs
 
 esc :: String -> String
 esc code = "\ESC[" ++ code ++ "m"

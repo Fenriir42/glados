@@ -498,16 +498,16 @@ compileExpr = \case
           void $ emitInstruction IArraySet
       )
       (zip [0 ..] elems)
-  ExprTry innerExpr ->
-    throwError $
-      UnsupportedConstruct
-        (locSpan innerExpr)
-        "Error handling (try) not yet supported"
-  ExprMust innerExpr ->
-    throwError $
-      UnsupportedConstruct
-        (locSpan innerExpr)
-        "Error handling (must) not yet supported"
+  ExprError (Located _ ename) fields -> do
+    mapM_ (\(_, valExpr) -> compileExpr (unLocated valExpr)) fields
+    let fnames = map (unLocated . fst) fields
+    void $ emitInstruction (INewError ename fnames)
+  ExprTry innerExpr -> do
+    compileExpr (unLocated innerExpr)
+    void $ emitInstruction ITryOp
+  ExprMust innerExpr -> do
+    compileExpr (unLocated innerExpr)
+    void $ emitInstruction IMustOp
   ExprParen expr -> compileExpr (unLocated expr)
   ExprCast expr castType -> do
     compileExpr (unLocated expr)

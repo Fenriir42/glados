@@ -5,7 +5,7 @@ module VM.Interpreter
   )
 where
 
-import AST.Types.Common (FieldName (..), FuncName (..), VarName)
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), VarName)
 import Compiler.Bytecode
   ( BinaryOp (..),
     Bytecode (..),
@@ -315,6 +315,37 @@ execInstr = \case
           s {vmStructHeap = Map.adjust (Map.insert fname val) sid (vmStructHeap s)}
         return Nothing
       _ -> throwError $ VMTypeMismatch $ "IFieldSet: expected struct ref, got " ++ show ref
+  INewError (ErrorName ename) fnames -> do
+    vals <- mapM (\fn -> pop ("INewError field " ++ T.unpack (unFieldName fn))) (reverse fnames)
+    push (VErrorVal (ErrorName ename) (zip fnames vals))
+    return Nothing
+  ITryOp -> do
+    v <- peek "ITryOp"
+    case v of
+      VErrorVal {} -> do
+        _ <- pop "ITryOp (propagate)"
+        frames <- gets vmCallStack
+        case frames of
+          [] -> return (Just v)
+          (frame : rest) -> do
+            modify $ \s ->
+              s
+                { vmLocals = fLocals frame,
+                  vmIP = fIP frame,
+                  vmInstrs = fInstrs frame,
+                  vmStrings = fStrings frame,
+                  vmCallStack = rest,
+                  vmStack = v : vmStack s,
+                  vmCurrentFunc = fFunc frame
+                }
+            return Nothing
+      _ -> return Nothing
+  IMustOp -> do
+    v <- peek "IMustOp"
+    case v of
+      VErrorVal (ErrorName ename) _ ->
+        throwError $ VMRuntimeError $ "must: unwrapped error `" ++ T.unpack ename ++ "`"
+      _ -> return Nothing
 
 -- ---------------------------------------------------------------------------
 -- Heap-aware builtins (array.len, array.push, array.pop, sys.exit)
@@ -510,6 +541,7 @@ valEq :: Value -> Value -> Bool
 valEq (VInt a) (VInt b) = a == b
 valEq (VFloat a) (VFloat b) = a == b
 valEq (VBool a) (VBool b) = a == b
+valEq (VErrorVal n1 _) (VErrorVal n2 _) = n1 == n2
 valEq VUnit VUnit = True
 valEq _ _ = False
 

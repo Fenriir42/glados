@@ -3,7 +3,7 @@ title: Types
 description: Complete reference for Quant's type system
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 Quant features a rich, statically-typed system that provides both safety and flexibility. All variables must have explicit type annotations.
 
@@ -403,3 +403,90 @@ Integer value ranges depend on bit size and signedness:
 |------|------|-----------|
 | `float<32>` | 32 | ~7 decimal digits |
 | `float` (default) | 64 | ~15 decimal digits |
+
+## Error Types
+
+`orerror(T, E)` is Quant's built-in result type — a value that is either a success of type `T` or a named error `E`. It plays the same role as `Result<T, E>` in Rust or `Either` in Haskell.
+
+### Declaring Error Types
+
+```quant
+error DivisionError;
+error ParseError;
+error OutOfBounds;
+```
+
+Error types with payload fields are also supported:
+
+```quant
+error NetworkError { code: int }
+error ValidationError { field: str }
+```
+
+### Returning orerror Values
+
+A function declares it can fail by using `orerror` as its return type:
+
+```quant
+fn safe_div(a: int, b: int) -> orerror(int, DivisionError) {
+  if (b == 0) {
+    return error DivisionError;
+  };
+  return a / b;
+}
+```
+
+Returning a plain value (`return a / b`) is the success path. Returning `error Name` is the error path.
+
+### Handling orerror Values
+
+<Tabs>
+  <TabItem label="must (unwrap or panic)">
+    Use `must` to unwrap the success value, panicking at runtime if it is an error:
+
+    ```quant
+    x: int = must safe_div(10, 2);   // x = 5
+    y: int = must safe_div(10, 0);   // runtime panic: unwrapped error DivisionError
+    ```
+
+    Use `must` when you are certain the call will succeed, or intentionally want a hard crash on failure.
+  </TabItem>
+  <TabItem label="try (propagate)">
+    Use `try` to unwrap the success value and **propagate** the error upward if the call fails. The surrounding function must also return an `orerror` with a compatible error type:
+
+    ```quant
+    fn double_div(a: int, b: int, c: int) -> orerror(int, DivisionError) {
+      x: int = try safe_div(a, b);     // propagates if b == 0
+      return try safe_div(x, c);       // propagates if c == 0
+    }
+    ```
+
+    If `safe_div` returns an error, `try` immediately returns that error from `double_div` — no further statements execute.
+  </TabItem>
+</Tabs>
+
+<Aside type="caution">
+  `try` can only be used inside a function whose return type is `orerror(_, E)` where `E` matches the propagated error type.
+</Aside>
+
+### Full Example
+
+```quant
+error DivisionError;
+
+fn safe_div(a: int, b: int) -> orerror(int, DivisionError) {
+  if (b == 0) {
+    return error DivisionError;
+  };
+  return a / b;
+}
+
+fn main() -> void {
+  ok: int = must safe_div(100, 4);
+  println(`result: {ok}`);
+}
+```
+
+```text
+result: 25
+```
