@@ -1,0 +1,75 @@
+from string import len, to_upper, reverse
+
+# Helper: format a labelled result using interpolation.
+fn label(name: str, val: str) -> str {
+    return `{name}: {val}`;
+}
+
+# Return a greeting string built with interpolation.
+fn greet(who: str, n: int) -> str {
+    return `hello, {who}! you have {n} messages`;
+}
+
+# Compute and describe a sum.
+fn sum_desc(a: int, b: int) -> str {
+    total: int = a + b;
+    return `{a} + {b} = {total}`;
+}
+
+fn main() -> void {
+    # plain backtick string (no interpolation)
+    println(`hello, world`);
+
+    # single int variable
+    x: int = 42;
+    println(`x = {x}`);
+
+    # float variable
+    pi: float = 3.14159;
+    println(`pi ~ {pi}`);
+
+    # bool variable
+    flag: bool = True;
+    println(`flag = {flag}`);
+
+    # arithmetic expression inside interpolation
+    a: int = 6;
+    b: int = 7;
+    println(`{a} * {b} = {a * b}`);
+
+    # multiple interpolations in one string
+    name: str = "Quant";
+    version: int = 1;
+    println(`language: {name}, version: {version}`);
+
+    # interpolation at the very start (empty leading chunk)
+    println(`{x} is the answer`);
+
+    # interpolation at the very end (empty trailing chunk)
+    println(`the answer is {x}`);
+
+    # only an interpolated expression, nothing else
+    println(`{a * b}`);
+
+    # string variable interpolated then used in another interpolation
+    greeting: str = "hi";
+    target: str = "world";
+    println(`{greeting}, {target}!`);
+
+    # using a string function result inside interpolation
+    n: int = len(name);
+    println(`'{name}' has {n} chars`);
+
+    upper: str = to_upper("quant");
+    println(`uppercased: {upper}`);
+
+    rev: str = reverse("abcde");
+    println(`reversed: {rev}`);
+
+    # function returning an interpolated string
+    println(greet("Alice", 3));
+    println(sum_desc(100, 23));
+
+    # label helper: double nesting through a function call
+    println(label("answer", `{x}`));
+}

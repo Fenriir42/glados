@@ -36,8 +36,7 @@ fn abs_diff(x: int, y: int) -> int {
 
 // Build a labelled output line: "label: value".
 fn labelled(label: str, value: str) -> str {
-    sep: str = ": ";
-    return concat(concat(label, sep), value);
+    return `{label}: {value}`;
 }
 
 // Compute the nth triangular number: 1+2+...+n.
