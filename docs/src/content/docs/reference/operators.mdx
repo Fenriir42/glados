@@ -3,6 +3,8 @@ title: Operators
 description: Complete reference for all operators in Quant
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
 Quant provides a comprehensive set of operators for arithmetic, comparison, logical, bitwise operations, and assignments.
 
 ## Operator Precedence
@@ -41,14 +43,12 @@ x: int = (5 + 3) * 2;  // 16, not 11
 | `%`      | Modulo         | `a % b` | Remainder of a divided by b     |
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     a: int = 10 + 5;    // 15
     b: int = 20 - 8;    // 12
     c: int = 6 * 7;     // 42
     d: int = 20 / 4;    // 5
     e: int = 17 % 5;    // 2
-
-    return 0;
 }
 ```
 
@@ -60,12 +60,10 @@ fn main() -> int {
 | `+`      | Plus     | `+a`    | Returns the value (identity) |
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 10;
     y: int = -x;    // -10
     z: int = +x;    // 10
-
-    return 0;
 }
 ```
 
@@ -83,7 +81,7 @@ Comparison operators return boolean values.
 | `>=`     | Greater than or equal  | `a >= b`  | True if a is greater than or equal to b  |
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 5;
     y: int = 10;
 
@@ -93,8 +91,6 @@ fn main() -> int {
     flag4: bool = (x <= y);   // True
     flag5: bool = (x > y);    // False
     flag6: bool = (x >= y);   // False
-
-    return 0;
 }
 ```
 
@@ -105,11 +101,11 @@ Logical operators work with boolean values.
 | Operator | Name        | Example   | Description                       |
 |----------|-------------|-----------|-----------------------------------|
 | `&&`     | Logical AND | `a && b`  | True if both a and b are true     |
-| `||`     | Logical OR  | `a || b`  | True if either a or b is true     |
+| `\|\|`   | Logical OR  | `a \|\| b`| True if either a or b is true     |
 | `!`      | Logical NOT | `!a`      | True if a is false                |
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     a: bool = True;
     b: bool = False;
 
@@ -118,19 +114,20 @@ fn main() -> int {
     e: bool = !a;        // False
     f: bool = !b;        // True
 
-    // Short-circuit evaluation
     result: bool = (5 > 3) && (10 < 20);  // True
-
-    return 0;
 }
 ```
 
 ### Short-Circuit Evaluation
 
+<Aside type="note">
 Logical `&&` and `||` use short-circuit evaluation:
 
-- `a && b`: If `a` is false, `b` is not evaluated
-- `a || b`: If `a` is true, `b` is not evaluated
+- `a && b` -- if `a` is false, `b` is never evaluated
+- `a || b` -- if `a` is true, `b` is never evaluated
+
+This is useful for guarding operations that should only run when a precondition holds, such as checking a pointer is non-null before dereferencing it.
+</Aside>
 
 ## Bitwise Operators
 
@@ -139,14 +136,14 @@ Bitwise operators perform operations on individual bits.
 | Operator | Name        | Example   | Description                              |
 |----------|-------------|-----------|------------------------------------------|
 | `&`      | Bitwise AND | `a & b`   | Sets each bit to 1 if both bits are 1    |
-| `|`      | Bitwise OR  | `a | b`   | Sets each bit to 1 if either bit is 1    |
+| `\|`     | Bitwise OR  | `a \| b`  | Sets each bit to 1 if either bit is 1    |
 | `^`      | Bitwise XOR | `a ^ b`   | Sets each bit to 1 if only one bit is 1  |
 | `<<`     | Left shift  | `a << n`  | Shifts bits left by n positions          |
 | `>>`     | Right shift | `a >> n`  | Shifts bits right by n positions         |
 | `~`      | Bitwise NOT | `~a`      | Inverts all bits                         |
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     a: int = 0b1100;     // 12 in binary
     b: int = 0b1010;     // 10 in binary
 
@@ -156,8 +153,6 @@ fn main() -> int {
     f: int = a << 2;     // 0b110000 = 48
     g: int = a >> 2;     // 0b0011 = 3
     h: int = ~a;         // Inverts all bits
-
-    return 0;
 }
 ```
 
@@ -170,11 +165,9 @@ fn main() -> int {
 | `=`      | Assignment | `a = b` | Assigns b to a |
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int;
     x = 42;  // Assign 42 to x
-
-    return 0;
 }
 ```
 
@@ -190,13 +183,13 @@ Compound assignment operators combine an operation with assignment.
 | `/=`     | Divide assign      | `a /= b`   | `a = a / b`    |
 | `%=`     | Modulo assign      | `a %= b`   | `a = a % b`    |
 | `&=`     | AND assign         | `a &= b`   | `a = a & b`    |
-| `|=`     | OR assign          | `a |= b`   | `a = a | b`    |
+| `\|=`    | OR assign          | `a \|= b`  | `a = a \| b`   |
 | `^=`     | XOR assign         | `a ^= b`   | `a = a ^ b`    |
 | `<<=`    | Left shift assign  | `a <<= b`  | `a = a << b`   |
 | `>>=`    | Right shift assign | `a >>= b`  | `a = a >> b`   |
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 10;
 
     x += 5;   // x = 15
@@ -204,8 +197,6 @@ fn main() -> int {
     x *= 2;   // x = 24
     x /= 4;   // x = 6
     x %= 4;   // x = 2
-
-    return 0;
 }
 ```
 
@@ -218,7 +209,7 @@ Access array elements using square brackets.
 | `[]`     | Index | `arr[i]`  | Access element at index i     |
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     numbers: [int];
     numbers[0] = 10;
     numbers[1] = 20;
@@ -230,8 +221,6 @@ fn main() -> int {
     matrix: [[int]];
     matrix[0][0] = 1;
     matrix[0][1] = 2;
-
-    return 0;
 }
 ```
 
@@ -240,7 +229,7 @@ fn main() -> int {
 Parentheses group expressions and override operator precedence.
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     // Without parentheses (follows precedence)
     x: int = 2 + 3 * 4;        // 14 (multiplication first)
 
@@ -249,8 +238,6 @@ fn main() -> int {
 
     // Complex expressions
     z: int = ((10 + 5) * 2) - (3 * 4);  // 18
-
-    return 0;
 }
 ```
 
@@ -300,7 +287,7 @@ a = b = c  // Evaluated as a = (b = c)
 ### Complex Expression
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 10;
     y: int = 20;
     z: int = 30;
@@ -313,15 +300,13 @@ fn main() -> int {
 
     // Mixed operations
     value: int = (x + y) * 2 / 3 % 5;
-
-    return 0;
 }
 ```
 
 ### Bitwise Manipulation
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     flags: int = 0b0000;
 
     // Set bit 0
@@ -335,7 +320,5 @@ fn main() -> int {
 
     // Toggle bit 1
     flags = flags ^ 0b0010;     // flags = 0b0110
-
-    return 0;
 }
 ```

@@ -18,7 +18,8 @@ Terminals are written in `"double quotes"` or described by a rule name in **bold
               | <visibility> "fn" <func-decl>
               | <visibility> "struct" <struct-decl>
 
-<visibility> ::= "pub" | ε
+<visibility> ::= "static" | ε
+             -- default (no keyword) = public; "static" = module-private
 
 <import-decl> ::= "import" <module-name>
                |  "from" <module-name> "import" <import-list>
@@ -85,9 +86,9 @@ Terminals are written in `"double quotes"` or described by a rule name in **bold
 <stmt>   ::= <var-decl> ";"
            | <assign-stmt> ";"
            | <expr-stmt> ";"
-           | <if-stmt>
-           | <while-stmt>
-           | <for-stmt>
+           | <if-stmt> ";"
+           | <while-stmt> ";"
+           | <for-stmt> ";"
            | <return-stmt> ";"
            | "break" ";"
            | "continue" ";"
@@ -140,12 +141,16 @@ Expressions are listed from **lowest** to **highest** precedence.
                |  <primary>
 
 <primary>     ::= <literal>
+               | <identifier> "{" <field-init-list>? "}"            -- struct init
                | <identifier> "." <identifier> "(" <arg-list>? ")"  -- dotted call
                | <identifier> "(" <arg-list>? ")"                   -- function call
                | <primitive-type> "(" <expr> ")"                    -- type cast
                | <primary> "[" <expr> "]"                           -- index
+               | <primary> "." <identifier>                         -- field access
                | <identifier>                                        -- variable
                | "(" <expr> ")"                                      -- parenthesised
+
+<field-init-list> ::= <identifier> ":" <expr> ("," <identifier> ":" <expr>)*
 
 <arg-list>    ::= <expr> ("," <expr>)*
 ```
@@ -186,6 +191,7 @@ Expressions are listed from **lowest** to **highest** precedence.
               |  <float-literal>
               |  <bool-literal>
               |  <string-literal>
+              |  <interp-literal>
               |  <array-literal>
 
 <int-literal>    ::= <decimal>
@@ -199,6 +205,12 @@ Expressions are listed from **lowest** to **highest** precedence.
 
 <string-literal> ::= '"' <char>* '"'
                    -- supports escape sequences: \n \t \r \\ \"
+
+<interp-literal> ::= '`' <interp-part>* '`'
+                   -- backtick string; {expr} holes are interpolated at runtime
+
+<interp-part>    ::= <any-char-except-backtick-or-brace>+
+                   | "{" <expr> "}"
 
 <array-literal>  ::= "[" (<expr> ("," <expr>)*)? "]"
 
@@ -228,8 +240,11 @@ Expressions are listed from **lowest** to **highest** precedence.
 
 ```
 bool  break  char  const  continue  else  f32  f64  float  fn  for
-from  i16  i32  i64  i8  if  import  int  must  pub  return  str
+from  i16  i32  i64  i8  if  import  int  must  return  str
 struct  try  u16  u32  u64  u8  void  while
+
+Contextual keyword (parsed as identifier, not reserved):
+static
 ```
 
 ---

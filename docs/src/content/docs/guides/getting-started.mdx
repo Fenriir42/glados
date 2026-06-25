@@ -1,0 +1,132 @@
+---
+title: Getting Started
+description: Learn how to write your first Quant program
+---
+
+import { Aside, Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
+## Introduction
+
+Quant is a statically-typed, compiled language with C-like syntax. It features a powerful type system, standard library modules, and modern programming constructs.
+
+## Your First Program
+
+A simple "Hello, World!" program:
+
+```quant
+fn main() -> void {
+    println("Hello, World!");
+}
+```
+
+### Breaking It Down
+
+<Steps>
+
+1. **`fn main() -> void`** -- Entry point; every program starts here.
+
+2. **`println(...)`** -- Built-in print function that appends a trailing newline.
+
+3. **`;`** -- All statements end with a semicolon.
+
+</Steps>
+
+## Basic Program Structure
+
+Every Quant program consists of optional imports followed by function definitions:
+
+```quant
+import math
+
+fn main() -> void {
+    r: float = math.sqrt(16.0);
+    println(r);   // 4.0
+}
+```
+
+## Import Styles
+
+Quant supports three import styles.
+
+<Tabs>
+  <TabItem label="Module Import">
+    ```quant
+    import math
+
+    fn main() -> void {
+        x: float = math.sqrt(9.0);   // 3.0
+        n: int = math.abs(-7);        // 7
+        println(x);
+    }
+    ```
+
+    Module functions are called with the `module.function` prefix.
+  </TabItem>
+  <TabItem label="Selective Import">
+    ```quant
+    from math import sqrt, abs
+
+    fn main() -> void {
+        x: float = sqrt(9.0);   // call without prefix
+        n: int = abs(-7);
+        println(x);
+    }
+    ```
+
+    `from M import f1, f2` brings specific names into scope without the prefix.
+  </TabItem>
+  <TabItem label="Wildcard Import">
+    ```quant
+    from math import *
+
+    fn main() -> void {
+        x: float = sqrt(9.0);
+        println(x);
+    }
+    ```
+
+    Imports every exported name from the module into the current scope.
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+Wildcard imports (`from M import *`) are convenient but may shadow names already in scope. Prefer selective or module-prefix imports in larger programs.
+</Aside>
+
+## Standard Library Modules
+
+| Module   | Contents                                                  |
+|----------|-----------------------------------------------------------|
+| `math`   | `sqrt`, `pow`, `sin`, `cos`, `abs`, `floor`, `ceil`, ... |
+| `string` | `len`, `concat`, `to_upper`, `contains`, `substring`, ... |
+| `array`  | `len`, `push`, `pop`, `reverse`, ...                      |
+| `sys`    | `exit`, `time`, `argc`, `platform`, `getcwd`, ...         |
+| `io`     | `print`, `println`, `read`                                |
+
+See the [Standard Library reference](/reference/stdlib/) for the full list.
+
+## Comments
+
+```quant
+// Single-line comment
+# Also a single-line comment (Python-style)
+```
+
+## Statements and Semicolons
+
+<Aside type="note">
+All statements end with a semicolon (`;`). Block statements such as `if`, `while`, and `for` also require a `;` after their closing brace `}`. Function bodies themselves do not need a trailing semicolon.
+</Aside>
+
+```quant
+fn main() -> void {
+    x: int = 10;
+    println(x);
+}
+```
+
+## Next Steps
+
+- [Language Basics](/guides/language-basics/) - Variables, types, and expressions
+- [Control Flow](/guides/control-flow/) - Conditionals and loops
+- [Standard Library](/reference/stdlib/) - Complete function reference

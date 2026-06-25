@@ -3,6 +3,8 @@ title: Types
 description: Complete reference for Quant's type system
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
 Quant features a rich, statically-typed system that provides both safety and flexibility. All variables must have explicit type annotations.
 
 ## Primitive Types
@@ -96,6 +98,34 @@ name: str = "Quant";
 - `\"` - Quote
 - `\\` - Backslash
 
+#### String Interpolation
+
+Backtick strings (`` ` `` ... `` ` ``) embed expressions directly inside the string using `{expr}`:
+
+```quant
+name: str = "Alice";
+age: int = 30;
+println(`hello, {name}! you are {age} years old`);
+// hello, Alice! you are 30 years old
+```
+
+Any expression is valid inside `{...}`:
+
+```quant
+a: int = 6;
+b: int = 7;
+println(`{a} * {b} = {a * b}`);
+// 6 * 7 = 42
+```
+
+All primitive types are converted to their string representation automatically. Backtick strings desugar to `string.concat` and `string.to_str` calls, so they produce a plain `str` value and can be used anywhere a `str` is expected:
+
+```quant
+fn label(key: str, val: int) -> str {
+    return `{key}: {val}`;
+}
+```
+
 ### Character Type
 
 Character type for single characters.
@@ -112,8 +142,8 @@ newline: char = '\n';
 The void type indicates no value.
 
 ```quant
-fn print_message() -> void {
-    print("This function returns nothing\n");
+fn greet() -> void {
+    println("This function returns nothing");
 }
 ```
 
@@ -147,6 +177,72 @@ matrix: [[const int]];            // 2D array of immutable integers
 
 See the [Arrays Guide](/guides/arrays/) for more details on array usage.
 
+### Struct Types
+
+Structs define named composite types that group related fields together.
+
+#### Declaration
+
+```quant
+struct Point {
+    x: int;
+    y: int;
+}
+
+struct Person {
+    name: str;
+    age: int;
+}
+```
+
+#### Instantiation
+
+Create a struct value using the struct name followed by a field initializer block:
+
+```quant
+fn main() -> void {
+    p: Point = Point { x: 10, y: 20 };
+    person: Person = Person { name: "Alice", age: 30 };
+}
+```
+
+#### Field Access
+
+Use dot notation to read or write fields:
+
+```quant
+fn main() -> void {
+    p: Point = Point { x: 0, y: 0 };
+
+    // Read
+    println(p.x);  // 0
+
+    // Write
+    p.x = 5;
+    p.y = 15;
+    println(`({p.x}, {p.y})`);  // (5, 15)
+}
+```
+
+#### Structs as Function Parameters
+
+Structs are passed by value like any other type:
+
+```quant
+fn distance(p: Point) -> float {
+    import math
+    xf: float = float(p.x);
+    yf: float = float(p.y);
+    return math.sqrt(xf * xf + yf * yf);
+}
+
+fn main() -> void {
+    p: Point = Point { x: 3, y: 4 };
+    d: float = distance(p);
+    println(d);  // 5.0
+}
+```
+
 ### Function Types
 
 Functions are declared with parameter types and a return type.
@@ -156,8 +252,8 @@ fn add(a: int, b: int) -> int {
     return a + b;
 }
 
-fn print_message(msg: str) -> void {
-    print("%s\n", msg);
+fn greet(msg: str) -> void {
+    println(msg);
 }
 
 fn process() -> float {
@@ -214,41 +310,41 @@ fn calculate() -> int {
     return 42;
 }
 
-fn main() -> int {
-    x: int = calculate();  // Type of calculate() is inferred
-    return 0;
+fn main() -> void {
+    x: int = calculate();  // Type of calculate() is known from its signature
 }
 ```
 
 ### In Expressions
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 10;
     y: int = 20;
-    z: int = x + y;  // Type of (x + y) is inferred
-    return 0;
+    z: int = x + y;  // Type of (x + y) is inferred as int
 }
 ```
 
 ## Type Casting
 
-Explicit type conversion using the target type as a function:
+Explicit type conversion uses the target type as a function call:
+
+<Aside type="note">
+Quant has no implicit conversions. You must always cast explicitly when mixing `int` and `float`. Forgetting a cast is a compile-time error, not a silent truncation.
+</Aside>
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     // Float to int
     x: float = 3.14;
     y: int = int(x);  // y = 3
-    
+
     // Int to float
     a: int = 42;
     b: float = float(a);  // b = 42.0
-    
+
     // In expressions
     c: int = int(3.9) + int(2.1);  // c = 5
-    
-    return 0;
 }
 ```
 
@@ -274,15 +370,13 @@ fn add(a: int, b: int) -> int {
     return a + b;
 }
 
-fn main() -> int {
+fn main() -> void {
     x: int = 10;
     y: int = 20;
     result: int = add(x, y);  // OK: types match
-    
+
     // z: float = 5.0;
     // add(x, z);  // Error: float doesn't match int parameter
-    
-    return 0;
 }
 ```
 

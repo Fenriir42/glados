@@ -3,6 +3,8 @@ title: Control Flow
 description: Learn about conditionals, loops, and control statements in Quant
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
 ## Conditional Statements
 
 ### If Statement
@@ -14,20 +16,18 @@ Execute code conditionally based on a boolean expression.
 ```quant
 if (condition) {
     // code executed if condition is true
-}:
+};
 ```
 
 **Example:**
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 10;
 
     if (x > 5) {
-        print("x is greater than 5\n");
+        println("x is greater than 5");
     };
-
-    return 0;
 }
 ```
 
@@ -48,16 +48,14 @@ if (condition) {
 **Example:**
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 3;
 
     if (x > 5) {
-        print("x is greater than 5\n");
+        println("x is greater than 5");
     } else {
-        print("x is not greater than 5\n");
+        println("x is not greater than 5");
     };
-
-    return 0;
 }
 ```
 
@@ -80,20 +78,18 @@ if (condition1) {
 **Example:**
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     score: int = 85;
 
     if (score >= 90) {
-        print("Grade: A\n");
+        println("Grade: A");
     } else if (score >= 80) {
-        print("Grade: B\n");
+        println("Grade: B");
     } else if (score >= 70) {
-        print("Grade: C\n");
+        println("Grade: C");
     } else {
-        print("Grade: F\n");
+        println("Grade: F");
     };
-
-    return 0;
 }
 ```
 
@@ -102,17 +98,15 @@ fn main() -> int {
 If statements can be nested inside each other.
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 10;
     y: int = 20;
 
     if (x > 5) {
         if (y > 15) {
-            print("Both conditions are true\n");
+            println("Both conditions are true");
         };
     };
-
-    return 0;
 }
 ```
 
@@ -133,27 +127,29 @@ while (condition) {
 **Example:**
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     count: int = 0;
 
     while (count < 5) {
-        print("Count: %d\n", count);
+        println(`Count: {count}`);
         count += 1;
     };
-
-    return 0;
 }
 ```
 
 **Output:**
 
-```quant
+```text
 Count: 0
 Count: 1
 Count: 2
 Count: 3
 Count: 4
 ```
+
+<Aside type="caution">
+Make sure the loop condition will eventually become false. Forgetting to update the loop variable (e.g., omitting `count += 1`) creates an infinite loop that never terminates.
+</Aside>
 
 ### For Loop
 
@@ -164,23 +160,22 @@ Loop with initialization, condition, and update in one statement.
 ```quant
 for (initialization; condition; update) {
     // code to repeat
-}
+};
 ```
 
 **Example:**
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     for (i: int = 0; i < 5; i += 1) {
-        print("i = %d\n", i);
+        println(`i = {i}`);
     };
-     return 0;
 }
 ```
 
 **Output:**
 
-```quant
+```text
 i = 0
 i = 1
 i = 2
@@ -201,26 +196,22 @@ for (i: int = 0; i < 10; i++) {
     //   ^           ^        ^
     //   |           |        |
     //   Init        Cond     Update
-}
+};
 ```
 
 ### For Loop with Assignment Operators
 
 ```quant
-fn main() -> int {
-    // Using +=
+fn main() -> void {
+    // Counting up
     for (i: int = 0; i < 5; i += 1) {
-        print("%d ", i);
+        println(i);
     };
-    print("\n");
 
-    // Using -= (counting down)
+    // Counting down
     for (i: int = 5; i > 0; i -= 1) {
-        print("%d ", i);
+        println(i);
     };
-    print("\n");
-
-    return 0;
 }
 ```
 
@@ -229,23 +220,27 @@ fn main() -> int {
 Loops can be nested inside each other.
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     for (i: int = 0; i < 3; i++) {
         for (j: int = 0; j < 3; j++) {
-            print("(%d, %d) ", i, j);
+            println(`({i}, {j})`);
         };
-        print("\n");
     };
-     return 0;
 }
 ```
 
 **Output:**
 
-```quant
-(0, 0) (0, 1) (0, 2)
-(1, 0) (1, 1) (1, 2)
-(2, 0) (2, 1) (2, 2)
+```text
+(0, 0)
+(0, 1)
+(0, 2)
+(1, 0)
+(1, 1)
+(1, 2)
+(2, 0)
+(2, 1)
+(2, 2)
 ```
 
 ## Loop Control Statements
@@ -255,36 +250,32 @@ fn main() -> int {
 Exit a loop immediately.
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     for (i: int = 0; i < 10; i++) {
         if (i == 5) {
             break;  // Exit loop when i equals 5
         };
-        print("%d ", i);
+        println(i);
     };
-    print("\n");  // Output: 0 1 2 3 4
-
-    return 0;
+    // Output: 0 1 2 3 4 (one per line)
 }
 ```
 
 **With while loop:**
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     count: int = 0;
 
     while (count < 100) {
-        print("%d ", count);
+        println(count);
         count += 1;
 
         if (count >= 5) {
             break;  // Exit loop early
         };
     };
-    print("\n");  // Output: 0 1 2 3 4
-
-    return 0;
+    // Output: 0 1 2 3 4 (one per line)
 }
 ```
 
@@ -293,23 +284,21 @@ fn main() -> int {
 Skip the rest of the current iteration and continue with the next one.
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     for (i: int = 0; i < 10; i++) {
         if (i % 2 == 0) {
             continue;  // Skip even numbers
         };
-        print("%d ", i);
+        println(i);
     };
-    print("\n");  // Output: 1 3 5 7 9
-
-    return 0;
+    // Output: 1 3 5 7 9 (one per line)
 }
 ```
 
 **With while loop:**
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     count: int = 0;
 
     while (count < 10) {
@@ -318,11 +307,9 @@ fn main() -> int {
         if (count % 2 == 0) {
             continue;  // Skip even numbers
         };
-         print("%d ", count);
+        println(count);
     };
-    print("\n");  // Output: 1 3 5 7 9
-
-    return 0;
+    // Output: 1 3 5 7 9 (one per line)
 }
 ```
 
@@ -349,7 +336,7 @@ fn find_first_negative(arr: [int], size: int) -> int {
     return -1;  // Not found
 }
 
-fn main() -> int {
+fn main() -> void {
     numbers: [int];
     numbers[0] = 10;
     numbers[1] = 20;
@@ -357,36 +344,43 @@ fn main() -> int {
     numbers[3] = 30;
 
     index: int = find_first_negative(numbers, 4);
-    print("First negative at index: %d\n", index);  // Output: 2
-
-    return 0;
+    println(`First negative at index: {index}`);  // 2
 }
 ```
 
 ## Block Statements
 
-Curly braces `{}` create a new scope.
+Curly braces `{}` create a new scope. When used as standalone blocks (not attached to a function), they end with `;`.
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 10;
 
     {
         y: int = 20;  // y only exists in this block
-        print("x = %d, y = %d\n", x, y);
+        println(`x = {x}, y = {y}`);
     };
-     // print("%d", y);  // Error: y not in scope
-
-    return 0;
+    // println(y);  // Error: y not in scope
 }
 ```
+
+## Short-Circuit Evaluation
+
+<Aside type="note">
+Logical `&&` and `||` use short-circuit evaluation:
+
+- `a && b` -- if `a` is false, `b` is never evaluated
+- `a || b` -- if `a` is true, `b` is never evaluated
+
+This means you can guard potentially unsafe operations behind a condition without worrying about the right-hand side executing.
+</Aside>
 
 ## Common Patterns
 
 ### Loop with Array
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     numbers: [int];
     numbers[0] = 10;
     numbers[1] = 20;
@@ -395,16 +389,15 @@ fn main() -> int {
     numbers[4] = 50;
 
     for (i: int = 0; i < 5; i++) {
-        print("numbers[%d] = %d\n", i, numbers[i]);
+        println(`numbers[{i}] = {numbers[i]}`);
     };
-     return 0;
 }
 ```
 
 ### Finding Maximum
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     numbers: [int];
     numbers[0] = 10;
     numbers[1] = 50;
@@ -419,16 +412,14 @@ fn main() -> int {
             max = numbers[i];
         };
     };
-     print("Maximum: %d\n", max);  // Output: Maximum: 90
-
-    return 0;
+    println(`Maximum: {max}`);  // Maximum: 90
 }
 ```
 
 ### Counting Elements
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     numbers: [int];
     numbers[0] = 10;
     numbers[1] = 20;
@@ -444,9 +435,7 @@ fn main() -> int {
             count += 1;
         };
     };
-     print("Count of %d: %d\n", target, count);  // Output: Count of 20: 3
-
-    return 0;
+    println(`Count of {target}: {count}`);  // Count of 20: 3
 }
 ```
 
@@ -459,36 +448,34 @@ fn is_prime(n: int) -> bool {
     if (n < 2) {
         return False;
     };
-     if (n == 2) {
+    if (n == 2) {
         return True;
     };
-     if (n % 2 == 0) {
+    if (n % 2 == 0) {
         return False;
     };
-     for (i: int = 3; i < int(math.sqrt(n)) + 1; i += 2) {
+    for (i: int = 3; i < int(math.sqrt(float(n))) + 1; i += 2) {
         if (n % i == 0) {
             return False;
         };
     };
-     return True;
+    return True;
 }
 
-fn main() -> int {
+fn main() -> void {
     for (i: int = 1; i <= 20; i++) {
         if (is_prime(i)) {
-            print("%d ", i);
+            println(i);
         };
     };
-    print("\n");  // Output: 2 3 5 7 11 13 17 19
-
-    return 0;
+    // Output: 2 3 5 7 11 13 17 19 (one per line)
 }
 ```
 
 ### Nested Loop for 2D Array
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     matrix: [[int]];
 
     // Initialize
@@ -497,21 +484,26 @@ fn main() -> int {
             matrix[i][j] = i * 3 + j + 1;
         };
     };
-     // Print
+
+    // Print
     for (i: int = 0; i < 3; i++) {
         for (j: int = 0; j < 3; j++) {
-            print("%d ", matrix[i][j]);
+            println(matrix[i][j]);
         };
-        print("\n");
     };
-     return 0;
 }
 ```
 
 **Output:**
 
-```quant
-1 2 3
-4 5 6
-7 8 9
+```text
+1
+2
+3
+4
+5
+6
+7
+8
+9
 ```

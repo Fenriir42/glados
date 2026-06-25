@@ -3,6 +3,8 @@ title: Language Basics
 description: Learn the fundamental concepts of Quant programming
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
 ## Variables
 
 Variables in Quant must be declared with an explicit type annotation using the colon (`:`) syntax.
@@ -22,21 +24,19 @@ name: type = value;
 ### Examples
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     // Integer variable
     x: int = 42;
-    
+
     // Boolean variable
     is_active: bool = True;
-    
+
     // String variable
     message: str = "Hello";
-    
+
     // Uninitialized variable
     count: int;
     count = 10;
-    
-    return 0;
 }
 ```
 
@@ -45,13 +45,11 @@ fn main() -> int {
 Use the `const` qualifier to make variables immutable:
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     pi: const float = 3.14159;
     max_size: const int = 100;
-    
+
     // pi = 3.14;  // Error: cannot modify const variable
-    
-    return 0;
 }
 ```
 
@@ -105,13 +103,30 @@ is_valid: bool = False;
 message: str = "Hello, Quant!";
 ```
 
+String literals use double quotes. To embed expressions inside a string, use a **backtick string**:
+
+```quant
+fn main() -> void {
+    name: str = "Quant";
+    version: int = 1;
+    println(`language: {name}, version: {version}`);
+    // language: Quant, version: 1
+}
+```
+
+Anything inside `{...}` is evaluated as an expression and converted to a string automatically.
+
+<Aside type="tip">
+Backtick strings desugar to `string.concat` and `string.to_str` calls internally, so they produce a plain `str` value and can be used anywhere a `str` is expected. See the [Types reference](/reference/types/#string-interpolation) for full details.
+</Aside>
+
 ### Void Type
 
 - **`void`**: Used for functions that don't return a value
 
 ```quant
-fn print_message() -> void {
-    print("No return value\n");
+fn greet() -> void {
+    println("No return value");
 }
 ```
 
@@ -122,18 +137,70 @@ Quant supports explicit type casting using the type name as a function:
 ```quant
 import math
 
-fn main() -> int {
+fn main() -> void {
     x: float = 3.14;
     y: int = int(x);  // Cast float to int: y = 3
-    
+
     z: float = float(42);  // Cast int to float: z = 42.0
-    
+
     // Casting in expressions
-    result: int = int(math.sqrt(16));
-    
-    return 0;
+    result: int = int(math.sqrt(16.0));
+    println(result);
 }
 ```
+
+## Structs
+
+Structs group related fields under a named type.
+
+### Declaration
+
+```quant
+struct Point {
+    x: int;
+    y: int;
+}
+```
+
+### Instantiation
+
+```quant
+fn main() -> void {
+    p: Point = Point { x: 10, y: 20 };
+    println(p.x);
+    println(p.y);
+}
+```
+
+### Field Access and Assignment
+
+```quant
+fn main() -> void {
+    p: Point = Point { x: 0, y: 0 };
+    p.x = 5;
+    p.y = 15;
+    println(`({p.x}, {p.y})`);
+}
+```
+
+Struct types are named types -- you declare variables with the struct name just like any primitive type.
+
+## Visibility
+
+By default, functions declared with `fn` are visible to any file that imports the module. The `static` keyword restricts a function to the file it is defined in.
+
+```quant
+// helpers.qa
+fn public_helper() -> void {
+    println("visible to importers");
+}
+
+static fn internal_helper() -> void {
+    println("only visible inside helpers.qa");
+}
+```
+
+When another file imports `helpers`, it can call `public_helper` but not `internal_helper`. This is Quant's module-level encapsulation mechanism.
 
 ## Expressions
 
@@ -179,7 +246,7 @@ f: int = ~5;          // Bitwise NOT
 
 ## Assignment Operators
 
-Any bitwise, arithmetic, or logical expression can be assigned to a variable using the assignment operator (`=`). Additionally, compound assignment operators are supported:
+Any bitwise, arithmetic, or logical expression can be assigned to a variable using the assignment operator (`=`). Compound assignment operators are also supported:
 
 ```quant
 x: int = 10;
@@ -197,16 +264,13 @@ x %= 3;        // Modulo and assign: x = x % 3
 Call functions using parentheses:
 
 ```quant
-from std import print
-
 fn add(a: int, b: int) -> int {
     return a + b;
 }
 
-fn main() -> int {
+fn main() -> void {
     result: int = add(5, 3);
-    print("Result: %d\n", result);
-    return 0;
+    println(`Result: {result}`);
 }
 ```
 
@@ -215,16 +279,14 @@ fn main() -> int {
 Variables are scoped to the block in which they are declared:
 
 ```quant
-fn main() -> int {
+fn main() -> void {
     x: int = 10;  // Outer scope
-    
+
     {
         y: int = 20;  // Inner scope
-        print("%d\n", x);  // Can access outer scope
-    }
-    
-    // print("%d\n", y);  // Error: y not in scope
-    
-    return 0;
+        println(x);   // Can access outer scope
+    };
+
+    // println(y);  // Error: y not in scope
 }
 ```
