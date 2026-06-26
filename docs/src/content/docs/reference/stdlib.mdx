@@ -244,3 +244,37 @@ fn main() -> void {
 ```
 
 For output that mixes multiple values or needs formatting, use backtick string interpolation rather than format specifiers.
+
+---
+
+## varargs
+
+Variadic utility functions. Import with `from varargs import ...`.
+
+<Tabs>
+  <TabItem label="Module prefix">
+    ```quant
+    import varargs
+    fn main() -> void {
+        println(`{varargs.sum(1, 2, 3)}`);
+    }
+    ```
+  </TabItem>
+  <TabItem label="Named import">
+    ```quant
+    from varargs import sum, join, format
+    fn main() -> void {
+        println(`{sum(1, 2, 3)}`);
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `sum` | `(args: ...int) -> int` | Sum of all integer arguments |
+| `product` | `(args: ...int) -> int` | Product of all integer arguments |
+| `min` | `(args: ...int) -> int` | Minimum of all integer arguments |
+| `max` | `(args: ...int) -> int` | Maximum of all integer arguments |
+| `join` | `(sep: str, parts: ...str) -> str` | Concatenate strings with a separator |
+| `format` | `(template: str, args: ...str) -> str` | Replace `{}` placeholders in order |

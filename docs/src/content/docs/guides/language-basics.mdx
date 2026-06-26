@@ -274,6 +274,69 @@ fn main() -> void {
 }
 ```
 
+## Variadic Functions
+
+A parameter declared with `...T` accepts zero or more extra arguments of type `T`. Inside the function the parameter is a `[T]` array — access elements with `[i]` and `len()`.
+
+```quant
+fn sum(args: ...int) -> int {
+    total: int = 0;
+    i: int = 0;
+    while (i < len(args)) {
+        total = total + args[i];
+        i = i + 1;
+    };
+    return total;
+}
+
+fn join(sep: str, parts: ...str) -> str {
+    result: str = "";
+    i: int = 0;
+    while (i < len(parts)) {
+        if (i > 0) { result = string.concat(result, sep); };
+        result = string.concat(result, parts[i]);
+        i = i + 1;
+    };
+    return result;
+}
+
+fn main() -> void {
+    println(`{sum(1, 2, 3, 4)}`);            // 10
+    println(join(", ", "a", "b", "c"));       // a, b, c
+}
+```
+
+<Aside>
+  The variadic parameter must be the last one. The caller passes arguments directly — no array literal needed at the call site.
+</Aside>
+
+The standard library module `varargs` provides ready-made variadic utilities:
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `sum` | `(args: ...int) -> int` | Sum of all arguments |
+| `product` | `(args: ...int) -> int` | Product of all arguments |
+| `min` | `(args: ...int) -> int` | Minimum value |
+| `max` | `(args: ...int) -> int` | Maximum value |
+| `join` | `(sep: str, parts: ...str) -> str` | Join strings with separator |
+| `format` | `(template: str, args: ...str) -> str` | Replace `{}` holes in order |
+
+```quant
+from varargs import sum, join, format
+
+fn main() -> void {
+    println(`{sum(10, 20, 30)}`);
+    println(join(" | ", "one", "two", "three"));
+    println(format("hello {} and {}", "alice", "bob"));
+}
+```
+
+```text
+60
+one | two | three
+hello alice and bob
+```
+
 ## Scope
 
 Variables are scoped to the block in which they are declared:

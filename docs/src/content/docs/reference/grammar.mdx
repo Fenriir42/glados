@@ -34,9 +34,11 @@ Terminals are written in `"double quotes"` or described by a rule name in **bold
 ```bnf
 <func-decl>  ::= <identifier> "(" <param-list>? ")" "->" <type> <block>
 
-<param-list> ::= <param> ("," <param>)*
+<param-list> ::= <param> ("," <param>)* ("," <variadic-param>)?
+             |  <variadic-param>
 
-<param>      ::= <identifier> ":" <qualified-type>
+<param>          ::= <identifier> ":" <qualified-type>
+<variadic-param> ::= <identifier> ":" "..." <type>   -- collects remaining args as [type]
 ```
 
 ---
