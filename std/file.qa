@@ -1,0 +1,61 @@
+# Quant Standard Library - File Module
+
+// Reads the entire contents of the file at `path` and returns them as a
+// string.
+//
+// Returns an empty string `""` if the file does not exist or cannot be read.
+// Use `file.exists` to distinguish between an empty file and a missing one.
+fn read(path: str) -> str {
+    return file.read(path);
+}
+
+// Writes `content` to the file at `path`, replacing any existing contents.
+//
+// Creates the file if it does not exist.
+// Returns true on success, false if the file could not be written.
+fn write(path: str, content: str) -> bool {
+    return file.write(path, content);
+}
+
+// Appends `content` to the end of the file at `path`.
+//
+// Creates the file if it does not exist.
+// Returns true on success, false if the file could not be opened.
+fn append(path: str, content: str) -> bool {
+    return file.append(path, content);
+}
+
+// Returns true if a file exists at `path`, false otherwise.
+fn exists(path: str) -> bool {
+    return file.exists(path);
+}
+
+// Deletes the file at `path`.
+//
+// Returns true on success, false if the file did not exist or could not be
+// removed.
+fn delete(path: str) -> bool {
+    return file.delete(path);
+}
+
+// Renames (or moves) the file at `old` to `new`.
+//
+// Returns true on success, false if the operation failed.
+fn rename(old: str, new: str) -> bool {
+    return file.rename(old, new);
+}
+
+// Returns the size of the file at `path` in bytes.
+//
+// Returns -1 if the file does not exist or its size cannot be determined.
+fn size(path: str) -> int {
+    return file.size(path);
+}
+
+// Reads the file at `path` and returns its contents split into lines.
+//
+// Returns an empty array if the file does not exist or cannot be read.
+// Line endings are stripped from each element.
+fn lines(path: str) -> [str] {
+    return file.lines(path);
+}

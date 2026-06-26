@@ -11,19 +11,27 @@ import Compiler.Bytecode (Value (..))
 import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, try)
 import Control.Monad (when)
+import Data.Bits ((.&.))
+import qualified Data.ByteString as BS
 import Data.Char (toLower, toUpper)
+import Data.Either (fromRight)
 import Data.List (isPrefixOf)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Network.HostName (getHostName)
 import System.CPUTime (getCPUTime)
-import System.Directory (getCurrentDirectory, setCurrentDirectory)
+import System.Directory (doesFileExist, getCurrentDirectory, getFileSize, removeFile, renameFile, setCurrentDirectory)
 import System.Environment (getArgs, lookupEnv, setEnv)
 import System.Exit (ExitCode (..), exitWith)
-import System.IO (hFlush, stdout)
+import System.IO (Handle, hFlush, stderr, stdin, stdout)
 import System.Info (os)
+import System.Posix.IO (OpenFileFlags (..), OpenMode (..), closeFd, defaultFileFlags, fdToHandle, fdWrite, openFd)
+import qualified System.Posix.IO.ByteString as PosixBS
+import System.Posix.Terminal (queryTerminal)
+import System.Posix.Types (ByteCount, Fd (..))
 import System.Process (system)
 
 -- | True if the function is a pure builtin (no heap access needed).
@@ -34,6 +42,7 @@ isBuiltin name =
     || "string." `T.isPrefixOf` name
     || "sys." `T.isPrefixOf` name
     || "io." `T.isPrefixOf` name
+    || "file." `T.isPrefixOf` name
 
 -- | True if the function needs heap access (handled in Interpreter directly).
 isHeapBuiltin :: Text -> Bool
@@ -52,7 +61,15 @@ heapBuiltins =
     "pop",
     "string.split",
     "string.join",
-    "sys.args"
+    "sys.args",
+    "file.lines",
+    "buf.new",
+    "buf.write",
+    "buf.writeln",
+    "buf.to_str",
+    "buf.len",
+    "buf.clear",
+    "buf.flush"
   ]
 
 -- | Execute a pure built-in. @strings@ is the caller's string pool.
@@ -64,6 +81,7 @@ callBuiltin name strings args
   | "string." `T.isPrefixOf` name = callString (T.drop 7 name) strings args
   | "sys." `T.isPrefixOf` name = callSys (T.drop 4 name) strings args
   | "io." `T.isPrefixOf` name = callIO (T.drop 3 name) strings args
+  | "file." `T.isPrefixOf` name = callFile (T.drop 5 name) strings args
 callBuiltin name _ _ = ioError $ userError $ "Unknown builtin: " ++ T.unpack name
 
 -- ---------------------------------------------------------------------------
@@ -263,7 +281,65 @@ callSys "chdir" ss [path] = do
 callSys "system" ss [cmd] = do
   code <- system (T.unpack (resolveStr ss cmd))
   return $ VInt (case code of ExitSuccess -> 0; ExitFailure n -> fromIntegral n)
+-- Raw fd write: flush GHC's buffer first to preserve ordering with print/println
+callSys "write" ss [VInt fd, s] = do
+  let txt = T.unpack (resolveStr ss s)
+  fdHandle fd >>= mapM_ hFlush
+  r <- try (fdWrite (Fd (fromIntegral fd)) txt) :: IO (Either SomeException ByteCount)
+  return $ VInt (either (const (-1)) fromIntegral r)
+-- Raw fd read: up to n bytes (ByteString version to support partial UTF-8 reads safely)
+callSys "read" _ [VInt fd, VInt n] = do
+  r <- try (PosixBS.fdRead (Fd (fromIntegral fd)) (fromIntegral n)) :: IO (Either SomeException BS.ByteString)
+  return $ VString (either (const "") TE.decodeUtf8Lenient r)
+-- Open a file path with POSIX flags (0=rdonly 1=wronly 2=rdwr | 64=creat 512=trunc 1024=append)
+callSys "open" ss [path, VInt flags] = do
+  let p = T.unpack (resolveStr ss path)
+      rawMode = fromIntegral flags .&. (3 :: Int)
+      openMode = case rawMode :: Int of 1 -> WriteOnly; 2 -> ReadWrite; _ -> ReadOnly
+      doCreat = (fromIntegral flags .&. (64 :: Int)) /= (0 :: Int)
+      fileFlags =
+        defaultFileFlags
+          { append = (fromIntegral flags .&. (1024 :: Int)) /= (0 :: Int),
+            trunc = (fromIntegral flags .&. (512 :: Int)) /= (0 :: Int),
+            creat = if doCreat then Just 0o644 else Nothing
+          }
+  r <- try (openFd p openMode fileFlags) :: IO (Either SomeException Fd)
+  return $ VInt (either (const (-1)) (\(Fd n) -> fromIntegral n) r)
+callSys "close" _ [VInt fd] = do
+  r <- try (closeFd (Fd (fromIntegral fd))) :: IO (Either SomeException ())
+  return $ VBool (either (const False) (const True) r)
+callSys "flush" _ [VInt fd] = do
+  h <- fdHandle fd
+  case h of
+    Just handle -> hFlush handle
+    Nothing -> do
+      r <- try (fdToHandle (Fd (fromIntegral fd))) :: IO (Either SomeException Handle)
+      case r of
+        Right handle -> hFlush handle
+        Left _ -> return ()
+  return VUnit
+callSys "isatty" _ [VInt fd] = do
+  r <- try (queryTerminal (Fd (fromIntegral fd))) :: IO (Either SomeException Bool)
+  return $ VBool (fromRight False r)
+-- Standard fd numbers
+callSys "stdin_fd" _ [] = return $ VInt 0
+callSys "stdout_fd" _ [] = return $ VInt 1
+callSys "stderr_fd" _ [] = return $ VInt 2
+-- POSIX open flags
+callSys "o_rdonly" _ [] = return $ VInt 0
+callSys "o_wronly" _ [] = return $ VInt 1
+callSys "o_rdwr" _ [] = return $ VInt 2
+callSys "o_creat" _ [] = return $ VInt 64
+callSys "o_trunc" _ [] = return $ VInt 512
+callSys "o_append" _ [] = return $ VInt 1024
 callSys name _ _ = ioError $ userError $ "Unknown sys function: sys." ++ T.unpack name
+
+-- | Resolve a small fd number to the corresponding GHC Handle, if any.
+fdHandle :: Integer -> IO (Maybe Handle)
+fdHandle 0 = return (Just stdin)
+fdHandle 1 = return (Just stdout)
+fdHandle 2 = return (Just stderr)
+fdHandle _ = return Nothing
 
 normaliseOs :: String
 normaliseOs = case os of
@@ -281,3 +357,39 @@ callIO "read" _ [] = do
   hFlush stdout
   VString . T.pack <$> getLine
 callIO name _ _ = ioError $ userError $ "Unknown io function: io." ++ T.unpack name
+
+-- ---------------------------------------------------------------------------
+-- file.*
+
+callFile :: Text -> [Text] -> [Value] -> IO Value
+callFile "read" ss [path] = do
+  let p = T.unpack (resolveStr ss path)
+  r <- try (TIO.readFile p) :: IO (Either SomeException Text)
+  return $ VString (fromRight "" r)
+callFile "write" ss [path, content] = do
+  let p = T.unpack (resolveStr ss path)
+      c = resolveStr ss content
+  r <- try (TIO.writeFile p c) :: IO (Either SomeException ())
+  return $ VBool (either (const False) (const True) r)
+callFile "append" ss [path, content] = do
+  let p = T.unpack (resolveStr ss path)
+      c = resolveStr ss content
+  r <- try (TIO.appendFile p c) :: IO (Either SomeException ())
+  return $ VBool (either (const False) (const True) r)
+callFile "exists" ss [path] = do
+  let p = T.unpack (resolveStr ss path)
+  VBool <$> doesFileExist p
+callFile "delete" ss [path] = do
+  let p = T.unpack (resolveStr ss path)
+  r <- try (removeFile p) :: IO (Either SomeException ())
+  return $ VBool (either (const False) (const True) r)
+callFile "rename" ss [old, new'] = do
+  let o = T.unpack (resolveStr ss old)
+      n = T.unpack (resolveStr ss new')
+  r <- try (renameFile o n) :: IO (Either SomeException ())
+  return $ VBool (either (const False) (const True) r)
+callFile "size" ss [path] = do
+  let p = T.unpack (resolveStr ss path)
+  r <- try (getFileSize p) :: IO (Either SomeException Integer)
+  return $ VInt (either (const (-1)) fromIntegral r)
+callFile name _ _ = ioError $ userError $ "Unknown file function: file." ++ T.unpack name

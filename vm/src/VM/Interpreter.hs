@@ -16,6 +16,7 @@ import Compiler.Bytecode
     UnaryOp (..),
     Value (..),
   )
+import Control.Exception (SomeException, try)
 import Control.Monad.Except (ExceptT, catchError, runExceptT, throwError)
 import Control.Monad.State (StateT, gets, modify, runStateT)
 import qualified Control.Monad.State as S
@@ -24,8 +25,11 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import System.Environment (getArgs)
 import System.Exit (ExitCode (..), exitWith)
+import System.Posix.IO (fdWrite)
+import System.Posix.Types (ByteCount, Fd (..))
 import VM.Builtins (callBuiltin, isBuiltin, isHeapBuiltin)
 
 -- ---------------------------------------------------------------------------
@@ -412,6 +416,73 @@ callHeapBuiltin name args = case (name, args) of
         let elems = map snd (Map.toAscList arr)
             texts = map (resolveValue strings) elems
         return $ VString (T.intercalate sep texts)
+  -- buf.new : () -> [str]
+  ("buf.new", []) -> do
+    VArrayRef <$> allocArray
+
+  -- buf.write : [str] -> str -> void
+  ("buf.write", [VArrayRef aid, s]) -> do
+    heapPush aid s
+    return VUnit
+
+  -- buf.writeln : [str] -> str -> void
+  ("buf.writeln", [VArrayRef aid, s]) -> do
+    strings <- gets vmStrings
+    let txt = resolveValue strings s
+    heapPush aid (VString txt)
+    heapPush aid (VString "\n")
+    return VUnit
+
+  -- buf.to_str : [str] -> str
+  ("buf.to_str", [VArrayRef aid]) -> do
+    strings <- gets vmStrings
+    heap <- gets vmHeap
+    case Map.lookup aid heap of
+      Nothing -> return $ VString ""
+      Just arr -> do
+        let elems = map snd (Map.toAscList arr)
+            texts = map (resolveValue strings) elems
+        return $ VString (T.concat texts)
+
+  -- buf.len : [str] -> int   (total character count)
+  ("buf.len", [VArrayRef aid]) -> do
+    strings <- gets vmStrings
+    heap <- gets vmHeap
+    case Map.lookup aid heap of
+      Nothing -> return $ VInt 0
+      Just arr -> do
+        let elems = map snd (Map.toAscList arr)
+            texts = map (resolveValue strings) elems
+        return $ VInt (fromIntegral (sum (map T.length texts)))
+
+  -- buf.clear : [str] -> void
+  ("buf.clear", [VArrayRef aid]) -> do
+    modify $ \s -> s {vmHeap = Map.insert aid Map.empty (vmHeap s)}
+    return VUnit
+
+  -- buf.flush : [str] -> int -> int  (join, write to fd, clear, return bytes written)
+  ("buf.flush", [VArrayRef aid, VInt fd]) -> do
+    strings <- gets vmStrings
+    heap <- gets vmHeap
+    case Map.lookup aid heap of
+      Nothing -> return $ VInt 0
+      Just arr -> do
+        let elems = map snd (Map.toAscList arr)
+            combined = T.concat (map (resolveValue strings) elems)
+        r <- S.liftIO (try (fdWrite (Fd (fromIntegral fd)) (T.unpack combined)) :: IO (Either SomeException ByteCount))
+        modify $ \s -> s {vmHeap = Map.insert aid Map.empty (vmHeap s)}
+        return $ VInt (either (const (-1)) fromIntegral r)
+
+  -- file.lines : str -> [str]
+  ("file.lines", [path]) -> do
+    strings <- gets vmStrings
+    let p = T.unpack (resolveValue strings path)
+    r <- S.liftIO (try (TIO.readFile p) :: IO (Either SomeException T.Text))
+    aid <- allocArray
+    case r of
+      Left _ -> return ()
+      Right txt -> mapM_ (heapPush aid . VString) (T.lines txt)
+    return $ VArrayRef aid
   _ ->
     throwError $
       VMRuntimeError $

@@ -10,7 +10,9 @@ std/
 ├── math.qa     # Mathematical functions
 ├── string.qa   # String manipulation
 ├── array.qa    # Array utilities
-├── sys.qa      # System operations
+├── sys.qa      # System operations + raw fd I/O + open flags
+├── file.qa     # File I/O (read, write, append, lines, …)
+├── buf.qa      # Mutable string buffers (write, flush, to_str, …)
 ├── varargs.qa  # Variadic helpers (sum, join, format, …)
 └── README.md
 ```
@@ -151,8 +153,22 @@ fn main() -> void {
 | `args` | `() -> [str]` | Command-line arguments |
 | `time` | `() -> int` | Unix timestamp (seconds) |
 | `hostname` | `() -> str` | Machine hostname |
-| `cpu_time` | `() -> float` | CPU time used (seconds) |
 | `sleep` | `(ms: int) -> void` | Sleep for milliseconds |
+| `write` | `(fd: int, s: str) -> int` | Write string to fd; returns bytes written |
+| `read` | `(fd: int, n: int) -> str` | Read up to n bytes from fd |
+| `open` | `(path: str, flags: int) -> int` | Open fd (returns -1 on error) |
+| `close` | `(fd: int) -> bool` | Close fd |
+| `flush` | `(fd: int) -> void` | Flush fd |
+| `isatty` | `(fd: int) -> bool` | True if fd is a terminal |
+| `stdin_fd` | `() -> int` | Returns 0 |
+| `stdout_fd` | `() -> int` | Returns 1 |
+| `stderr_fd` | `() -> int` | Returns 2 |
+| `o_rdonly` | `() -> int` | Open flag: read-only |
+| `o_wronly` | `() -> int` | Open flag: write-only |
+| `o_rdwr` | `() -> int` | Open flag: read+write |
+| `o_creat` | `() -> int` | Open flag: create if absent (mode 0644) |
+| `o_trunc` | `() -> int` | Open flag: truncate on open |
+| `o_append` | `() -> int` | Open flag: writes go to end |
 
 ```quant
 from sys import time, exit
@@ -161,6 +177,64 @@ fn main() -> void {
     t: int = time();
     println(`Started at {t}`);
     exit(0);
+}
+```
+
+---
+
+## `buf` — Mutable String Buffers
+
+Accumulate string output efficiently and flush to any file descriptor.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `new` | `() -> [str]` | Create an empty buffer |
+| `write` | `(b: [str], s: str) -> void` | Append string to buffer |
+| `writeln` | `(b: [str], s: str) -> void` | Append string + newline |
+| `to_str` | `(b: [str]) -> str` | Concatenate buffer without clearing |
+| `len` | `(b: [str]) -> int` | Total character count |
+| `clear` | `(b: [str]) -> void` | Clear buffer |
+| `flush` | `(b: [str], fd: int) -> int` | Write to fd, clear, return bytes |
+
+```quant
+from buf import new, write, writeln, flush
+from sys import stderr_fd
+
+fn main() -> void {
+    b: [str] = new();
+    writeln(b, "error: something went wrong");
+    writeln(b, "hint: check your input");
+    flush(b, stderr_fd());
+}
+```
+
+---
+
+## `file` — File I/O
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `read` | `(path: str) -> str` | Read entire file; `""` on error |
+| `write` | `(path: str, content: str) -> bool` | Write/overwrite file |
+| `append` | `(path: str, content: str) -> bool` | Append to file |
+| `exists` | `(path: str) -> bool` | True if file exists |
+| `delete` | `(path: str) -> bool` | Delete file |
+| `rename` | `(old: str, new: str) -> bool` | Rename or move file |
+| `size` | `(path: str) -> int` | Size in bytes; `-1` on error |
+| `lines` | `(path: str) -> [str]` | Read file as array of lines |
+
+```quant
+from file import write, read, lines, delete
+
+fn main() -> void {
+    write("hello.txt", "line one\nline two\n");
+    rows: [str] = lines("hello.txt");
+    i: int = 0;
+    while (i < len(rows)) {
+        println(rows[i]);
+        i = i + 1;
+    };
+    delete("hello.txt");
 }
 ```
 
@@ -200,4 +274,6 @@ fn main() -> void {
 | `string` | Complete |
 | `array` | Complete |
 | `sys` | Complete |
+| `file` | Complete |
+| `buf` | Complete |
 | `varargs` | Complete |

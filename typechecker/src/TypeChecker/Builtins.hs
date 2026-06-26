@@ -31,16 +31,27 @@ builtinReturnType (FuncName n)
   -- math: a handful return int, the rest return float
   | n `elem` mathIntFuncs = intT
   | "math." `T.isPrefixOf` n = floatT
-  -- sys: a handful return string
+  -- sys: specific return types before the int catch-all
   | n `elem` ["sys.env", "sys.platform", "sys.hostname", "sys.getcwd"] = stringT
-  -- sys.args returns [str] , not representable without generics; treat as unknown
-  | n == "sys.args" = Nothing
-  -- remaining sys.* return int (time, argc, system, chdir as int 0/1, etc.)
+  | n == "sys.args" = Nothing -- returns [str]; unknown without generics
+  | n == "sys.read" = stringT
+  | n `elem` ["sys.close", "sys.isatty"] = boolT
+  -- sys.flush already in voidFuncs; remaining sys.* return int
   | "sys." `T.isPrefixOf` n = intT
   -- io.read
   | n == "io.read" = stringT
   -- remaining io.* (io.print, io.println) already in voidFuncs above
   | "io." `T.isPrefixOf` n = voidT
+  -- file: read returns str, lines returns [str] (unknown here), bool/int variants explicit
+  | n == "file.read" = stringT
+  | n `elem` ["file.write", "file.append", "file.exists", "file.delete", "file.rename"] = boolT
+  | n == "file.size" = intT
+  | n == "file.lines" = Nothing -- returns [str]; unknown without generics
+  -- buf.*
+  | n == "buf.new" = Nothing -- returns [str]; unknown without generics
+  | n `elem` ["buf.write", "buf.writeln", "buf.clear"] = voidT
+  | n == "buf.to_str" = stringT
+  | n `elem` ["buf.len", "buf.flush"] = intT
   | otherwise = Nothing
   where
     voidFuncs =
@@ -51,7 +62,8 @@ builtinReturnType (FuncName n)
         "push",
         "array.push",
         "sys.exit",
-        "sys.sleep"
+        "sys.sleep",
+        "sys.flush"
       ]
     intFuncs =
       [ "len",
@@ -111,4 +123,4 @@ isKnownBuiltin (FuncName n) =
     || any (`T.isPrefixOf` n) modulePrefixes
   where
     standaloneBuiltins = ["print", "println", "len", "push", "pop"]
-    modulePrefixes = ["math.", "string.", "io.", "sys.", "array."]
+    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf."]

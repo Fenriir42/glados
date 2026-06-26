@@ -1,0 +1,46 @@
+# Quant Standard Library - Buffer Module
+
+// Creates a new empty string buffer.
+//
+// The buffer is backed by a `[str]` array; chunks are accumulated and
+// joined only when you call `to_str` or `flush`.
+fn new() -> [str] {
+    return buf.new();
+}
+
+// Appends `s` to the buffer.
+fn write(b: [str], s: str) -> void {
+    buf.write(b, s);
+}
+
+// Appends `s` followed by a newline character to the buffer.
+fn writeln(b: [str], s: str) -> void {
+    buf.writeln(b, s);
+}
+
+// Returns all buffer contents concatenated as a single string without
+// modifying the buffer.
+fn to_str(b: [str]) -> str {
+    return buf.to_str(b);
+}
+
+// Returns the total number of characters stored in the buffer.
+fn len(b: [str]) -> int {
+    return buf.len(b);
+}
+
+// Clears all contents from the buffer, leaving it empty.
+fn clear(b: [str]) -> void {
+    buf.clear(b);
+}
+
+// Writes all buffer contents to file descriptor `fd`, clears the buffer,
+// and returns the number of bytes written (-1 on error).
+//
+// Use `sys.stdout_fd()` (1) or `sys.stderr_fd()` (2) as typical targets.
+fn flush(b: [str], fd: int) -> int {
+    s: str = buf.to_str(b);
+    n: int = sys.write(fd, s);
+    buf.clear(b);
+    return n;
+}

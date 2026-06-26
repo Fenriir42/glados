@@ -127,7 +127,7 @@ isKnownFunction :: FuncName -> Set FuncName -> Bool
 isKnownFunction fname known =
   Set.member fname known
     || Set.member fname builtinFunctions
-    || any (`T.isPrefixOf` unFuncName fname) ["math.", "string.", "sys.", "io."]
+    || any (`T.isPrefixOf` unFuncName fname) ["math.", "string.", "sys.", "io.", "file.", "buf."]
 
 -- ---------------------------------------------------------------------------
 -- Compile state

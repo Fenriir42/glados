@@ -87,3 +87,69 @@ fn chdir(path: str) -> bool {
 fn system(command: str) -> int {
     return sys.system(command);
 }
+
+// ---------------------------------------------------------------------------
+// Raw file-descriptor I/O
+
+// Writes `s` to the open file descriptor `fd` and returns the number of bytes
+// actually written.  Returns -1 on error.
+//
+// Standard descriptors: 0 = stdin, 1 = stdout, 2 = stderr.
+fn write(fd: int, s: str) -> int {
+    return sys.write(fd, s);
+}
+
+// Reads up to `n` bytes from `fd` and returns them as a string.
+//
+// Returns an empty string on EOF or error.
+fn read(fd: int, n: int) -> str {
+    return sys.read(fd, n);
+}
+
+// Opens the file at `path` with the given `flags` and returns a file
+// descriptor, or -1 on error.
+//
+// Build `flags` by combining constants with the `|` operator:
+//   sys.o_rdonly()  - open for reading
+//   sys.o_wronly()  - open for writing
+//   sys.o_rdwr()    - open for reading and writing
+//   sys.o_creat()   - create if absent (default mode 0644)
+//   sys.o_trunc()   - truncate to zero on open
+//   sys.o_append()  - writes always go to end of file
+fn open(path: str, flags: int) -> int {
+    return sys.open(path, flags);
+}
+
+// Closes the file descriptor `fd`.
+//
+// Returns true on success, false on error.
+fn close(fd: int) -> bool {
+    return sys.close(fd);
+}
+
+// Flushes any buffered output for `fd`.
+fn flush(fd: int) -> void {
+    sys.flush(fd);
+}
+
+// Returns true if `fd` refers to a terminal (TTY), false otherwise.
+fn isatty(fd: int) -> bool {
+    return sys.isatty(fd);
+}
+
+// ---------------------------------------------------------------------------
+// Standard fd numbers
+
+fn stdin_fd()  -> int { return sys.stdin_fd(); }
+fn stdout_fd() -> int { return sys.stdout_fd(); }
+fn stderr_fd() -> int { return sys.stderr_fd(); }
+
+// ---------------------------------------------------------------------------
+// Open flags (combine with | for sys.open)
+
+fn o_rdonly() -> int { return sys.o_rdonly(); }
+fn o_wronly() -> int { return sys.o_wronly(); }
+fn o_rdwr()   -> int { return sys.o_rdwr(); }
+fn o_creat()  -> int { return sys.o_creat(); }
+fn o_trunc()  -> int { return sys.o_trunc(); }
+fn o_append() -> int { return sys.o_append(); }
