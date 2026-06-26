@@ -167,7 +167,8 @@ tokSymbol = withLoc $ lexeme $ do
     choice $
       -- Longest operators first (3 chars)
       [ string "<<=",
-        string ">>="
+        string ">>=",
+        string "..."
       ]
         ++ [ string "==",
              string "!=",

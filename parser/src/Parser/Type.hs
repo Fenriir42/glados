@@ -1,6 +1,6 @@
 module Parser.Type where
 
-import AST.Types.Common (ErrorName (..), Located (..), TypeName (..), VarName (..), getSpan)
+import AST.Types.Common (ErrorName (..), Located (..), TypeName (..), VarName (..), getSpan, locSpan)
 import AST.Types.Literal (IntBase (BaseDec))
 import AST.Types.Type
   ( ArrayType (ArrayType),
@@ -116,10 +116,16 @@ parseQualifiedType = do
 parseParameter :: TokenParser (Located Parameter)
 parseParameter = do
   Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
-  Located colonSpan _ <- matchSymbol ":"
-  Located typeSpan qtype <- parseQualifiedType
-  let combinedSpan = nameSpan <> colonSpan <> typeSpan
-  return $ Located combinedSpan (Parameter (VarName name) qtype)
+  _ <- matchSymbol ":"
+  mDots <- MP.optional (matchSymbol "...")
+  Located typeSpan elemType <- parseType
+  let isVariadic = case mDots of Just _ -> True; Nothing -> False
+      qt = case mDots of
+        Nothing -> QualifiedType Mutable elemType
+        Just _ -> QualifiedType Mutable (TypeArray (ArrayType (QualifiedType Mutable elemType)))
+      dotsSpan = maybe voidSpann locSpan mDots
+      combinedSpan = nameSpan <> dotsSpan <> typeSpan
+  return $ Located combinedSpan (Parameter (VarName name) qt isVariadic)
 
 parseFunctionType :: TokenParser (Located FunctionType)
 parseFunctionType = do

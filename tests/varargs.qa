@@ -1,0 +1,43 @@
+from varargs import sum, product, min, max, join, format
+
+fn my_sum(args: ...int) -> int {
+  total: int = 0;
+  i: int = 0;
+  while (i < len(args)) {
+    total = total + args[i];
+    i = i + 1;
+  };
+  return total;
+}
+
+fn greet(prefix: str, names: ...str) -> str {
+  i: int = 0;
+  result: str = prefix;
+  while (i < len(names)) {
+    result = string.concat(result, names[i]);
+    if (i < len(names) - 1) {
+      result = string.concat(result, ", ");
+    };
+    i = i + 1;
+  };
+  return result;
+}
+
+fn main() -> void {
+  println(`my_sum(1,2,3) = {my_sum(1, 2, 3)}`);
+  println(`my_sum(10,20,30,40) = {my_sum(10, 20, 30, 40)}`);
+
+  println(`sum(1,2,3) = {sum(1, 2, 3)}`);
+  println(`product(2,3,4) = {product(2, 3, 4)}`);
+  println(`min(5,2,8,1) = {min(5, 2, 8, 1)}`);
+  println(`max(5,2,8,1) = {max(5, 2, 8, 1)}`);
+
+  j: str = join(", ", "alpha", "beta", "gamma");
+  println(`join = {j}`);
+
+  f: str = format("hello {} and {}", "alice", "bob");
+  println(`format = {f}`);
+
+  g: str = greet("hello: ", "alice", "bob", "carol");
+  println(`greet = {g}`);
+}

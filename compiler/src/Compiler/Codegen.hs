@@ -36,7 +36,7 @@ import AST.Types.Literal
     StringLiteral (..),
   )
 import qualified AST.Types.Operator as Op
-import AST.Types.Type (PrimitiveType (..), QualifiedType (..), Type (..), paramName, qualType)
+import AST.Types.Type (FunctionType (..), PrimitiveType (..), QualifiedType (..), Type (..), paramName, paramVariadic, qualType)
 import Compiler.Bytecode
   ( BinaryOp (..),
     Bytecode (..),
@@ -57,6 +57,7 @@ import Control.Monad.State
     modify,
     put,
   )
+import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -143,6 +144,7 @@ data CompileState = CompileState
     -- scope tracking
     csScope :: Set VarName,
     csKnownFunctions :: Set FuncName,
+    csFuncTypes :: Map FuncName FunctionType,
     csTempCount :: Int
   }
   deriving stock (Show)
@@ -160,6 +162,7 @@ initialState =
       csContinueJumps = [],
       csScope = Set.empty,
       csKnownFunctions = Set.empty,
+      csFuncTypes = Map.empty,
       csTempCount = 0
     }
 
@@ -216,7 +219,12 @@ compileProgram (Program decls) =
       -- First pass: register all user-defined function names so forward
       -- references and mutual recursion work.
       let userNames = Set.fromList [unLocated (funcDeclName fd) | fd <- funcs]
-      modify $ \s -> s {csKnownFunctions = userNames}
+          funcTypes =
+            Map.fromList
+              [ (unLocated (funcDeclName fd), FunctionType (funcDeclParams fd) (funcDeclReturnType fd))
+                | fd <- funcs
+              ]
+      modify $ \s -> s {csKnownFunctions = userNames, csFuncTypes = funcTypes}
       mapM compileFunction funcs
 
 -- ---------------------------------------------------------------------------
@@ -226,7 +234,7 @@ compileFunction :: FunctionDecl ann -> Compile Bytecode
 compileFunction funcDecl = do
   let funcName = unLocated (funcDeclName funcDecl)
   oldState <- get
-  put initialState {csKnownFunctions = csKnownFunctions oldState}
+  put initialState {csKnownFunctions = csKnownFunctions oldState, csFuncTypes = csFuncTypes oldState}
   -- Parameters are in scope from the start
   let paramNames = [paramName p | Located _ p <- funcDeclParams funcDecl]
   modify $ \s -> s {csScope = Set.fromList paramNames}
@@ -469,12 +477,29 @@ compileExpr = \case
         void $ emitInstruction (IUnary (astUnaryOpToBytecode unaryOp))
   ExprCall funcName args -> do
     knownFns <- gets csKnownFunctions
+    funcTypes <- gets csFuncTypes
     let fname = unLocated funcName
     unless (isKnownFunction fname knownFns) $
       throwError $
         UndefinedFunction (locSpan funcName) fname
-    mapM_ (compileExpr . unLocated) (reverse args)
-    void $ emitInstruction (ICall (FunctionRef fname) (length args))
+    case Map.lookup fname funcTypes >>= find (paramVariadic . unLocated) . funcParams of
+      Nothing -> do
+        mapM_ (compileExpr . unLocated) (reverse args)
+        void $ emitInstruction (ICall (FunctionRef fname) (length args))
+      Just _ -> do
+        let ft = funcTypes Map.! fname
+            regularParams = filter (not . paramVariadic . unLocated) (funcParams ft)
+            nRegular = length regularParams
+            regularArgs = take nRegular args
+            varArgs = drop nRegular args
+        void $ emitInstruction INewArray
+        forM_ (zip [0 ..] varArgs) $ \(i, argExpr) -> do
+          void $ emitInstruction IDup
+          void $ emitInstruction (IPush (VInt i))
+          compileExpr (unLocated argExpr)
+          void $ emitInstruction IArraySet
+        mapM_ (compileExpr . unLocated) (reverse regularArgs)
+        void $ emitInstruction (ICall (FunctionRef fname) (nRegular + 1))
   ExprIndex arrExpr indexExpr -> do
     compileExpr (unLocated arrExpr)
     compileExpr (unLocated indexExpr)

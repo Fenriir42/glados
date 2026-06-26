@@ -181,6 +181,7 @@ execInstr = \case
         pool <- gets vmStrings
         let (callArgs, rest) = splitAt argc stk
             resolvedArgs = map (resolveStringRef pool) callArgs
+        mapM_ (\case VArrayRef aid -> resolveArrayStrings pool aid; _ -> return ()) callArgs
         modify $ \s ->
           s
             { vmStack = resolvedArgs ++ rest,
@@ -445,6 +446,16 @@ resolveStringRef :: [Text] -> Value -> Value
 resolveStringRef strings (VStringRef i)
   | i < length strings = VString (strings !! i)
 resolveStringRef _ v = v
+
+-- | Deep-resolve VStringRef values inside an array on the heap.
+resolveArrayStrings :: [Text] -> Int -> VM ()
+resolveArrayStrings strings aid = do
+  heap <- gets vmHeap
+  case Map.lookup aid heap of
+    Nothing -> return ()
+    Just elems -> do
+      let resolved = Map.map (resolveStringRef strings) elems
+      modify $ \s -> s {vmHeap = Map.insert aid resolved (vmHeap s)}
 
 resolveValue :: [Text] -> Value -> Text
 resolveValue strings (VStringRef i) = strings !! i

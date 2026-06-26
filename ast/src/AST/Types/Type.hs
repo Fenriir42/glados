@@ -161,14 +161,19 @@ instance Show ArrayType where
 
 data Parameter = Parameter
   { paramName :: VarName,
-    paramType :: QualifiedType
+    paramType :: QualifiedType,
+    paramVariadic :: Bool
   }
   deriving stock (Eq, Ord, Generic)
 
 instance Hashable Parameter
 
 instance Show Parameter where
-  show (Parameter (VarName name) qtype) = T.unpack name ++ ": " ++ show qtype
+  show p =
+    T.unpack (unVarName (paramName p))
+      ++ ": "
+      ++ (if paramVariadic p then "..." else "")
+      ++ show (qualType (paramType p))
 
 data FunctionType = FunctionType
   { funcParams :: [Located Parameter],
@@ -182,7 +187,8 @@ instance Show FunctionType where
   show (FunctionType params retType) =
     "fn(" ++ intercalate ", " (map showParamType params) ++ ") -> " ++ show retType
     where
-      showParamType (Located _ (Parameter _ qt)) = show (qualType qt)
+      showParamType (Located _ p) =
+        (if paramVariadic p then "..." else "") ++ show (qualType (paramType p))
 
 data StructField = StructField
   { fieldName :: FieldName,

@@ -52,6 +52,7 @@ import AST.Types.Type
     isNumericType,
     paramName,
     paramType,
+    paramVariadic,
     qualType,
   )
 import Control.Monad (foldM_, forM_, unless, void, when)
@@ -213,13 +214,33 @@ inferExpr env (Located sp expr) = do
           let retType = qualType (unLocated (funcReturnType ft))
           recordCallSite nameSpan fname ft
           recordCallWithArgs callSp fname ft argSpans
-          when (length args /= length params) $
-            recordError (TCWrongArgCount sp fname (length params) (length args))
-          forM_ (zip3 args argResults (map unLocated params)) $ \(argExpr, mArgType, p) ->
-            forM_ mArgType $ \argType ->
-              let expectedType = qualType (paramType p)
-               in unless (typesCompatible argType expectedType) $
-                    recordError (TCTypeMismatch (locSpan argExpr) expectedType argType)
+          let regularParams = filter (not . paramVariadic . unLocated) params
+              mVariadicParam = find (paramVariadic . unLocated) params
+          case mVariadicParam of
+            Nothing -> do
+              when (length args /= length params) $
+                recordError (TCWrongArgCount sp fname (length params) (length args))
+              forM_ (zip3 args argResults (map unLocated params)) $ \(argExpr, mArgType, p) ->
+                forM_ mArgType $ \argType ->
+                  let expectedType = qualType (paramType p)
+                   in unless (typesCompatible argType expectedType) $
+                        recordError (TCTypeMismatch (locSpan argExpr) expectedType argType)
+            Just (Located _ vp) -> do
+              let nRegular = length regularParams
+              when (length args < nRegular) $
+                recordError (TCWrongArgCount sp fname nRegular (length args))
+              forM_ (zip3 args argResults (map unLocated regularParams)) $ \(argExpr, mArgType, p) ->
+                forM_ mArgType $ \argType ->
+                  let expectedType = qualType (paramType p)
+                   in unless (typesCompatible argType expectedType) $
+                        recordError (TCTypeMismatch (locSpan argExpr) expectedType argType)
+              let elemType = case qualType (paramType vp) of
+                    TypeArray (ArrayType qt) -> qualType qt
+                    t -> t
+              forM_ (zip (drop nRegular args) (drop nRegular argResults)) $ \(argExpr, mArgType) ->
+                forM_ mArgType $ \argType ->
+                  unless (typesCompatible argType elemType) $
+                    recordError (TCTypeMismatch (locSpan argExpr) elemType argType)
           return (Just retType)
         Nothing ->
           if isKnownBuiltin fname

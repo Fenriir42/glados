@@ -1,0 +1,66 @@
+fn sum(args: ...int) -> int {
+  total: int = 0;
+  i: int = 0;
+  while (i < len(args)) {
+    total = total + args[i];
+    i = i + 1;
+  };
+  return total;
+}
+
+fn product(args: ...int) -> int {
+  result: int = 1;
+  i: int = 0;
+  while (i < len(args)) {
+    result = result * args[i];
+    i = i + 1;
+  };
+  return result;
+}
+
+fn min(args: ...int) -> int {
+  m: int = args[0];
+  i: int = 1;
+  while (i < len(args)) {
+    if (args[i] < m) {
+      m = args[i];
+    };
+    i = i + 1;
+  };
+  return m;
+}
+
+fn max(args: ...int) -> int {
+  m: int = args[0];
+  i: int = 1;
+  while (i < len(args)) {
+    if (args[i] > m) {
+      m = args[i];
+    };
+    i = i + 1;
+  };
+  return m;
+}
+
+fn join(sep: str, parts: ...str) -> str {
+  result: str = "";
+  i: int = 0;
+  while (i < len(parts)) {
+    if (i > 0) {
+      result = string.concat(result, sep);
+    };
+    result = string.concat(result, parts[i]);
+    i = i + 1;
+  };
+  return result;
+}
+
+fn format(template: str, args: ...str) -> str {
+  result: str = template;
+  i: int = 0;
+  while (i < len(args)) {
+    result = string.replace_first(result, "{}", args[i]);
+    i = i + 1;
+  };
+  return result;
+}

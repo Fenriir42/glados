@@ -277,6 +277,16 @@ lineScannedDefSites fp modName text =
 -- ---------------------------------------------------------------------------
 -- Parse error -> LSP diagnostic conversion
 
+-- | Strip ANSI SGR escape sequences from a string.
+-- showErrorComponent in Error.hs embeds ANSI unconditionally; LSP diagnostics
+-- must always be plain text so VS Code can render them cleanly.
+stripAnsi :: Text -> Text
+stripAnsi = T.pack . go . T.unpack
+  where
+    go [] = []
+    go ('\ESC' : '[' : rest) = go (drop 1 (dropWhile (/= 'm') rest))
+    go (c : cs) = c : go cs
+
 bundleToDiags ::
   (TraversableStream s, VisualStream s, ShowErrorComponent e) =>
   ParseErrorBundle s e ->
@@ -289,7 +299,7 @@ bundleToDiags (ParseErrorBundle errs initPS) =
       let off = errorOffset err
           (_, ps') = reachOffset off ps
           sp = pstateSourcePos ps'
-          msg = T.pack (parseErrorTextPretty err)
+          msg = stripAnsi (T.pack (parseErrorTextPretty err))
        in (ps', mkPosDiag sp msg : acc)
 
 mkPosDiag :: MP.SourcePos -> Text -> Diagnostic

@@ -72,7 +72,7 @@ specAST = do
 
     it "displays result types correctly" $ do
       let resType = ResultType (TypePrimitive (PrimInt defaultIntType)) (ErrorName "DivisionError")
-      show resType `shouldBe` "int | DivisionError"
+      show resType `shouldBe` "orerror(int, DivisionError)"
 
     it "displays error types without fields" $ do
       let errType = ErrorType (ErrorName "SimpleError") []
