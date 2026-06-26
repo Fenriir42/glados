@@ -1,0 +1,293 @@
+---
+title: Editor Setup
+description: Install and configure the Quant VS Code extension and Language Server
+---
+
+import { Aside, Steps, Tabs, TabItem, Card, CardGrid, Badge } from '@astrojs/starlight/components';
+
+Quant ships a first-party VS Code extension that bundles both syntax highlighting and a full Language Server Protocol (LSP) implementation backed by the compiler's type checker.
+
+## Extensions
+
+There are two VS Code extensions in this repository:
+
+| Extension | Purpose |
+|-----------|---------|
+| `quant-lsp` | Full LSP support + syntax highlighting (recommended) |
+| `quant-highlighter` | Syntax highlighting only (lightweight fallback) |
+
+Install **`quant-lsp`** unless you have a specific reason not to run the language server.
+
+---
+
+## Installation
+
+<Steps>
+
+1. **Build the language server binary**
+
+   From the repository root:
+
+   ```text
+   cabal install lsp-server --overwrite-policy=always
+   ```
+
+   This places `glados-lsp` in `~/.cabal/bin/`.
+
+2. **Install the VS Code extension**
+
+   Open VS Code, then install the extension from source:
+
+   ```text
+   cd extension/vscode/quant-lsp
+   npm install
+   npm run package
+   code --install-extension quant-lsp-*.vsix
+   ```
+
+3. **Pin the server path (recommended)**
+
+   VS Code's extension host does not inherit your terminal `PATH`, so the extension may not find `glados-lsp` automatically after a restart. Add this to your VS Code settings (`settings.json`):
+
+   ```json
+   {
+     "quant-lsp.serverPath": "/absolute/path/to/.cabal/bin/glados-lsp"
+   }
+   ```
+
+   On Linux with a default Cabal setup:
+   ```json
+   {
+     "quant-lsp.serverPath": "/root/.cabal/bin/glados-lsp"
+   }
+   ```
+
+4. **Reload the window**
+
+   Press **Ctrl+Shift+P** → **Developer: Reload Window**.
+   Open any `.qa` file — the server starts automatically.
+
+</Steps>
+
+<Aside type="tip">
+  After rebuilding the language server (`cabal install lsp-server`), reload with **Ctrl+Shift+P → Developer: Restart Extension Host** to pick up the new binary without a full window reload.
+</Aside>
+
+---
+
+## Configuration
+
+All settings live under the `quant-lsp` namespace in VS Code settings.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `quant-lsp.enable` | `boolean` | `true` | Enable or disable the language server |
+| `quant-lsp.serverPath` | `string` | `""` | Absolute path to the `glados-lsp` binary. Leave empty to search `PATH`. |
+| `quant-lsp.trace.server` | `"off"` \| `"messages"` \| `"verbose"` | `"off"` | Show LSP wire traffic in the **Quant LSP Trace** output channel |
+
+---
+
+## Language Server Features
+
+### Diagnostics <Badge text="always on" variant="tip" />
+
+Parse errors and type errors appear inline as red squiggles as you type. Hover the squiggle for the error message.
+
+```quant
+fn main() -> void {
+    x: int = "hello";
+    //        ^^^^^^^ error[type]: expected `int`, got `str`
+}
+```
+
+Diagnostics cover:
+- Lexer errors (invalid characters, unclosed strings)
+- Parse errors (unexpected tokens)
+- Type errors (mismatched types, wrong argument count, undefined variables/functions, unknown error types)
+
+---
+
+### Hover <Badge text="K" variant="note" />
+
+Hover any symbol to see its type or signature.
+
+<Tabs>
+  <TabItem label="Function calls">
+    Hovering a function call shows its full signature:
+
+    ```quant
+    fn add(a: int, b: int) -> int { return a + b; }
+
+    fn main() -> void {
+        add(1, 2);
+        // hover "add" → fn add(a: int, b: int) -> int
+    }
+    ```
+  </TabItem>
+  <TabItem label="Expressions">
+    Hovering an expression shows its inferred type:
+
+    ```quant
+    fn safe_div(a: int, b: int) -> orerror(int, DivisionError) { ... }
+
+    fn main() -> void {
+        x: int = must safe_div(10, 2);
+        //       ^^^^ hover → int
+        //             ^^^^^^^^^^^^ hover → orerror(int, DivisionError)
+    }
+    ```
+  </TabItem>
+  <TabItem label="Variables">
+    Hovering a variable use shows its type:
+
+    ```quant
+    fn main() -> void {
+        n: int = 42;
+        println(`value: {n}`);
+        //               ^ hover → int
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+### Completion <Badge text="Ctrl+Space" variant="note" />
+
+The completion popup offers three kinds of items:
+
+**Functions** — all user-defined and standard library functions in scope, with their signature as detail and doc-comment as description.
+
+**Keywords** — all Quant keywords, with smart snippet expansion:
+
+| Keyword | Expands to |
+|---------|-----------|
+| `fn` | Full function skeleton |
+| `if` | `if (condition) { }` |
+| `while` | `while (condition) { }` |
+| `for` | `for (init; cond; step) { }` |
+| `orerror` | `orerror(T, ErrorName)` |
+| `error` | `error ErrorName;` |
+| `try` | `try expr` |
+| `must` | `must expr` |
+
+**Error names** — any error types declared in the current file (e.g., `DivisionError`, `OutOfBounds`) appear as completion candidates wherever an identifier is expected.
+
+---
+
+### Go to Definition <Badge text="F12 / Ctrl+Click" variant="note" />
+
+Jump to where a function is defined.
+
+- **User-defined functions** — jumps to the `fn` declaration in the current file.
+- **Standard library functions** — jumps to the function's definition inside the `std/` directory.
+
+---
+
+### Find References <Badge text="Shift+F12" variant="note" />
+
+Lists every call site of a function or every use of a variable across the file. Right-click → **Find All References**, or press **Shift+F12**.
+
+Works on:
+- Function names (at call sites and at the definition)
+- Local variables (at declaration and at every use)
+- Function parameters
+
+---
+
+### Document Highlight <Badge text="cursor move" variant="note" />
+
+Place the cursor on any function name or variable — all other occurrences in the file are highlighted immediately.
+
+- **Definition site** → highlighted as a write (solid underline)
+- **Use/call sites** → highlighted as reads (dimmer underline)
+
+---
+
+### Rename <Badge text="F2" variant="note" />
+
+Press **F2** on any user-defined function name or local variable to rename it everywhere in the file.
+
+<Aside type="caution">
+  Rename works within a single file only. Standard library functions and built-in functions cannot be renamed.
+</Aside>
+
+---
+
+### Signature Help <Badge text="( triggers" variant="note" />
+
+When you type `(` after a function name, the signature help popup appears showing the parameter list with the current argument highlighted.
+
+```quant
+safe_div(10, |
+//           ^ shows: safe_div(a: int, b: int) -> orerror(int, DivisionError)
+//                                    ^^^^^^ active parameter
+```
+
+---
+
+### Inlay Hints <Badge text="always on" variant="note" />
+
+Parameter name hints appear inline at call sites (for functions with 2+ parameters):
+
+```quant
+safe_div(/*a:*/ 10, /*b:*/ 2)
+```
+
+Toggle them in VS Code with **Editor: Toggle Inlay Hints** or:
+
+```json
+{ "editor.inlayHints.enabled": "off" }
+```
+
+---
+
+### Document Symbols <Badge text="Ctrl+Shift+O" variant="note" />
+
+The **OUTLINE** panel in the Explorer sidebar lists all functions defined in the current file. Press **Ctrl+Shift+O** to fuzzy-search them.
+
+---
+
+### Folding <Badge text="gutter chevrons" variant="note" />
+
+Function bodies, `if`/`while`/`for` blocks, and nested blocks all show fold chevrons in the editor gutter. Click to collapse.
+
+---
+
+### Semantic Tokens <Badge text="always on" variant="note" />
+
+The LSP provides semantic token classification on top of the TextMate grammar. Function call sites, variable uses, and parameters get their own color categories, independent of what the grammar detects.
+
+---
+
+## Troubleshooting
+
+**"glados-lsp binary not found" warning**
+
+The extension host does not inherit your shell's `PATH`. Set the absolute path:
+
+```json
+{ "quant-lsp.serverPath": "/root/.cabal/bin/glados-lsp" }
+```
+
+**LSP features not working after a rebuild**
+
+After `cabal install lsp-server`, run **Ctrl+Shift+P → Developer: Restart Extension Host**.
+
+**Grammar highlighting not updating**
+
+Grammar changes require a full **Ctrl+Shift+P → Developer: Reload Window**, not just an extension host restart.
+
+**Enabling trace logging**
+
+To see raw LSP messages for debugging, set:
+
+```json
+{ "quant-lsp.trace.server": "verbose" }
+```
+
+Then open the **Output** panel → **Quant LSP Trace** channel.
+
+**Checking the server is running**
+
+Open the **Output** panel → **Quant Language Server** channel. You should see `[Info] Server starting` on activation.

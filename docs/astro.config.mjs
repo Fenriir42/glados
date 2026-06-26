@@ -30,6 +30,7 @@ export default defineConfig({
 					label: 'Guides',
 					items: [
 						{ label: 'Getting Started', slug: 'guides/getting-started' },
+						{ label: 'Editor Setup', slug: 'guides/editor-setup' },
 						{ label: 'Language Basics', slug: 'guides/language-basics' },
 						{ label: 'Control Flow', slug: 'guides/control-flow' },
 						{ label: 'Arrays', slug: 'guides/arrays' },
@@ -41,6 +42,7 @@ export default defineConfig({
 						{ label: 'Types', slug: 'reference/types' },
 						{ label: 'Operators', slug: 'reference/operators' },
 						{ label: 'Standard Library', slug: 'reference/stdlib' },
+						{ label: 'Grammar', slug: 'reference/grammar' },
 					],
 				},
 				{
