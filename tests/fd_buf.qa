@@ -1,0 +1,110 @@
+// Showcase: raw fd I/O, buf module, and a custom printf.
+//
+// Demonstrates:
+//   - sys.write to stdout / stderr
+//   - sys.open / sys.read / sys.close for arbitrary file descriptors
+//   - sys.isatty to detect terminal vs pipe
+//   - buf.* for buffered output without import conflicts
+//   - A custom printf function built from buf and sys
+
+from sys import write, read, open, close, flush, isatty
+from sys import stdout_fd, stderr_fd, stdin_fd
+from sys import o_rdonly, o_wronly, o_creat, o_trunc
+from string import from_int, from_float, replace_first, concat
+from file import delete
+
+// ---------------------------------------------------------------------------
+// printf: replace {} placeholders with variadic string arguments
+// then write the result to any file descriptor.
+
+fn printf(fd: int, fmt: str, args: ...str) -> int {
+    b: [str] = buf.new();
+    result: str = fmt;
+    i: int = 0;
+    while (i < len(args)) {
+        result = replace_first(result, "{}", args[i]);
+        i = i + 1;
+    };
+    buf.write(b, result);
+    return buf.flush(b, fd);
+}
+
+// ---------------------------------------------------------------------------
+// eprint: write a message line to stderr
+
+fn eprint(msg: str) -> void {
+    b: [str] = buf.new();
+    buf.writeln(b, msg);
+    buf.flush(b, stderr_fd());
+}
+
+// ---------------------------------------------------------------------------
+// cat: read a file and dump it to stdout
+
+fn cat(path: str) -> void {
+    fd: int = open(path, o_rdonly());
+    if (fd < 0) {
+        eprint(concat("error: cannot open ", path));
+        return;
+    };
+    content: str = read(fd, 4096);
+    close(fd);
+    write(stdout_fd(), content);
+}
+
+// ---------------------------------------------------------------------------
+// write_file: create / truncate a file and write content to it
+
+fn write_file(path: str, content: str) -> bool {
+    fd: int = open(path, o_wronly() | o_creat() | o_trunc());
+    if (fd < 0) {
+        return False;
+    };
+    write(fd, content);
+    close(fd);
+    return True;
+}
+
+// ---------------------------------------------------------------------------
+// main
+
+fn main() -> void {
+    // 1. Write directly to stdout and stderr via raw fd
+    printf(stdout_fd(), "=== fd / buf showcase ===\n");
+    eprint("(this line goes to stderr)");
+
+    // 2. TTY detection
+    if (isatty(stdout_fd())) {
+        printf(stdout_fd(), "stdout is a TTY\n");
+    };
+    if (!isatty(stdout_fd())) {
+        printf(stdout_fd(), "stdout is a pipe / file\n");
+    };
+
+    // 3. buf accumulation and flush
+    b: [str] = buf.new();
+    buf.writeln(b, "--- buffer demo ---");
+    buf.writeln(b, concat("chunks in buffer: ", from_int(buf.len(b))));
+    buf.flush(b, stdout_fd());
+    printf(stdout_fd(), "buf len after flush: {}\n", from_int(buf.len(b)));
+
+    // 4. open / write / read / close
+    path: str = "/tmp/quant_fd_demo.txt";
+    ok: bool = write_file(path, "line 1\nline 2\nline 3\n");
+    if (ok) {
+        printf(stdout_fd(), "wrote to {}\n", path);
+    };
+
+    cat(path);
+
+    // 5. printf with mixed types
+    x: int = 42;
+    f: float = 2.718;
+    label: str = "answer";
+    printf(stdout_fd(), "the {} is {} (approx e = {})\n",
+            label, from_int(x), from_float(f));
+
+    // 6. Cleanup
+    delete(path);
+    printf(stdout_fd(), "=== done ===\n");
+}

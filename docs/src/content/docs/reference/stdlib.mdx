@@ -5,7 +5,7 @@ description: Complete reference for all built-in modules and functions
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-The Quant standard library is split into five modules. Built-in functions are accessed via dotted module prefixes (`math.sqrt`, `string.len`, etc.) or via named imports.
+The Quant standard library is split into nine modules. Built-in functions are accessed via dotted module prefixes (`math.sqrt`, `string.len`, etc.) or via named imports.
 
 ## math
 
@@ -178,7 +178,9 @@ Array operations. The built-in array functions operate on `[int]` arrays at the 
 
 ## sys
 
-System and environment functions.
+System, environment, and raw file-descriptor functions.
+
+### Environment & process
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -196,8 +198,33 @@ System and environment functions.
 | `sys.chdir` | `(str) -> bool` | Change working directory; true on success |
 | `sys.system` | `(str) -> int` | Run shell command; returns exit code |
 
+### Raw fd I/O
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `sys.write` | `(int, str) -> int` | Write string to fd; returns bytes written (-1 on error) |
+| `sys.read` | `(int, int) -> str` | Read up to N bytes from fd |
+| `sys.open` | `(str, int) -> int` | Open file path with flags; returns fd or -1 |
+| `sys.close` | `(int) -> bool` | Close fd |
+| `sys.flush` | `(int) -> void` | Flush fd |
+| `sys.isatty` | `(int) -> bool` | True if fd refers to a terminal |
+| `sys.stdin_fd` | `() -> int` | Returns `0` |
+| `sys.stdout_fd` | `() -> int` | Returns `1` |
+| `sys.stderr_fd` | `() -> int` | Returns `2` |
+
+### Open flags (combine with `\|`)
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `sys.o_rdonly()` | 0 | Open for reading |
+| `sys.o_wronly()` | 1 | Open for writing |
+| `sys.o_rdwr()` | 2 | Open for reading and writing |
+| `sys.o_creat()` | 64 | Create file if absent (mode 0644) |
+| `sys.o_trunc()` | 512 | Truncate to zero on open |
+| `sys.o_append()` | 1024 | Writes always go to end of file |
+
 <Tabs>
-  <TabItem label="Module prefix">
+  <TabItem label="Environment">
     ```quant
     import sys
 
@@ -208,14 +235,27 @@ System and environment functions.
     }
     ```
   </TabItem>
-  <TabItem label="Named import">
+  <TabItem label="Write to stderr">
     ```quant
-    from sys import platform, getcwd, exit
+    import sys
 
     fn main() -> void {
-        println(platform());
-        println(getcwd());
-        exit(0);
+        sys.write(sys.stderr_fd(), "fatal: something went wrong\n");
+        sys.exit(1);
+    }
+    ```
+  </TabItem>
+  <TabItem label="Open / read / close">
+    ```quant
+    import sys
+
+    fn main() -> void {
+        fd: int = sys.open("/etc/hostname", sys.o_rdonly());
+        if (fd >= 0) {
+            content: str = sys.read(fd, 256);
+            sys.close(fd);
+            println(content);
+        };
     }
     ```
   </TabItem>
@@ -246,6 +286,135 @@ fn main() -> void {
 For output that mixes multiple values or needs formatting, use backtick string interpolation rather than format specifiers.
 
 ---
+
+## buf
+
+Mutable string buffers — accumulate chunks cheaply, then write everything to any file descriptor in one POSIX `write(2)` call.
+
+All `buf.*` functions are always available as dotted calls — no import statement required. A buffer is typed as `[str]` and mutates in place.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `buf.new` | `() -> [str]` | Allocate a new empty buffer |
+| `buf.write` | `([str], str) -> void` | Append a string chunk |
+| `buf.writeln` | `([str], str) -> void` | Append a string chunk + newline |
+| `buf.to_str` | `([str]) -> str` | Join all chunks into one string (non-destructive) |
+| `buf.len` | `([str]) -> int` | Total character count across all chunks |
+| `buf.clear` | `([str]) -> void` | Remove all chunks, leaving the buffer empty |
+| `buf.flush` | `([str], int) -> int` | Join chunks, write to fd, clear buffer; returns bytes written |
+
+<Tabs>
+  <TabItem label="Write to stderr">
+    ```quant
+    fn eprint(msg: str) -> void {
+        b: [str] = buf.new();
+        buf.writeln(b, msg);
+        buf.flush(b, sys.stderr_fd());
+    }
+
+    fn main() -> void {
+        eprint("error: something failed");
+        eprint("hint: check your arguments");
+    }
+    ```
+  </TabItem>
+  <TabItem label="Custom printf">
+    ```quant
+    from string import replace_first, from_int, from_float
+
+    fn printf(fd: int, fmt: str, args: ...str) -> int {
+        b: [str] = buf.new();
+        result: str = fmt;
+        i: int = 0;
+        while (i < len(args)) {
+            result = replace_first(result, "{}", args[i]);
+            i = i + 1;
+        };
+        buf.write(b, result);
+        return buf.flush(b, fd);
+    }
+
+    fn main() -> void {
+        printf(sys.stdout_fd(), "x = {}, pi = {}\n",
+               from_int(42), from_float(3.14));
+        printf(sys.stderr_fd(), "warn: {} retries\n", from_int(3));
+    }
+    ```
+  </TabItem>
+  <TabItem label="Build a string">
+    ```quant
+    from string import from_int
+
+    fn repeat_str(s: str, n: int) -> str {
+        b: [str] = buf.new();
+        i: int = 0;
+        while (i < n) {
+            buf.write(b, s);
+            i = i + 1;
+        };
+        return buf.to_str(b);
+    }
+
+    fn main() -> void {
+        println(repeat_str("ha", 3));   // hahaha
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## file
+
+File system operations. All functions take a file path as their first argument.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `file.read` | `(str) -> str` | Read entire file; returns `""` if missing or unreadable |
+| `file.write` | `(str, str) -> bool` | Write/overwrite file; creates if absent; returns success |
+| `file.append` | `(str, str) -> bool` | Append to file; creates if absent; returns success |
+| `file.exists` | `(str) -> bool` | True if the path exists and is a file |
+| `file.delete` | `(str) -> bool` | Delete file; returns success |
+| `file.rename` | `(str, str) -> bool` | Rename or move file; returns success |
+| `file.size` | `(str) -> int` | Size in bytes; `-1` if file does not exist |
+| `file.lines` | `(str) -> [str]` | Read file as an array of lines (newlines stripped) |
+
+<Tabs>
+  <TabItem label="Module prefix">
+    ```quant
+    import file
+
+    fn main() -> void {
+        ok: bool = file.write("out.txt", "hello\nworld\n");
+        if (ok) {
+            rows: [str] = file.lines("out.txt");
+            i: int = 0;
+            while (i < len(rows)) {
+                println(rows[i]);
+                i = i + 1;
+            };
+            file.delete("out.txt");
+        };
+    }
+    ```
+  </TabItem>
+  <TabItem label="Named import">
+    ```quant
+    from file import write, lines, delete, exists, size
+
+    fn main() -> void {
+        write("log.txt", "first line\n");
+        append("log.txt", "second line\n");
+        println(`size: {size("log.txt")}`);
+        rows: [str] = lines("log.txt");
+        i: int = 0;
+        while (i < len(rows)) {
+            println(rows[i]);
+            i = i + 1;
+        };
+        delete("log.txt");
+    }
+    ```
+  </TabItem>
+</Tabs>
 
 ## varargs
 
