@@ -290,6 +290,22 @@ main = hspec $ do
         ImportError msg -> msg `shouldSatisfy` ("nonexistent" `isInfixOf`)
         other -> expectationFailure $ "Expected ImportError, got: " ++ show other
 
+    it "reports ImportError for a direct import cycle" $ do
+      withSystemTempDirectory "quant-cycle" $ \tmpDir -> do
+        writeFile (tmpDir ++ "/a.qa") "import b\nfn fa() -> void { }"
+        writeFile (tmpDir ++ "/b.qa") "import a\nfn fb() -> void { }"
+        let src = "import a\nfn main() -> void { }"
+        case lexString src of
+          Left err -> expectationFailure $ "LexError: " ++ err
+          Right tokens ->
+            case runParser (many parseDecl) "<test>" tokens of
+              Left bundle -> expectationFailure $ "ParseError: " ++ errorBundlePretty bundle
+              Right rawDecls -> do
+                result <- resolveImports [tmpDir] rawDecls
+                case result of
+                  Left msg -> msg `shouldSatisfy` ("cycle" `isInfixOf`)
+                  Right _ -> expectationFailure "Expected cycle error, got success"
+
   describe "Pipeline - string interpolation" $ do
     it "compiles and runs a plain backtick string" $ do
       let src = unlines ["fn main() -> void { println(`hello`); }"]

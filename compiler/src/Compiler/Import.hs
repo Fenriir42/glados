@@ -28,7 +28,7 @@ import AST.Types.Common
     unLocated,
   )
 import Control.Exception (IOException, catch)
-import Data.List (partition)
+import Data.List (intercalate, partition)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -51,47 +51,70 @@ resolveImports ::
   [FilePath] ->
   [Located (Decl ())] ->
   IO (Either String [Located (Decl ())])
-resolveImports searchPaths decls = do
+resolveImports searchPaths =
+  resolveImports' searchPaths Set.empty []
+
+-- Internal: carries the visited-file set and name chain for cycle detection.
+resolveImports' ::
+  [FilePath] ->
+  Set FilePath ->
+  [String] ->
+  [Located (Decl ())] ->
+  IO (Either String [Located (Decl ())])
+resolveImports' searchPaths visiting chain decls = do
   results <- mapM resolve decls
   return $ concat <$> sequence results
   where
-    resolve (Located _ (DeclImport imp)) = resolveOne searchPaths imp
+    resolve (Located _ (DeclImport imp)) =
+      resolveOne' searchPaths visiting chain imp
     resolve loc = return (Right [loc])
 
 -- ---------------------------------------------------------------------------
 -- Single import resolution
 
-resolveOne ::
+resolveOne' ::
   [FilePath] ->
+  Set FilePath ->
+  [String] ->
   ImportDecl ->
   IO (Either String [Located (Decl ())])
-resolveOne searchPaths (ImportDecl path target) = do
+resolveOne' searchPaths visiting chain (ImportDecl path target) = do
   let modName = moduleText path
   mFound <- findModule searchPaths (T.unpack modName)
   case mFound of
     Nothing ->
       return $ Left $ "cannot find module '" <> T.unpack modName <> "'"
-    Just (foundPath, src) -> do
-      let foundDir = takeDirectory foundPath
-      case lexString src of
-        Left lexErr ->
-          return $ Left $ "lex error in '" <> T.unpack modName <> "': " <> lexErr
-        Right tokens ->
-          case runParser (many parseDecl) (T.unpack modName <> ".qa") tokens of
-            Left bundle ->
-              return $ Left $ errorBundlePretty bundle
-            Right rawDecls -> do
-              -- Split module's own declarations from its imports.
-              let isImportDecl (Located _ (DeclImport {})) = True
-                  isImportDecl _ = False
-                  (importStmts, ownDecls) = partition isImportDecl rawDecls
-              -- Recursively resolve imports declared inside the loaded module.
-              -- Prepend the module's own directory so its sibling files are found.
-              transitiveOrErr <- resolveImports (foundDir : searchPaths) importStmts
-              case transitiveOrErr of
-                Left err -> return $ Left err
-                Right transitive ->
-                  return $ Right $ transitive ++ pickDecls modName target ownDecls
+    Just (foundPath, src) ->
+      if Set.member foundPath visiting
+        then
+          let cycleNames = chain ++ [T.unpack modName]
+           in return $
+                Left $
+                  "import cycle detected: " <> intercalate " -> " cycleNames
+        else do
+          let foundDir = takeDirectory foundPath
+              visiting' = Set.insert foundPath visiting
+              chain' = chain ++ [T.unpack modName]
+          case lexString src of
+            Left lexErr ->
+              return $ Left $ "lex error in '" <> T.unpack modName <> "': " <> lexErr
+            Right tokens ->
+              case runParser (many parseDecl) (T.unpack modName <> ".qa") tokens of
+                Left bundle ->
+                  return $ Left $ errorBundlePretty bundle
+                Right rawDecls -> do
+                  -- Split module's own declarations from its imports.
+                  let isImportDecl (Located _ (DeclImport {})) = True
+                      isImportDecl _ = False
+                      (importStmts, ownDecls) = partition isImportDecl rawDecls
+                  -- Recursively resolve imports declared inside the loaded module.
+                  -- Prepend the module's own directory so its sibling files are found.
+                  transitiveOrErr <-
+                    resolveImports' (foundDir : searchPaths) visiting' chain' importStmts
+                  case transitiveOrErr of
+                    Left err -> return $ Left err
+                    Right transitive ->
+                      return $ Right $ transitive ++ pickDecls modName target ownDecls
 
 -- | Try each directory in order; return the first file found together with
 -- its contents, or @Nothing@ if no directory contains @modName.qa@.
