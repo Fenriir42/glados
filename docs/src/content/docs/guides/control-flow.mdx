@@ -5,6 +5,79 @@ description: Learn about conditionals, loops, and control statements in Quant
 
 import { Aside } from '@astrojs/starlight/components';
 
+## Match Statement
+
+`match` dispatches on a value and executes the first arm whose pattern matches.
+
+**Syntax:**
+
+```quant
+match <expr> {
+    <pattern> => <statement>;
+    ...
+};
+```
+
+Arms are checked top to bottom. The first match wins; remaining arms are skipped. If no arm matches the statement is a no-op (use a wildcard `_` to guarantee a catch-all).
+
+### Patterns
+
+| Pattern | Syntax | Matches when |
+|---------|--------|-------------|
+| Integer literal | `42` | subject equals 42 |
+| Integer range | `1..9` | subject is between 1 and 9 (inclusive) |
+| Wildcard | `_` | always |
+| `ok` branch | `ok(v)` | `orerror` value is the success case; binds `v` |
+| `err` branch | `err(E v)` | `orerror` value is error `E`; binds `v` |
+
+### Value matching
+
+```quant
+fn classify(n: int) -> str {
+    match n {
+        0     => return "zero";
+        1..9  => return "single digit";
+        10..99 => return "two digits";
+        _     => return "large";
+    };
+    return "unreachable";
+}
+
+fn main() -> void {
+    println(classify(0));   // zero
+    println(classify(7));   // single digit
+    println(classify(42));  // two digits
+    println(classify(100)); // large
+}
+```
+
+### Handling orerror with match
+
+`match` is the idiomatic way to branch on an `orerror(T, E)` result without panicking:
+
+```quant
+error ParseError { line: int, msg: str };
+
+fn parse(src: str) -> orerror(int, ParseError) {
+    if (src == "") {
+        return error ParseError { line: 1, msg: "empty input" };
+    };
+    return 42;
+}
+
+fn main() -> void {
+    result: orerror(int, ParseError) = parse("");
+
+    match result {
+        ok(n)           => println(`parsed: {n}`);
+        err(ParseError e) => println(`error on line {e.line}: {e.msg}`);
+    };
+    // Output: error on line 1: empty input
+}
+```
+
+The `err(ErrorName v)` arm binds the full error value to `v`. Fields of `v` are accessible with the usual dot notation (`v.field`).
+
 ## Conditional Statements
 
 ### If Statement

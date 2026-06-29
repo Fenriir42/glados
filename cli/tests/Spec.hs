@@ -327,6 +327,80 @@ main = hspec $ do
               ]
       runPipeline src >>= (`shouldBe` RunOk)
 
+  describe "Pipeline - match statement" $ do
+    it "match on integer literal" $ do
+      let src =
+            unlines
+              [ "fn main() -> void {",
+                "  n: int = 0;",
+                "  match n {",
+                "    0 => println(42);",
+                "    _ => println(99);",
+                "  };",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "match on integer range" $ do
+      let src =
+            unlines
+              [ "fn main() -> void {",
+                "  n: int = 5;",
+                "  match n {",
+                "    0 => println(0);",
+                "    1..9 => println(1);",
+                "    _ => println(2);",
+                "  };",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "match wildcard catches all" $ do
+      let src =
+            unlines
+              [ "fn main() -> void {",
+                "  n: int = 100;",
+                "  match n {",
+                "    _ => println(7);",
+                "  };",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "match ok branch on orerror success" $ do
+      let src =
+            unlines
+              [ "error Fail { };",
+                "fn try_it(x: int) -> orerror(int, Fail) {",
+                "  return x * 2;",
+                "}",
+                "fn main() -> void {",
+                "  result: orerror(int, Fail) = try_it(3);",
+                "  match result {",
+                "    ok(n) => println(n);",
+                "    err(Fail e) => println(0);",
+                "  };",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "match err branch on orerror error" $ do
+      let src =
+            unlines
+              [ "error Bad { msg: str };",
+                "fn fail_me() -> orerror(int, Bad) {",
+                "  return error Bad { msg: \"oops\" };",
+                "}",
+                "fn main() -> void {",
+                "  result: orerror(int, Bad) = fail_me();",
+                "  match result {",
+                "    ok(n) => println(n);",
+                "    err(Bad e) => println(e.msg);",
+                "  };",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
   describe "Pipeline - pub/static visibility" $ do
     let modSrc =
           unlines

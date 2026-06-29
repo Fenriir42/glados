@@ -18,6 +18,8 @@ module AST.Types.AST
     ForInit (..),
     Expr (..),
     LValue (..),
+    MatchPattern (..),
+    MatchArm (..),
     LocatedExpr,
     LocatedStmt,
     LocatedDecl,
@@ -162,6 +164,30 @@ data Stmt ann
   | StmtBreak
   | StmtContinue
   | StmtBlock (Block ann)
+  | StmtMatch
+      (Located (Expr ann))
+      [MatchArm ann]
+  deriving stock (Show, Eq, Generic)
+
+-- | A single pattern in a match arm.
+data MatchPattern ann
+  = -- | Matches the success branch of an orerror value: @ok(v)@
+    MatchOk (Located VarName)
+  | -- | Matches a specific error: @err(ErrorName v)@
+    MatchErr (Located ErrorName) (Located VarName)
+  | -- | Matches a literal value (int, string, bool)
+    MatchLit (Located (Expr ann))
+  | -- | Matches an inclusive integer range: @lo..hi@
+    MatchRange (Located (Expr ann)) (Located (Expr ann))
+  | -- | Wildcard; matches anything
+    MatchWildcard
+  deriving stock (Show, Eq, Generic)
+
+-- | One arm of a match statement.
+data MatchArm ann = MatchArm
+  { matchArmPat :: MatchPattern ann,
+    matchArmBody :: Located (Stmt ann)
+  }
   deriving stock (Show, Eq, Generic)
 
 data ForInit ann

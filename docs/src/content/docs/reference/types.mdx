@@ -441,6 +441,30 @@ Returning a plain value (`return a / b`) is the success path. Returning `error N
 ### Handling orerror Values
 
 <Tabs>
+  <TabItem label="match (branch on outcome)">
+    Use `match` to handle both the success and error cases explicitly. The `ok(v)` arm binds the success value; `err(E v)` binds the error value (including its fields):
+
+    ```quant
+    error DivisionError { msg: str };
+
+    fn safe_div(a: int, b: int) -> orerror(int, DivisionError) {
+      if (b == 0) {
+        return error DivisionError { msg: "division by zero" };
+      };
+      return a / b;
+    }
+
+    fn main() -> void {
+      result: orerror(int, DivisionError) = safe_div(10, 0);
+
+      match result {
+        ok(n)              => println(`quotient: {n}`);
+        err(DivisionError e) => println(`failed: {e.msg}`);
+      };
+      // Output: failed: division by zero
+    }
+    ```
+  </TabItem>
   <TabItem label="must (unwrap or panic)">
     Use `must` to unwrap the success value, panicking at runtime if it is an error:
 
@@ -468,6 +492,26 @@ Returning a plain value (`return a / b`) is the success path. Returning `error N
 <Aside type="caution">
   `try` can only be used inside a function whose return type is `orerror(_, E)` where `E` matches the propagated error type.
 </Aside>
+
+### Accessing error payload fields
+
+When you bind the error with `err(E v)` in a `match`, the variable `v` holds the full error value and you can read its fields with dot notation:
+
+```quant
+error HttpError { code: int, body: str };
+
+fn fetch() -> orerror(str, HttpError) {
+    return error HttpError { code: 404, body: "Not Found" };
+}
+
+fn main() -> void {
+    match fetch() {
+        ok(data)        => println(data);
+        err(HttpError e) => println(`HTTP {e.code}: {e.body}`);
+    };
+    // Output: HTTP 404: Not Found
+}
+```
 
 ### Full Example
 

@@ -310,7 +310,11 @@ execInstr = \case
             case Map.lookup fname fields of
               Nothing -> throwError $ VMRuntimeError $ "Field '" ++ T.unpack fname ++ "' not found in struct #" ++ show sid
               Just v -> push v >> return Nothing
-      _ -> throwError $ VMTypeMismatch $ "IFieldGet: expected struct ref, got " ++ show ref
+      VErrorVal _ fields ->
+        case lookup (FieldName fname) fields of
+          Nothing -> throwError $ VMRuntimeError $ "Field '" ++ T.unpack fname ++ "' not found in error value"
+          Just v -> push v >> return Nothing
+      _ -> throwError $ VMTypeMismatch $ "IFieldGet: expected struct or error ref, got " ++ show ref
   IFieldSet (FieldName fname) -> do
     val <- pop "IFieldSet (value)"
     ref <- pop "IFieldSet (ref)"
@@ -321,8 +325,14 @@ execInstr = \case
         return Nothing
       _ -> throwError $ VMTypeMismatch $ "IFieldSet: expected struct ref, got " ++ show ref
   INewError (ErrorName ename) fnames -> do
+    -- Field values were pushed in fnames order (first field deepest on stack).
+    -- Pop in reverse so we pair each name with the value that was pushed for it.
     vals <- mapM (\fn -> pop ("INewError field " ++ T.unpack (unFieldName fn))) (reverse fnames)
-    push (VErrorVal (ErrorName ename) (zip fnames vals))
+    -- Resolve VStringRef values eagerly so they survive being passed across
+    -- function boundaries where the string pool index would be invalid.
+    strings <- gets vmStrings
+    let resolvedVals = map (resolveStringRef strings) vals
+    push (VErrorVal (ErrorName ename) (zip (reverse fnames) resolvedVals))
     return Nothing
   ITryOp -> do
     v <- peek "ITryOp"
@@ -351,6 +361,16 @@ execInstr = \case
       VErrorVal (ErrorName ename) _ ->
         throwError $ VMRuntimeError $ "must: unwrapped error `" ++ T.unpack ename ++ "`"
       _ -> return Nothing
+  IIsOk -> do
+    v <- peek "IIsOk"
+    case v of
+      VErrorVal {} -> push (VBool False) >> return Nothing
+      _ -> push (VBool True) >> return Nothing
+  IIsErr (ErrorName ename) -> do
+    v <- peek "IIsErr"
+    case v of
+      VErrorVal (ErrorName n) _ -> push (VBool (n == ename)) >> return Nothing
+      _ -> push (VBool False) >> return Nothing
 
 -- ---------------------------------------------------------------------------
 -- Heap-aware builtins (array.len, array.push, array.pop, sys.exit)

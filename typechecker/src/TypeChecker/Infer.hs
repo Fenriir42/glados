@@ -14,15 +14,21 @@ import AST.Types.AST
     ForInit (..),
     FunctionDecl (..),
     LValue (..),
+    MatchArm (..),
+    MatchPattern (..),
     Stmt (..),
   )
 import AST.Types.Common
-  ( FuncName,
+  ( ErrorName (..),
+    FuncName,
     Located (..),
     SourceSpan,
+    TypeName (..),
     VarName,
     locSpan,
+    unErrorName,
     unLocated,
+    unTypeName,
   )
 import AST.Types.Literal
   ( ArrayLiteral (..),
@@ -39,6 +45,8 @@ import AST.Types.Operator
 import AST.Types.Type
   ( ArrayType (..),
     Constness (..),
+    ErrorField (..),
+    ErrorType (..),
     FunctionType (..),
     PrimitiveType (..),
     QualifiedType (..),
@@ -160,6 +168,14 @@ inferExpr env (Located sp expr) = do
               let fname = unLocated locField
                   mSf = find (\f -> fieldName f == fname) (structFields st)
                in return (fmap (qualType . fieldType) mSf)
+        -- TypeNamed is used for error-bound variables in err(E v) match arms
+        Just (TypeNamed tname) ->
+          case lookupError (ErrorName (unTypeName tname)) env of
+            Just et ->
+              let fname = unLocated locField
+                  mEf = find (\f -> errorFieldName f == fname) (errorTypeFields et)
+               in return (fmap errorFieldType mEf)
+            Nothing -> return Nothing
         _ -> return Nothing
     go (ExprStructInit (Located _ tname) fieldExprs) = do
       forM_ fieldExprs $ \(_, e) -> inferExpr env e
@@ -332,6 +348,10 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
   StmtBreak -> return env
   StmtContinue -> return env
   StmtBlock block -> checkBlock env block >> return env
+  StmtMatch subj arms -> do
+    mSubjType <- inferExpr env subj
+    mapM_ (checkMatchArm env mSubjType) arms
+    return env
 
 -- ---------------------------------------------------------------------------
 -- Declaration checking
@@ -352,6 +372,31 @@ checkFunction baseEnv fd = do
           params
   mapM_ (\(Located psp p) -> recordVarUse psp (paramName p) psp) params
   checkBlock env (funcDeclBody fd)
+
+-- ---------------------------------------------------------------------------
+-- Match arm checking
+
+checkMatchArm :: Env -> Maybe Type -> MatchArm () -> TC ()
+checkMatchArm env mSubjType (MatchArm pat body) = do
+  armEnv <- case pat of
+    MatchOk (Located vsp v) -> do
+      let innerQt = case mSubjType of
+            Just (TypeResult (ResultType t _)) -> QualifiedType Mutable t
+            Just t -> QualifiedType Mutable t
+            Nothing -> QualifiedType Mutable (TypePrimitive PrimNone)
+      recordVarUse vsp v vsp
+      return (insertVarWithSpan v innerQt vsp env)
+    MatchErr (Located _ ename) (Located vsp v) -> do
+      let errQt = QualifiedType Mutable (TypeNamed (TypeName (unErrorName ename)))
+      recordVarUse vsp v vsp
+      return (insertVarWithSpan v errQt vsp env)
+    MatchLit e -> void (inferExpr env e) >> return env
+    MatchRange lo hi -> do
+      void (inferExpr env lo)
+      void (inferExpr env hi)
+      return env
+    MatchWildcard -> return env
+  void (checkStmt armEnv body)
 
 -- ---------------------------------------------------------------------------
 -- Helpers

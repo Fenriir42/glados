@@ -4,9 +4,11 @@ import AST.Types.AST
   ( Block (Block),
     Expr (..),
     ForInit (..),
+    MatchArm (..),
+    MatchPattern (..),
     Stmt (..),
   )
-import AST.Types.Common (Located (..), VarName (..), getSpan, SourceSpan(..))
+import AST.Types.Common (ErrorName (..), Located (..), SourceSpan (..), VarName (..), getSpan)
 import AST.Types.Literal (IntBase (..), IntLiteral (..), Literal (..))
 import AST.Types.Operator (AssignOp (AssignAdd, AssignSub))
 import Parser.Expr (parseExpr)
@@ -165,10 +167,68 @@ parseElseChain = do
               let span = ifSpan <> lpanSpan <> condSpan <> rpanSpan <> thenSpan
                in (elseSpan <> span, StmtIf (Located condSpan condExpr) thenBlock Nothing)
       return (totalSpan, Block totalSpan [Located totalSpan stmt])
-
     Nothing -> do
       Located elseBlockSpan elseBlock <- parseBlock
       return (elseSpan <> elseBlockSpan, elseBlock)
+
+isOkIdent :: Located TokenContent -> Bool
+isOkIdent (Located _ (TokIdentifier "ok")) = True
+isOkIdent _ = False
+
+isErrIdent :: Located TokenContent -> Bool
+isErrIdent (Located _ (TokIdentifier "err")) = True
+isErrIdent _ = False
+
+isWildcardIdent :: Located TokenContent -> Bool
+isWildcardIdent (Located _ (TokIdentifier "_")) = True
+isWildcardIdent _ = False
+
+parseMatchPattern :: TokenParser (MatchPattern ann)
+parseMatchPattern =
+  MP.choice
+    [ -- ok(v)
+      MP.try $ do
+        _ <- MP.satisfy isOkIdent
+        _ <- matchSymbol "("
+        Located vspan (TokIdentifier v) <- MP.satisfy isIdentifier
+        _ <- matchSymbol ")"
+        return (MatchOk (Located vspan (VarName v))),
+      -- err(ErrorName v)
+      MP.try $ do
+        _ <- MP.satisfy isErrIdent
+        _ <- matchSymbol "("
+        Located espan (TokIdentifier ename) <- MP.satisfy isIdentifier
+        Located vspan (TokIdentifier v) <- MP.satisfy isIdentifier
+        _ <- matchSymbol ")"
+        return (MatchErr (Located espan (ErrorName ename)) (Located vspan (VarName v))),
+      -- range: expr..expr  (must be tried before MatchLit)
+      MP.try $ do
+        lo <- parseExpr
+        _ <- matchSymbol ".."
+        MatchRange lo <$> parseExpr,
+      -- wildcard: _
+      MP.try $ do
+        _ <- MP.satisfy isWildcardIdent
+        return MatchWildcard,
+      -- literal / expression
+      MatchLit <$> parseExpr
+    ]
+
+parseMatchArm :: TokenParser (MatchArm ann)
+parseMatchArm = do
+  pat <- parseMatchPattern
+  _ <- matchSymbol "=>"
+  MatchArm pat <$> parseStmt
+
+parseStmtMatch :: TokenParser (Located (Stmt ann))
+parseStmtMatch = do
+  Located matchSpan _ <- matchKeyword "match"
+  subj <- parseExpr
+  _ <- matchSymbol "{"
+  arms <- MP.endBy parseMatchArm (matchSymbol ";")
+  Located endSpan _ <- matchSymbol "}"
+  let combinedSpan = matchSpan <> endSpan
+  return $ Located combinedSpan (StmtMatch subj arms)
 
 parseStmt :: TokenParser (Located (Stmt ann))
 parseStmt =
@@ -206,5 +266,6 @@ parseStmt =
       parseStmtBlock,
       parseStmtWhile,
       parseStmtFor,
-      parseStmtIf
+      parseStmtIf,
+      parseStmtMatch
     ]

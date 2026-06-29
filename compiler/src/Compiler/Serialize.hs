@@ -13,7 +13,7 @@ module Compiler.Serialize
   )
 where
 
-import AST.Types.Common (FieldName (..), FuncName (..), VarName (..))
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), VarName (..))
 import Compiler.Bytecode
 import Data.Binary (Binary (..))
 import Data.Binary.Get (Get, getByteString, runGetOrFail)
@@ -73,6 +73,10 @@ instance Binary VarName where
 instance Binary FieldName where
   put (FieldName t) = put t
   get = FieldName <$> get
+
+instance Binary ErrorName where
+  put (ErrorName t) = put t
+  get = ErrorName <$> get
 
 instance Binary InstructionPointer where
   put (InstructionPointer i) = put i
@@ -147,6 +151,11 @@ instance Binary Instruction where
     INewStruct -> tag 18
     IFieldGet f -> tag 19 >> put f
     IFieldSet f -> tag 20 >> put f
+    INewError ename fnames -> tag 21 >> put ename >> put fnames
+    ITryOp -> tag 22
+    IMustOp -> tag 23
+    IIsOk -> tag 24
+    IIsErr ename -> tag 25 >> put ename
     where
       tag n = put (n :: Word8)
 
@@ -173,6 +182,11 @@ instance Binary Instruction where
       18 -> pure INewStruct
       19 -> IFieldGet <$> get
       20 -> IFieldSet <$> get
+      21 -> INewError <$> get <*> get
+      22 -> pure ITryOp
+      23 -> pure IMustOp
+      24 -> pure IIsOk
+      25 -> IIsErr <$> get
       t -> fail $ "Unknown Instruction tag: " ++ show t
 
 instance Binary Bytecode where

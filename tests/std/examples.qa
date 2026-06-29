@@ -128,10 +128,46 @@ fn demo_loops() -> void {
     println(labelled("total", from_int(total)));                # total: 20
 }
 
+error ParseError { line: int, msg: str };
+
+fn parse_number(src: str) -> orerror(int, ParseError) {
+    if (len(src) == 0) {
+        return error ParseError { line: 1, msg: "empty input" };
+    };
+    return 99;
+}
+
+// Demonstrate match: value patterns, ranges, ok/err branches, field access.
+fn demo_match() -> void {
+    // Integer literal and range patterns
+    for (i: int = 0; i <= 12; i++) {
+        match i {
+            0     => println(labelled("zero", from_int(i)));
+            1..9  => println(labelled("digit", from_int(i)));
+            10..12 => println(labelled("teens", from_int(i)));
+            _     => println(labelled("large", from_int(i)));
+        };
+    };
+
+    // ok / err branches on an orerror result
+    good: orerror(int, ParseError) = parse_number("42");
+    match good {
+        ok(n)            => println(labelled("parsed", from_int(n)));
+        err(ParseError e) => println(labelled("error", e.msg));
+    };
+
+    bad: orerror(int, ParseError) = parse_number("");
+    match bad {
+        ok(n)            => println(labelled("parsed", from_int(n)));
+        err(ParseError e) => println(`line {e.line}: {e.msg}`);
+    };
+}
+
 fn main() -> void {
     demo_math();
     demo_string();
     demo_array();
     demo_loops();
+    demo_match();
     println("done");
 }

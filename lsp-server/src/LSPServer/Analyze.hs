@@ -159,6 +159,7 @@ collectFoldingRanges = concatMap collectDecl
     collectStmt (StmtWhile _ body) = collectBlock body
     collectStmt (StmtFor _ _ _ body) = collectBlock body
     collectStmt (StmtBlock block) = collectBlock block
+    collectStmt (StmtMatch _ _) = []
     collectStmt _ = []
 
 -- ---------------------------------------------------------------------------

@@ -16,6 +16,8 @@ import AST.Types.AST
     ImportDecl (..),
     ImportTarget (..),
     LValue (..),
+    MatchArm (..),
+    MatchPattern (..),
     ModulePath (..),
     Stmt (..),
     Visibility (..),
@@ -197,6 +199,16 @@ stmtHasCall prefix = \case
   StmtBreak -> False
   StmtContinue -> False
   StmtBlock b -> blockHasCall prefix b
+  StmtMatch subj arms ->
+    exprHasCall prefix (unLocated subj)
+      || any armHasCall arms
+    where
+      armHasCall (MatchArm pat body) =
+        patHasCall pat || stmtHasCall prefix (unLocated body)
+      patHasCall (MatchLit e) = exprHasCall prefix (unLocated e)
+      patHasCall (MatchRange lo hi) =
+        exprHasCall prefix (unLocated lo) || exprHasCall prefix (unLocated hi)
+      patHasCall _ = False
 
 forInitHasCall :: Text -> ForInit () -> Bool
 forInitHasCall prefix = \case
@@ -274,6 +286,14 @@ renameStmt names prefix = \case
   StmtBreak -> StmtBreak
   StmtContinue -> StmtContinue
   StmtBlock b -> StmtBlock (rB b)
+  StmtMatch subj arms ->
+    StmtMatch (fmap rE subj) (map renameArm arms)
+    where
+      renameArm (MatchArm pat body) =
+        MatchArm (renamePat pat) (fmap (renameStmt names prefix) body)
+      renamePat (MatchLit e) = MatchLit (fmap rE e)
+      renamePat (MatchRange lo hi) = MatchRange (fmap rE lo) (fmap rE hi)
+      renamePat p = p
   where
     rE = renameExpr names prefix
     rB = renameBlock names prefix

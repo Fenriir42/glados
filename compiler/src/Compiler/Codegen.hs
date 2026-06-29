@@ -16,6 +16,8 @@ import AST.Types.AST
     ForInit (..),
     FunctionDecl (..),
     LValue (..),
+    MatchArm (..),
+    MatchPattern (..),
     Program (..),
     Stmt (..),
     Visibility (..),
@@ -476,6 +478,7 @@ compileStmt = \case
     addr <- emitInstruction (IJump (InstructionPointer 0))
     modify $ \s -> s {csContinueJumps = addr : csContinueJumps s}
   StmtBlock block -> compileBlock block
+  StmtMatch subj arms -> compileMatch subj arms
 
 -- ---------------------------------------------------------------------------
 -- For-loop init
@@ -610,6 +613,83 @@ compileExpr = \case
           TypePrimitive PrimString -> CastToString
           _ -> CastToInt
     void $ emitInstruction (ICast ct)
+
+-- ---------------------------------------------------------------------------
+-- Match statement
+
+compileMatch :: Located (Expr ann) -> [MatchArm ann] -> Compile ()
+compileMatch subj arms = do
+  compileExpr (unLocated subj)
+  tmpN <- gets csTempCount
+  modify $ \s -> s {csTempCount = tmpN + 1}
+  let subjVar = VarName (T.pack ("__match_subj_" ++ show tmpN))
+  void $ emitInstruction (IStore subjVar)
+  addToScope subjVar
+  exitJumps <- mapM (compileMatchArm subjVar) arms
+  exitTarget <- gets (InstructionPointer . csInstructionCounter)
+  modify $ \s ->
+    s {csInstructions = patchAll (concat exitJumps) exitTarget (csInstructions s)}
+
+-- | Compile one match arm.  Returns the list of IJump-to-exit instruction
+-- pointers emitted at the end of the arm body; the caller patches them all
+-- to the instruction after the entire match statement once all arms are done.
+compileMatchArm :: VarName -> MatchArm ann -> Compile [InstructionPointer]
+compileMatchArm subjVar (MatchArm pat body) = case pat of
+  MatchWildcard -> do
+    compileStmt (unLocated body)
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    return [exitJmp]
+  MatchOk locVar -> do
+    void $ emitInstruction (ILoad subjVar)
+    void $ emitInstruction IIsOk
+    falseJmp <- emitInstruction (IJumpFalse (InstructionPointer 0))
+    let v = unLocated locVar
+    void $ emitInstruction (ILoad subjVar)
+    void $ emitInstruction (IStore v)
+    addToScope v
+    compileStmt (unLocated body)
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    nextArm <- gets (InstructionPointer . csInstructionCounter)
+    modify $ \s -> s {csInstructions = patchJump (csInstructions s) falseJmp nextArm}
+    return [exitJmp]
+  MatchErr locEName locVar -> do
+    void $ emitInstruction (ILoad subjVar)
+    void $ emitInstruction (IIsErr (unLocated locEName))
+    falseJmp <- emitInstruction (IJumpFalse (InstructionPointer 0))
+    let v = unLocated locVar
+    void $ emitInstruction (ILoad subjVar)
+    void $ emitInstruction (IStore v)
+    addToScope v
+    compileStmt (unLocated body)
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    nextArm <- gets (InstructionPointer . csInstructionCounter)
+    modify $ \s -> s {csInstructions = patchJump (csInstructions s) falseJmp nextArm}
+    return [exitJmp]
+  MatchLit litExpr -> do
+    void $ emitInstruction (ILoad subjVar)
+    compileExpr (unLocated litExpr)
+    void $ emitInstruction (IBinary BOpEq)
+    falseJmp <- emitInstruction (IJumpFalse (InstructionPointer 0))
+    compileStmt (unLocated body)
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    nextArm <- gets (InstructionPointer . csInstructionCounter)
+    modify $ \s -> s {csInstructions = patchJump (csInstructions s) falseJmp nextArm}
+    return [exitJmp]
+  MatchRange loExpr hiExpr -> do
+    -- condition: subject >= lo && subject <= hi
+    void $ emitInstruction (ILoad subjVar)
+    compileExpr (unLocated loExpr)
+    void $ emitInstruction (IBinary BOpGte)
+    void $ emitInstruction (ILoad subjVar)
+    compileExpr (unLocated hiExpr)
+    void $ emitInstruction (IBinary BOpLte)
+    void $ emitInstruction (IBinary BOpAnd)
+    falseJmp <- emitInstruction (IJumpFalse (InstructionPointer 0))
+    compileStmt (unLocated body)
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    nextArm <- gets (InstructionPointer . csInstructionCounter)
+    modify $ \s -> s {csInstructions = patchJump (csInstructions s) falseJmp nextArm}
+    return [exitJmp]
 
 -- ---------------------------------------------------------------------------
 -- Literal

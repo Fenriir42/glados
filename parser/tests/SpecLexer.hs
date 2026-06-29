@@ -165,7 +165,7 @@ lexerSpec = do
     it "lexes arrow symbols" $ do
       let result = runLexer "-> =>"
       result `shouldSatisfy` isRight
-      getContents (fromRight result) `shouldBe` [TokSymbol "->", TokSymbol "=", TokSymbol ">"]
+      getContents (fromRight result) `shouldBe` [TokSymbol "->", TokSymbol "=>"]
 
     it "lexes parentheses" $ do
       let result = runLexer "( )"

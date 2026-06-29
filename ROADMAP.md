@@ -18,12 +18,14 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | CLI | Done | `--stdlib`, `--dump`, `--load`, `--output` flags; 27 integration tests |
 | Structs | Done | Declare, init, field access/assignment, nested structs, field compound assignment |
 | String interpolation | Done | Backtick strings `` `hello {name}` ``; desugars to `string.concat` + `string.to_str` |
-| Error handling | Done | `error`, `orerror`, `try`, `must`; runtime panic on `must`; payload fields on creation |
+| Error handling | Done | `error`, `orerror`, `try`, `must`; runtime panic on `must`; payload fields on creation and access |
 | Visibility enforcement | Done | `static fn` blocked from `from M import` and `import M; M.fn()` |
+| Import cycle detection | Done | Circular imports detected and reported with the full cycle path |
+| Match expression | Done | `match` statement with `ok(v)`, `err(E v)`, literal, range `lo..hi`, wildcard `_` arms |
 | LSP server | Done | 12 protocol features — see table below |
 | VS Code extension | Done | Syntax highlighting, snippets, all LSP features wired |
 | Docs site | Done | Astro/Starlight; all pages written |
-| Tests | Done | 548 total, 0 failures |
+| Tests | Done | 559 total, 0 failures |
 
 ### LSP feature coverage
 
@@ -85,7 +87,7 @@ fn main() -> void {
 
 ---
 
-### 2. Error payload field access
+### 2. Error payload field access *(done)*
 
 Error types already support payload fields at the declaration and creation
 sites. Accessing those fields on a caught error value is the missing half.
@@ -123,7 +125,7 @@ natural way to bind the error branch before projecting fields.
 
 ---
 
-### 3. Match expression
+### 3. Match expression *(done)*
 
 A `match` / `switch` construct for control flow on values, struct fields,
 and error variants.
@@ -193,7 +195,7 @@ Stdlib module `dict.qa` for higher-level operations.
 
 ---
 
-### 5. Import cycle detection
+### 5. Import cycle detection *(done)*
 
 Circular imports currently cause a stack overflow.
 

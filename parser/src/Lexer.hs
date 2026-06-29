@@ -111,7 +111,8 @@ reservedNames =
     "must",
     "try",
     "error",
-    "orerror"
+    "orerror",
+    "match"
   ]
 
 tokInt :: Parser Token
@@ -177,10 +178,12 @@ tokSymbol = withLoc $ lexeme $ do
              string "&&",
              string "||",
              string "->",
+             string "=>",
              string "<<",
              string ">>",
              string "++",
-             string "--"
+             string "--",
+             string ".."
            ]
         -- Then compound assignments (2 chars)
         ++ [string (T.pack [op, '=']) | op <- "+-*~/%&|^"]

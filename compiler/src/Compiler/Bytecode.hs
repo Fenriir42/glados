@@ -144,6 +144,10 @@ data Instruction
     ITryOp
   | -- | If TOS is VErrorVal, panic; else no-op
     IMustOp
+  | -- | Peek TOS: push VBool True if NOT a VErrorVal
+    IIsOk
+  | -- | Peek TOS: push VBool True if IS a VErrorVal with the given name
+    IIsErr ErrorName
   deriving stock (Show, Eq, Generic)
 
 instance Hashable Instruction
