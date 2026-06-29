@@ -21,7 +21,7 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | LSP server | Done | See LSP feature table below |
 | VS Code extension | Done | `extension/vscode/quant-lsp/`; syntax highlighting, snippets, all LSP features wired |
 | Docs site | Done | Astro/Starlight; all pages written |
-| Tests | Done | 545 total, 0 failures |
+| Tests | Done | 548 total, 0 failures |
 
 ### LSP feature coverage
 
@@ -43,22 +43,6 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 ---
 
 ## Known gaps
-
-### Variable go-to-definition / highlight / references / rename
-
-The type checker tracks variable *use* sites (`fsVarUseSites` in `FileState`) but
-go-to-definition for variables resolves to the declaration span only — highlight,
-references, and rename do not yet span across all use sites for variables (only
-function names work today). Implementing this requires wiring `fsVarUseSites` into
-the relevant LSP modules (`Definition.hs`, `Highlight.hs`, `References.hs`,
-`Rename.hs`).
-
-### LSP: variable go-to-definition / highlight / references / rename
-
-`fsVarUseSites` is tracked by the type checker but the LSP modules
-(`Definition.hs`, `Highlight.hs`, `References.hs`, `Rename.hs`) only wire it
-up partially. Variable highlight and cross-reference navigation do not yet span
-all use sites the way function navigation does.
 
 ---
 

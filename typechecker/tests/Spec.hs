@@ -1,13 +1,15 @@
 module Main (main) where
 
 import AST.Types.AST (Program (..))
-import AST.Types.Common (unVarName)
+import AST.Types.Common (SourceSpan (..), VarName (..), unVarName)
 import AST.Types.Type
   ( PrimitiveType (..),
     Type (..),
     defaultFloatType,
     defaultIntType,
   )
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Lib (lexString)
 import Parser.Decl (parseDecl)
 import Test.Hspec
@@ -75,6 +77,49 @@ main = hspec $ do
       let res = check "fn f() -> int { return 42; }"
       null (tcTypes res) `shouldBe` False
 
+    it "populates tcVarUseSites for local variables" $ do
+      let src =
+            unlines
+              [ "fn main() -> void {",
+                "    x: int = 42;",
+                "    y: int = x + 1;",
+                "    println(x);",
+                "}"
+              ]
+          res = check src
+          vus = tcVarUseSites res
+          -- All use sites keyed by variable name
+          xSites = [sp | (sp, (VarName n, _)) <- Map.toList vus, n == "x"]
+          ySites = [sp | (sp, (VarName n, _)) <- Map.toList vus, n == "y"]
+      -- x: declaration + 2 uses = 3 entries
+      length xSites `shouldBe` 3
+      -- y: declaration only = 1 entry
+      length ySites `shouldBe` 1
+
+    it "all x use sites point to the same declaration span" $ do
+      let src =
+            unlines
+              [ "fn main() -> void {",
+                "    x: int = 10;",
+                "    y: int = x + x;",
+                "}"
+              ]
+          res = check src
+          vus = tcVarUseSites res
+          xDefSpans = [defSp | (_, (VarName n, defSp)) <- Map.toList vus, n == "x"]
+      -- All entries for x must share the same declaration span
+      length (dedup xDefSpans) `shouldBe` 1
+
+    it "populates tcVarUseSites for function parameters" $ do
+      let src = "fn add(a: int, b: int) -> int { return a + b; }"
+          res = check src
+          vus = tcVarUseSites res
+          aCount = length [() | (_, (VarName n, _)) <- Map.toList vus, n == "a"]
+          bCount = length [() | (_, (VarName n, _)) <- Map.toList vus, n == "b"]
+      -- Each param: 1 declaration + 1 use in body = 2
+      aCount `shouldBe` 2
+      bCount `shouldBe` 2
+
   describe "TypeChecker - type errors" $ do
     it "reports undefined variable" $ do
       let src = unlines ["fn f() -> int {", "  return x;", "}"]
@@ -121,3 +166,7 @@ isReturnMismatch _ = False
 isConditionNotBool :: TypeCheckError -> Bool
 isConditionNotBool (TCConditionNotBool {}) = True
 isConditionNotBool _ = False
+
+dedup :: (Eq a) => [a] -> [a]
+dedup [] = []
+dedup (x : xs) = x : dedup (filter (/= x) xs)
