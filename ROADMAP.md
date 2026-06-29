@@ -10,7 +10,7 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Type checker | Done | 11 tests; wired into CLI + REPL |
 | Compiler / Codegen | Done | All control flow, structs, error handling, compound assignment |
 | VM Interpreter | Done | Stack-based; 46 VM tests; OOB and type errors throw correctly |
-| Import system | Done | `import M`, `from M import f`, `from M import *`; visibility enforced |
+| Import system | Done | `import M`, `from M import f`, `from M import *`; user `.qa` files resolved relative to the source file; transitive imports supported; visibility enforced |
 | Standard library | Done | 8 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs` (~80 functions) |
 | REPL | Done | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | Done | `--stdlib`, `--dump`, `--load`, `--output` flags; 27 integration tests |
@@ -53,11 +53,12 @@ function names work today). Implementing this requires wiring `fsVarUseSites` in
 the relevant LSP modules (`Definition.hs`, `Highlight.hs`, `References.hs`,
 `Rename.hs`).
 
-### Cross-module variable visibility (multi-file)
+### LSP: variable go-to-definition / highlight / references / rename
 
-Import currently works for standard library modules and for files found via
-`--stdlib`. User-defined packages (importing `.qa` files from arbitrary paths)
-are not yet supported.
+`fsVarUseSites` is tracked by the type checker but the LSP modules
+(`Definition.hs`, `Highlight.hs`, `References.hs`, `Rename.hs`) only wire it
+up partially. Variable highlight and cross-reference navigation do not yet span
+all use sites the way function navigation does.
 
 ---
 
@@ -68,5 +69,5 @@ are not yet supported.
 - **FFI** — call C functions from Quant
 - **Generics** — needed for fully-typed arrays (`[T]`), generic functions
 - **Closures / first-class functions** — `fn` as a value, lambdas
-- **Multi-file user packages** — `import` from user-defined packages, not just stdlib
+- **Cycle detection in imports** — circular imports between user `.qa` files currently stack-overflow rather than report a clean error
 - **Error payload fields** — `error Foo { msg: str }` with field access on the error value

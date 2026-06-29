@@ -22,6 +22,7 @@ import Lib (lexFile)
 import Options.Applicative
 import Parser.Decl (parseDecl)
 import System.Exit (exitFailure)
+import System.FilePath (takeDirectory)
 import System.IO (hIsTerminalDevice, stdout)
 import Text.Megaparsec (errorBundlePretty, runParser)
 import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
@@ -85,7 +86,7 @@ compileSource stdlibDir filePath = do
     case runParser (many parseDecl) filePath tokens of
       Left err -> Left (errorBundlePretty err)
       Right ds -> Right ds
-  decls <- resolveImports stdlibDir rawDecls >>= orDie "Import error"
+  decls <- resolveImports [takeDirectory filePath, stdlibDir] rawDecls >>= orDie "Import error"
   let typeErrs = tcErrors (typeCheck (Program decls))
   case typeErrs of
     [] -> return ()

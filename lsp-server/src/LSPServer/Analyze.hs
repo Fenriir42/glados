@@ -38,7 +38,7 @@ import Language.LSP.Protocol.Types
 import Lexer (parseRawTokens)
 import Parser.Decl (parseDecl)
 import System.Directory (getCurrentDirectory, listDirectory)
-import System.FilePath (takeBaseName, (</>))
+import System.FilePath (takeBaseName, takeDirectory, (</>))
 import System.IO (IOMode (..), hGetContents, hSetEncoding, openFile, utf8)
 import Text.Megaparsec
   ( ParseErrorBundle (..),
@@ -99,7 +99,7 @@ analyzeText fp text = do
         Left bundle ->
           return (emptyResult (bundleToDiags bundle))
         Right rawDecls -> do
-          resolvedOrErr <- resolveImports stdlibDir rawDecls
+          resolvedOrErr <- resolveImports [takeDirectory fp, stdlibDir] rawDecls
           let decls = case resolvedOrErr of
                 Left _ -> rawDecls
                 Right ds -> ds

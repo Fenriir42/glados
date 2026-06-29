@@ -1,4 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 
 module Compiler.Import
   ( resolveImports,
@@ -26,48 +28,51 @@ import AST.Types.Common
     unLocated,
   )
 import Control.Exception (IOException, catch)
+import Data.List (partition)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Lib (lexString)
 import Parser.Decl (parseDecl)
+import System.FilePath (takeDirectory, (</>))
 import Text.Megaparsec (errorBundlePretty, many, runParser)
 
 -- ---------------------------------------------------------------------------
 -- Public API
 
 -- | Resolve all @DeclImport@ nodes in a program, replacing them with the
--- imported function declarations. @stdlibDir@ is the path to the @std/@
--- directory (e.g. @"./std"@).
+-- imported function declarations.
+--
+-- @searchPaths@ is an ordered list of directories to search: the first match
+-- wins.  Typically the caller passes @[sourceFileDir, stdlibDir]@ so that
+-- sibling @.qa@ files are found before falling back to the stdlib.
 resolveImports ::
-  FilePath ->
+  [FilePath] ->
   [Located (Decl ())] ->
   IO (Either String [Located (Decl ())])
-resolveImports stdlibDir decls = do
+resolveImports searchPaths decls = do
   results <- mapM resolve decls
   return $ concat <$> sequence results
   where
-    resolve (Located _ (DeclImport imp)) = resolveOne stdlibDir imp
+    resolve (Located _ (DeclImport imp)) = resolveOne searchPaths imp
     resolve loc = return (Right [loc])
 
 -- ---------------------------------------------------------------------------
 -- Single import resolution
 
 resolveOne ::
-  FilePath ->
+  [FilePath] ->
   ImportDecl ->
   IO (Either String [Located (Decl ())])
-resolveOne stdlibDir (ImportDecl path target) = do
+resolveOne searchPaths (ImportDecl path target) = do
   let modName = moduleText path
-      filePath = stdlibDir <> "/" <> T.unpack modName <> ".qa"
-  srcOrErr <-
-    (Right <$> readFile filePath)
-      `catch` (\e -> return $ Left (show (e :: IOException)))
-  case srcOrErr of
-    Left ioe ->
-      return $ Left $ "cannot open stdlib module '" <> T.unpack modName <> "': " <> ioe
-    Right src ->
+  mFound <- findModule searchPaths (T.unpack modName)
+  case mFound of
+    Nothing ->
+      return $ Left $ "cannot find module '" <> T.unpack modName <> "'"
+    Just (foundPath, src) -> do
+      let foundDir = takeDirectory foundPath
       case lexString src of
         Left lexErr ->
           return $ Left $ "lex error in '" <> T.unpack modName <> "': " <> lexErr
@@ -75,8 +80,29 @@ resolveOne stdlibDir (ImportDecl path target) = do
           case runParser (many parseDecl) (T.unpack modName <> ".qa") tokens of
             Left bundle ->
               return $ Left $ errorBundlePretty bundle
-            Right rawDecls ->
-              return $ Right (pickDecls modName target rawDecls)
+            Right rawDecls -> do
+              -- Split module's own declarations from its imports.
+              let isImportDecl (Located _ (DeclImport {})) = True
+                  isImportDecl _ = False
+                  (importStmts, ownDecls) = partition isImportDecl rawDecls
+              -- Recursively resolve imports declared inside the loaded module.
+              -- Prepend the module's own directory so its sibling files are found.
+              transitiveOrErr <- resolveImports (foundDir : searchPaths) importStmts
+              case transitiveOrErr of
+                Left err -> return $ Left err
+                Right transitive ->
+                  return $ Right $ transitive ++ pickDecls modName target ownDecls
+
+-- | Try each directory in order; return the first file found together with
+-- its contents, or @Nothing@ if no directory contains @modName.qa@.
+findModule :: [FilePath] -> String -> IO (Maybe (FilePath, String))
+findModule [] _ = return Nothing
+findModule (dir : rest) modName = do
+  let fp = dir </> modName <> ".qa"
+  result <- (Just . (fp,) <$> readFile fp) `catch` (\(_ :: IOException) -> return Nothing)
+  case result of
+    Just found -> return (Just found)
+    Nothing -> findModule rest modName
 
 -- ---------------------------------------------------------------------------
 -- Module dispatch

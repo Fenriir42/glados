@@ -57,7 +57,7 @@ runPipelineWithImports src =
       case runParser (many parseDecl) "<test>" tokens of
         Left bundle -> return $ ParseError (errorBundlePretty bundle)
         Right rawDecls -> do
-          declsOrErr <- resolveImports stdlibPath rawDecls
+          declsOrErr <- resolveImports [stdlibPath] rawDecls
           case declsOrErr of
             Left importErr -> return $ ImportError importErr
             Right decls -> do
@@ -84,7 +84,7 @@ runPipelineWithModule modName modSrc mainSrc =
         case runParser (many parseDecl) "<test>" tokens of
           Left bundle -> return $ ParseError (errorBundlePretty bundle)
           Right rawDecls -> do
-            declsOrErr <- resolveImports tmpDir rawDecls
+            declsOrErr <- resolveImports [tmpDir] rawDecls
             case declsOrErr of
               Left importErr -> return $ ImportError importErr
               Right decls -> do

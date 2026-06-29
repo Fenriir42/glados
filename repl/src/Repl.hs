@@ -170,7 +170,7 @@ tryCompile config src existing = do
       case runParser (many parseDecl) "<repl>" tokens of
         Left err -> return (Left (errorBundlePretty err))
         Right rawDecls -> do
-          declsOrErr <- resolveImports (replStdlib config) rawDecls
+          declsOrErr <- resolveImports [replStdlib config] rawDecls
           case declsOrErr of
             Left importErr -> return (Left importErr)
             Right decls -> do

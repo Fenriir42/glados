@@ -47,6 +47,7 @@ library
     , binary
     , bytestring
     , containers
+    , filepath
     , hashable
     , megaparsec
     , mtl
