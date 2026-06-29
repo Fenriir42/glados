@@ -1,81 +1,72 @@
 # Quant Language - Roadmap
 
-Current state of the `feat/revival` branch as of 2026-06-10.
+Current state of the `feat/revival` branch as of 2026-06-29.
 
 ## What's complete
 
-| Area | Notes |
-|------|-------|
-| Lexer / Parser | 342 tests |
-| Type checker | Wired into CLI + REPL; 11 tests |
-| Compiler / Codegen | All control flow, arrays, casts, compound assignment |
-| VM Interpreter | Stack-based; 46 tests; OOB now throws correctly |
-| Import system | `import M`, `from M import f`, `from M import *` |
-| Standard library | `math`, `string`, `array`, `sys`, `io` (~60 functions) |
-| REPL | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
-| CLI | `--stdlib`, `--dump`, `--load`, `--output` flags |
-| LSP server | Diagnostics, hover, completion, go-to-def, signature help, symbols, highlight, references, rename, folding, inlay hints, semantic tokens |
-| VS Code extension | `extension/vscode/quant-lsp/` , syntax highlighting, snippets, all LSP features wired |
-| Structs | Declare, init, field access/assignment; fully typed and compiled |
-| String interpolation | Backtick strings `` `hello {name}` ``; desugars to `string.concat` + `string.to_str` |
-| Visibility enforcement | `static fn` hides functions from wildcard/explicit imports |
-| Docs site | Astro; all pages written |
-| Tests | 545 total, 0 failures |
+| Area | Status | Notes |
+|------|--------|-------|
+| Lexer / Parser | Done | 353 parser tests |
+| Type checker | Done | 11 tests; wired into CLI + REPL |
+| Compiler / Codegen | Done | All control flow, structs, error handling, compound assignment |
+| VM Interpreter | Done | Stack-based; 46 VM tests; OOB and type errors throw correctly |
+| Import system | Done | `import M`, `from M import f`, `from M import *`; visibility enforced |
+| Standard library | Done | 8 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs` (~80 functions) |
+| REPL | Done | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
+| CLI | Done | `--stdlib`, `--dump`, `--load`, `--output` flags; 27 integration tests |
+| Structs | Done | Declare, init, field access/assignment, nested structs, field compound assignment |
+| String interpolation | Done | Backtick strings `` `hello {name}` ``; desugars to `string.concat` + `string.to_str` |
+| Error handling | Done | `error`, `orerror`, `try`, `must`; runtime panic on `must` over an error value |
+| Visibility enforcement | Done | `static fn` blocked from `from M import` and from `import M; M.fn()` |
+| LSP server | Done | See LSP feature table below |
+| VS Code extension | Done | `extension/vscode/quant-lsp/`; syntax highlighting, snippets, all LSP features wired |
+| Docs site | Done | Astro/Starlight; all pages written |
+| Tests | Done | 545 total, 0 failures |
 
-## Known stubs
+### LSP feature coverage
 
-These features are parsed and stored in the AST but throw `UnsupportedConstruct` in the compiler:
-
-- **Error handling** , `ExprTry`, `ExprMust`, `DeclError`, `DeclErrorSet`
-
----
-
-## LSP expansion (in progress)
-
-Expanding toward Rust Analyzer / TypeScript LSP feature parity.
-
-### Phase 1 - No type-checker changes needed
-- **Document symbols** (`textDocument/documentSymbol`) - OUTLINE panel showing all `fn` declarations
-- **Document highlight** (`textDocument/documentHighlight`) - all occurrences glow on cursor
-- **Find references** (`textDocument/references`) - right-click Find All References
-- **Rename** (`textDocument/rename`) - F2 rename for user-defined functions (single-file)
-- **Folding ranges** (`textDocument/foldingRange`) - collapse function bodies / if / while / for blocks
-
-### Phase 2 - Variable tracking (requires type-checker extension)
-- Extend `Env` with variable declaration spans (`envVarDefs`)
-- Add `tcsVarUseSites` to TCState to map each `ExprVar` to its declaration
-- Unlocks: variable go-to-def, variable highlight, variable references, variable rename
-
-### Phase 3 - Inlay hints
-- **Parameter name hints** (`textDocument/inlayHint`) - show `paramName:` before each argument
-
-### Phase 4 - Semantic tokens
-- **Semantic highlighting** (`textDocument/semanticTokens`) - function calls, variables, parameters colored by role
+| Feature | Protocol method | Status |
+|---------|----------------|--------|
+| Diagnostics | `textDocument/publishDiagnostics` | Done |
+| Hover | `textDocument/hover` | Done |
+| Completion | `textDocument/completion` | Done |
+| Go to definition | `textDocument/definition` | Done |
+| Signature help | `textDocument/signatureHelp` | Done |
+| Document symbols | `textDocument/documentSymbol` | Done |
+| Document highlight | `textDocument/documentHighlight` | Done |
+| Find references | `textDocument/references` | Done |
+| Rename | `textDocument/rename` + `prepareRename` | Done |
+| Folding ranges | `textDocument/foldingRange` | Done |
+| Inlay hints | `textDocument/inlayHint` | Done |
+| Semantic tokens | `textDocument/semanticTokensFull` | Done |
 
 ---
 
----
+## Known gaps
 
-## Larger features
+### Variable go-to-definition / highlight / references / rename
 
-### Error handling (`try` / `must`)
-Zig-style error unions. All codegen stubs:
+The type checker tracks variable *use* sites (`fsVarUseSites` in `FileState`) but
+go-to-definition for variables resolves to the declaration span only — highlight,
+references, and rename do not yet span across all use sites for variables (only
+function names work today). Implementing this requires wiring `fsVarUseSites` into
+the relevant LSP modules (`Definition.hs`, `Highlight.hs`, `References.hs`,
+`Rename.hs`).
 
-1. Decide representation: a `VResult (Either String Value)` tagged union, or a separate error stack
-2. `DeclError` / `DeclErrorSet` , register error types
-3. `ExprTry` , propagate error up the call stack (like `?` in Zig)
-4. `ExprMust` , assert non-error, panic otherwise
-5. Codegen + VM + type checker changes
+### Cross-module variable visibility (multi-file)
 
-Effort: ~1 day. Requires design decision on error representation first.
+Import currently works for standard library modules and for files found via
+`--stdlib`. User-defined packages (importing `.qa` files from arbitrary paths)
+are not yet supported.
 
 ---
 
 ## Future / big-picture (not scoped)
 
-- **Package manager** , resolve external Quant packages, fetch from a registry
-- **Graphics / game library** , bindings to SDL2 or similar via FFI
-- **FFI** , call C functions from Quant
-- **Generics** , needed for typed arrays (`[T]`), error sets (`Result(T, E)`)
-- **Closures / first-class functions** , `fn` as a value
-- **Multi-file compilation** , `import` from user packages, not just stdlib
+- **Package manager** — resolve external Quant packages, fetch from a registry
+- **Graphics / game library** — bindings to SDL2 or similar via FFI
+- **FFI** — call C functions from Quant
+- **Generics** — needed for fully-typed arrays (`[T]`), generic functions
+- **Closures / first-class functions** — `fn` as a value, lambdas
+- **Multi-file user packages** — `import` from user-defined packages, not just stdlib
+- **Error payload fields** — `error Foo { msg: str }` with field access on the error value
