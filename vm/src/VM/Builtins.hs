@@ -11,7 +11,7 @@ import Compiler.Bytecode (Value (..))
 import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, try)
 import Control.Monad (when)
-import Data.Bits ((.&.))
+import Data.Bits (xor, (.&.))
 import qualified Data.ByteString as BS
 import Data.Char (toLower, toUpper)
 import Data.Either (fromRight)
@@ -232,6 +232,12 @@ callString "to_float" ss [s] =
   case reads (T.unpack (resolveStr ss s)) of
     [(f, "")] -> return $ VFloat f
     _ -> return $ VFloat 0.0
+-- FNV-1a 32-bit hash, result in [0, 2^31-2] (always non-negative, fits int)
+callString "hash" ss [s] =
+  let txt = T.unpack (resolveStr ss s)
+      step acc c = (acc `xor` toInteger (fromEnum c)) * 16777619
+      h = foldl step 2166136261 txt `mod` 2147483647
+   in return $ VInt h
 callString name _ _ = ioError $ userError $ "Unknown string function: string." ++ T.unpack name
 
 findFirst :: String -> String -> Maybe Int

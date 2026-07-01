@@ -159,6 +159,19 @@ fn pad_right(s: str, length: int, pad_char: str) -> str {
     return string.concat(s, padding);
 }
 
+// Returns a non-negative integer hash of `s` using FNV-1a.
+//
+// The result is always in [0, 2147483646] so it is safe to use directly as
+// a bucket index after a modulo operation:
+//
+//   bucket: int = string.hash(key) % num_buckets;
+//
+// The hash is deterministic within a process but not guaranteed stable across
+// language versions.
+fn hash(s: str) -> int {
+    return string.hash(s);
+}
+
 // Returns the decimal string representation of integer `n`.
 fn from_int(n: int) -> str {
     return string.from_int(n);

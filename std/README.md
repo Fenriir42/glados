@@ -22,12 +22,12 @@ std/
 ```quant
 import math                         # all functions as math.sqrt, math.abs, …
 from string import concat, to_upper # specific names, unqualified
-from string import *                # wildcard — all names unqualified
+from string import *                # wildcard -all names unqualified
 ```
 
 ---
 
-## `io` — Input / Output
+## `io` -Input / Output
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -49,7 +49,7 @@ fn main() -> void {
 
 ---
 
-## `math` — Mathematics
+## `math` -Mathematics
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -79,7 +79,7 @@ fn main() -> void {
 
 ---
 
-## `string` — String Operations
+## `string` -String Operations
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -115,7 +115,7 @@ fn main() -> void {
 
 ---
 
-## `array` — Array Utilities
+## `array` -Array Utilities
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -145,7 +145,7 @@ fn main() -> void {
 
 ---
 
-## `sys` — System Operations
+## `sys` -System Operations
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -182,7 +182,7 @@ fn main() -> void {
 
 ---
 
-## `buf` — Mutable String Buffers
+## `buf` -Mutable String Buffers
 
 Accumulate string output efficiently and flush to any file descriptor.
 
@@ -210,7 +210,7 @@ fn main() -> void {
 
 ---
 
-## `file` — File I/O
+## `file` -File I/O
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -240,7 +240,7 @@ fn main() -> void {
 
 ---
 
-## `varargs` — Variadic Utilities
+## `varargs` -Variadic Utilities
 
 Functions that accept a variable number of arguments via the `...T` syntax.
 

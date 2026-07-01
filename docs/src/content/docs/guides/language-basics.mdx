@@ -276,7 +276,7 @@ fn main() -> void {
 
 ## Variadic Functions
 
-A parameter declared with `...T` accepts zero or more extra arguments of type `T`. Inside the function the parameter is a `[T]` array — access elements with `[i]` and `len()`.
+A parameter declared with `...T` accepts zero or more extra arguments of type `T`. Inside the function the parameter is a `[T]` array -access elements with `[i]` and `len()`.
 
 ```quant
 fn sum(args: ...int) -> int {
@@ -307,7 +307,7 @@ fn main() -> void {
 ```
 
 <Aside>
-  The variadic parameter must be the last one. The caller passes arguments directly — no array literal needed at the call site.
+  The variadic parameter must be the last one. The caller passes arguments directly -no array literal needed at the call site.
 </Aside>
 
 The standard library module `varargs` provides ready-made variadic utilities:
@@ -466,7 +466,7 @@ fn eprint(msg: str) -> void {
 }
 ```
 
-The `buf.flush(b, fd)` call joins all chunks, writes them to `fd` with a single `write(2)` call, clears the buffer, and returns the byte count. No import statement is needed — `buf.*` functions are always available as dotted calls.
+The `buf.flush(b, fd)` call joins all chunks, writes them to `fd` with a single `write(2)` call, clears the buffer, and returns the byte count. No import statement is needed -`buf.*` functions are always available as dotted calls.
 
 ### Building a custom printf
 
@@ -501,7 +501,7 @@ fn main() -> void {
 
 ## Error Handling
 
-Quant uses `orerror(T, E)` — a built-in result type — instead of exceptions. A function either returns a value of type `T` or a named error `E`.
+Quant uses `orerror(T, E)` -a built-in result type -instead of exceptions. A function either returns a value of type `T` or a named error `E`.
 
 ### Declaring Errors
 

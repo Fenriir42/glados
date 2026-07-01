@@ -22,7 +22,7 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Visibility enforcement | Done | `static fn` blocked from `from M import` and `import M; M.fn()` |
 | Import cycle detection | Done | Circular imports detected and reported with the full cycle path |
 | Match expression | Done | `match` statement with `ok(v)`, `err(E v)`, literal, range `lo..hi`, wildcard `_` arms |
-| LSP server | Done | 12 protocol features — see table below |
+| LSP server | Done | 12 protocol features -see table below |
 | VS Code extension | Done | Syntax highlighting, snippets, all LSP features wired |
 | Docs site | Done | Astro/Starlight; all pages written |
 | Tests | Done | 559 total, 0 failures |
@@ -34,19 +34,19 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Diagnostics | `publishDiagnostics` | Done |
 | Hover | `textDocument/hover` | Done |
 | Completion | `textDocument/completion` | Done |
-| Go to definition | `textDocument/definition` | Done — functions and variables |
+| Go to definition | `textDocument/definition` | Done -functions and variables |
 | Signature help | `textDocument/signatureHelp` | Done |
 | Document symbols | `textDocument/documentSymbol` | Done |
-| Document highlight | `textDocument/documentHighlight` | Done — functions and variables |
-| Find references | `textDocument/references` | Done — functions and variables |
-| Rename | `textDocument/rename` + `prepareRename` | Done — functions and variables |
+| Document highlight | `textDocument/documentHighlight` | Done -functions and variables |
+| Find references | `textDocument/references` | Done -functions and variables |
+| Rename | `textDocument/rename` + `prepareRename` | Done -functions and variables |
 | Folding ranges | `textDocument/foldingRange` | Done |
 | Inlay hints | `textDocument/inlayHint` | Done |
 | Semantic tokens | `textDocument/semanticTokensFull` | Done |
 
 ---
 
-## True V1 — what's left
+## True V1 -what's left
 
 The deadline V1 shipped a working language. True V1 needs a handful of
 language-level features that any programmer expects, plus a clean
@@ -79,7 +79,7 @@ fn main() -> void {
 
 | Layer | Change |
 |-------|--------|
-| Parser/Type | `(int) -> int` type syntax — positional-typed function types (currently requires named params `(x: int) -> int`) |
+| Parser/Type | `(int) -> int` type syntax -positional-typed function types (currently requires named params `(x: int) -> int`) |
 | AST/Type | Already has `TypeFunction`; `VFunction FuncName` value is missing from `Bytecode.hs` |
 | Codegen | `ExprVar` of a function name → push `VFunction fname`; `ExprCall` on a non-literal callee → `ICallIndirect` |
 | VM | New `ICallIndirect` instruction: pop `VFunction`, dispatch like `ICall` |
@@ -118,7 +118,7 @@ but there is no instruction to project a field out of it.
 | AST | Add `ExprErrorField` or reuse `ExprField` for `VErrorVal` |
 | VM | `IFieldGet` already exists for structs; extend to handle `VErrorVal` lookup |
 | Type checker | Infer field access on `orerror` / error-typed expressions |
-| Language design | Decide how to bind the error branch — `match`, or a dedicated `catch err { }` block, or a destructuring `let` |
+| Language design | Decide how to bind the error branch -`match`, or a dedicated `catch err { }` block, or a destructuring `let` |
 
 This is best implemented together with **match** (feature 3) so you have a
 natural way to bind the error branch before projecting fields.
@@ -185,7 +185,7 @@ fn main() -> void {
 | Layer | Change |
 |-------|--------|
 | AST/Type | `TypeDict KeyType ValueType`; `LitDict []` |
-| Parser | `dict(K, V)` type syntax; `{}` literal; subscript assignment (`d[k] = v`) already handled by `LArrayIndex` — reuse or extend |
+| Parser | `dict(K, V)` type syntax; `{}` literal; subscript assignment (`d[k] = v`) already handled by `LArrayIndex` -reuse or extend |
 | VM | `VDictRef Int` (heap-backed like `VArrayRef`); `vmDictHeap :: Map Int (Map Value Value)` in `VMState` |
 | Builtins | `dict.has`, `dict.keys`, `dict.values`, `dict.len`, `dict.delete` |
 | Type checker | Dict subscript types; builtin return types |
@@ -237,12 +237,59 @@ fn main() -> void {
 `option(T)` is a specialisation of the error system (`orerror(T, None)`)
 but with dedicated syntax and a `none` literal that reads more naturally.
 
-**Layers:** similar to `orerror` — AST type node, parser, type checker,
+**Layers:** similar to `orerror` -AST type node, parser, type checker,
 VM `VOption`, codegen. Depends on **match** (feature 3) for clean usage.
 
 ---
 
-### 7. FFI — call C functions
+### 7. Generics / parametric polymorphism
+
+Write functions and structs that are parameterised over types.
+
+```quant
+fn identity[T](x: T) -> T { return x; }
+
+fn map[T, U](arr: [T], f: (T) -> U) -> [U] {
+    result: [U] = [];
+    i: int = 0;
+    while (i < len(arr)) {
+        push(result, f(arr[i]));
+        i = i + 1;
+    };
+    return result;
+}
+
+struct Pair[A, B] {
+    first: A;
+    second: B;
+}
+
+fn main() -> void {
+    doubled: [int] = map([1, 2, 3], fn(x: int) -> int { return x * 2; });
+    p: Pair[int, str] = Pair { first: 42, second: "hello" };
+}
+```
+
+**Approach:** monomorphization -the compiler generates one specialised copy of
+each generic function per distinct set of type arguments, similar to C++ templates
+or Rust generics. No runtime type information needed.
+
+**Layers that need work:**
+
+| Layer | Change |
+|-------|--------|
+| Parser | `[T, U, ...]` type-param list on `fn` and `struct` declarations; `T` as a bare type in param/return positions |
+| AST | `funcDeclTypeParams :: [TypeName]` on `FunctionDecl`; `structDeclTypeParams` on `StructDecl`; `TypeVar TypeName` constructor in `Type` |
+| Type checker | Unification: collect constraints from call-site arguments, solve for type vars, verify body under substitution |
+| Codegen | Monomorphization pass: for each call-site instantiation emit a renamed copy (`map__int__str`, etc.) |
+| Import.hs | Propagate type-param renaming through module boundaries |
+
+Depends on nothing -but significantly unlocks `array.map`, `array.filter`,
+generic containers, and reduces duplicated code across the stdlib.
+
+---
+
+### 8. FFI -call C functions
 
 Bind to C libraries directly from Quant.
 
@@ -261,7 +308,7 @@ fn main() -> void {
 3. The VM resolves `ICallForeign` via `dlopen` + `dlsym` at runtime (using
    the `libffi` Haskell binding, or Haskell's `Foreign.Ptr` + `ccall`)
 
-Alternatively, output native code (LLVM or C) and link normally — but that
+Alternatively, output native code (LLVM or C) and link normally -but that
 requires a separate backend.
 
 ---
@@ -273,11 +320,11 @@ The current stdlib is comprehensive. Remaining gaps:
 | Module | Missing |
 |--------|---------|
 | `string` | `to_chars` → `[str]`, `from_chars` → `str`, `count` occurrences, `format` (named `{}` holes) |
-| `array` | `map(arr, f)` and `filter(arr, f)` — blocked until first-class functions land |
+| `array` | `map(arr, f)` and `filter(arr, f)` -blocked until first-class functions land |
 | `math` | `pi` and `tau` constants, `log2`, `log10`, `hypot`, `is_nan`, `is_inf` |
-| `json` | `encode(value) -> str`, `decode(s) -> ...` — needs dict and option first |
-| `regex` | basic `match`, `find`, `replace` — can wrap Haskell's `regex-compat` |
-| `net` | `http.get`, `http.post` — post-V1 in practice |
+| `json` | `encode(value) -> str`, `decode(s) -> ...` -needs dict and option first |
+| `regex` | basic `match`, `find`, `replace` -can wrap Haskell's `regex-compat` |
+| `net` | `http.get`, `http.post` -post-V1 in practice |
 
 ---
 
@@ -286,14 +333,14 @@ The current stdlib is comprehensive. Remaining gaps:
 Dependencies shape the order:
 
 ```
-cycle detection (5)          — standalone, do first
+cycle detection (5)          -standalone, do first
 error field access (2)  ─┐
 match (3)               ─┴─ do together, match enables field binding
-first-class functions (1)    — independent, can parallelize
-dict (4)                     — independent
+first-class functions (1)    -independent, can parallelize
+dict (4)                     -independent
 optional (6)            ─── depends on match for clean usage
-stdlib additions             — fill in as language features land
-FFI (7)                      — last, needs design decision on backend
+stdlib additions             -fill in as language features land
+FFI (7)                      -last, needs design decision on backend
 ```
 
 Realistic V1 sequence:
@@ -302,19 +349,19 @@ Realistic V1 sequence:
 3. First-class functions
 4. Dict type
 5. Optional type
-6. Stdlib additions (json, regex, string.format)
-7. FFI
+6. Generics / parametric polymorphism
+7. Stdlib additions (json, regex, string.format, generic array.map/filter)
+8. FFI
 
 ---
 
 ## Post-V1 / future
 
-- **Generics** — `fn map[T, U](arr: [T], f: (T) -> U) -> [U]`; requires type-variable inference
-- **Tuples** — `(int, str)` for lightweight multiple returns
-- **Enum types** — named variants without payload, beyond the error system
-- **Closures capturing environment** — lambdas that close over local variables
-- **Async / await** — cooperative concurrency
-- **Package manager** — resolve external Quant packages from a registry
-- **Graphics / game library** — SDL2 or similar via FFI
-- **Multi-target codegen** — LLVM or C output instead of the bytecode VM
-- **Cycle detection in imports** — if not done in V1
+- **Tuples** -`(int, str)` for lightweight multiple returns
+- **Enum types** -named variants without payload, beyond the error system
+- **Closures capturing environment** -lambdas that close over local variables
+- **Async / await** -cooperative concurrency
+- **Package manager** -resolve external Quant packages from a registry
+- **Graphics / game library** -SDL2 or similar via FFI
+- **Multi-target codegen** -LLVM or C output instead of the bytecode VM
+- **Cycle detection in imports** -if not done in V1

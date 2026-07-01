@@ -253,7 +253,7 @@ Functions are first-class values in Quant. A function type is written as a paren
 () -> void             // no parameters, no return value
 ```
 
-Parameter names are optional in type annotations — `(int) -> int` and `(x: int) -> int` are the same type.
+Parameter names are optional in type annotations -`(int) -> int` and `(x: int) -> int` are the same type.
 
 #### Function references
 
@@ -449,7 +449,7 @@ Integer value ranges depend on bit size and signedness:
 
 ## Error Types
 
-`orerror(T, E)` is Quant's built-in result type — a value that is either a success of type `T` or a named error `E`. It plays the same role as `Result<T, E>` in Rust or `Either` in Haskell.
+`orerror(T, E)` is Quant's built-in result type -a value that is either a success of type `T` or a named error `E`. It plays the same role as `Result<T, E>` in Rust or `Either` in Haskell.
 
 ### Declaring Error Types
 
@@ -528,7 +528,7 @@ Returning a plain value (`return a / b`) is the success path. Returning `error N
     }
     ```
 
-    If `safe_div` returns an error, `try` immediately returns that error from `double_div` — no further statements execute.
+    If `safe_div` returns an error, `try` immediately returns that error from `double_div` -no further statements execute.
   </TabItem>
 </Tabs>
 
