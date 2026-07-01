@@ -1,7 +1,7 @@
 -- | Human-readable disassembly of compiled bytecode.
 module Compiler.Disasm (disassemble) where
 
-import AST.Types.Common (ErrorName (..), unErrorName, unFieldName, unFuncName, unVarName)
+import AST.Types.Common (ErrorName (..), FuncName (..), unFieldName, unFuncName, unVarName)
 import Compiler.Bytecode
 import Data.List (intercalate)
 import qualified Data.Text as T
@@ -72,6 +72,8 @@ showInstr = \case
   IMustOp -> "MUST"
   IIsOk -> "IS_OK"
   IIsErr (ErrorName n) -> "IS_ERR     " ++ T.unpack n
+  ILoadFunc (FuncName n) -> "LOAD_FUNC  " ++ T.unpack n
+  ICallIndirect argc -> "CALL_INDIR " ++ show argc
 
 showVal :: Value -> String
 showVal (VInt n) = show n
@@ -81,6 +83,8 @@ showVal (VString s) = show s
 showVal (VStringRef i) = "str[" ++ show i ++ "]"
 showVal (VArrayRef i) = "arr[" ++ show i ++ "]"
 showVal (VStructRef i) = "struct[" ++ show i ++ "]"
+showVal (VErrorVal (ErrorName n) _) = "err(" ++ T.unpack n ++ ")"
+showVal (VFunction (FuncName n)) = "fn(" ++ T.unpack n ++ ")"
 showVal VUnit = "unit"
 
 showIP :: InstructionPointer -> String

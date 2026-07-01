@@ -11,7 +11,8 @@ import Data.List (foldl')
 import qualified Data.Text as T
 import Parser.Literal (parseLiteral)
 import Parser.Operator (parseBinaryOp, parseUnaryOp)
-import Parser.Type (parsePrimitiveType)
+import {-# SOURCE #-} Parser.Stmt (parseBlock)
+import Parser.Type (parseParameter, parsePrimitiveType, parseQualifiedType)
 import Parser.Utils
   ( TokenParser,
     isIdentifier,
@@ -196,11 +197,24 @@ parseErrorFieldInit = do
   val <- parseExpr
   return (Located fspan (FieldName n), val)
 
+-- | Parse an anonymous function expression: fn(params) -> retType { body }
+parseExprLambda :: TokenParser (Located (Expr ann))
+parseExprLambda = do
+  Located startSpan _ <- matchKeyword "fn"
+  _ <- matchSymbol "("
+  params <- MP.sepBy parseParameter (matchSymbol ",")
+  _ <- matchSymbol ")"
+  _ <- matchSymbol "->"
+  retType <- parseQualifiedType
+  Located bodySpan body <- parseBlock
+  return $ Located (startSpan <> bodySpan) (ExprLambda params retType body)
+
 parsePrimary :: TokenParser (Located (Expr ann))
 parsePrimary =
   MP.choice
     [ parseExprInterp,
       parseExprLiteral,
+      MP.try parseExprLambda,
       MP.try parseExprDottedCall,
       MP.try parseExprCall,
       parseExprCast,

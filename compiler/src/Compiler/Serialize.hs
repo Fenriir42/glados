@@ -108,6 +108,8 @@ instance Binary Value where
   put VUnit = put (5 :: Word8)
   put (VString t) = put (6 :: Word8) >> put t
   put (VStructRef i) = put (7 :: Word8) >> put i
+  put (VFunction fname) = put (8 :: Word8) >> put fname
+  put (VErrorVal ename fields) = put (9 :: Word8) >> put ename >> put fields
   get =
     (get :: Get Word8) >>= \case
       0 -> VInt <$> get
@@ -118,6 +120,8 @@ instance Binary Value where
       5 -> pure VUnit
       6 -> VString <$> get
       7 -> VStructRef <$> get
+      8 -> VFunction <$> get
+      9 -> VErrorVal <$> get <*> get
       t -> fail $ "Unknown Value tag: " ++ show t
 
 instance Binary BinaryOp where
@@ -156,6 +160,8 @@ instance Binary Instruction where
     IMustOp -> tag 23
     IIsOk -> tag 24
     IIsErr ename -> tag 25 >> put ename
+    ILoadFunc fname -> tag 26 >> put fname
+    ICallIndirect argc -> tag 27 >> put (argc :: Int)
     where
       tag n = put (n :: Word8)
 
@@ -187,6 +193,8 @@ instance Binary Instruction where
       23 -> pure IMustOp
       24 -> pure IIsOk
       25 -> IIsErr <$> get
+      26 -> ILoadFunc <$> get
+      27 -> ICallIndirect <$> get
       t -> fail $ "Unknown Instruction tag: " ++ show t
 
 instance Binary Bytecode where

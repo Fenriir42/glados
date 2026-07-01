@@ -20,11 +20,11 @@ import AST.Types.AST
   )
 import AST.Types.Common
   ( ErrorName (..),
-    FuncName,
+    FuncName (..),
     Located (..),
     SourceSpan,
     TypeName (..),
-    VarName,
+    VarName (..),
     locSpan,
     unErrorName,
     unLocated,
@@ -71,6 +71,7 @@ import qualified Data.Map as Map
 import TypeChecker.Builtins (builtinReturnType, isKnownBuiltin)
 import TypeChecker.Env
   ( Env (..),
+    insertVar,
     insertVarWithSpan,
     lookupError,
     lookupFunc,
@@ -137,7 +138,11 @@ inferExpr env (Located sp expr) = do
           forM_ (lookupVarDef name env) $ \defSp ->
             recordVarUse vspan name defSp
           return (Just (qualType qt))
-        Nothing -> recordError (TCUndefinedVar vspan name) >> return Nothing
+        Nothing ->
+          -- Fallback: a function name used as a first-class value
+          case lookupFunc (FuncName (unVarName name)) env of
+            Just ft -> return (Just (TypeFunction ft))
+            Nothing -> recordError (TCUndefinedVar vspan name) >> return Nothing
     go (ExprBinary op lhs rhs) = do
       mL <- inferExpr env lhs
       mR <- inferExpr env rhs
@@ -149,8 +154,14 @@ inferExpr env (Located sp expr) = do
       case mT of
         Just t -> checkUnary sp op t
         Nothing -> return Nothing
-    go (ExprCall (Located nameSpan fname) args) =
-      inferCall sp nameSpan fname args
+    go (ExprCall (Located nameSpan fname) args) = do
+      -- Try indirect call: variable holding a function value
+      let vname = VarName (unFuncName fname)
+      case lookupVar vname env of
+        Just qt | TypeFunction ft <- qualType qt -> do
+          mapM_ (inferExpr env) args
+          return (Just (qualType (unLocated (funcReturnType ft))))
+        _ -> inferCall sp nameSpan fname args
     go (ExprIndex arrExpr idxExpr) = do
       mArrType <- inferExpr env arrExpr
       void $ inferExpr env idxExpr
@@ -199,6 +210,14 @@ inferExpr env (Located sp expr) = do
       case mInner of
         Just (TypeResult (ResultType successType _)) -> return (Just successType)
         other -> return other
+    go (ExprLambda params retQType body) = do
+      let paramEnv =
+            foldl
+              (\e (Located _ p) -> insertVar (paramName p) (paramType p) e)
+              (setReturnType (unLocated retQType) env)
+              params
+      checkBlock paramEnv body
+      return (Just (TypeFunction (FunctionType params retQType)))
     go (ExprParen inner) = inferExpr env inner
     go (ExprCast inner (Located _ castTo)) = do
       mFrom <- inferExpr env inner
@@ -428,6 +447,15 @@ typesCompatible t1 t2 = case (t1, t2) of
   _ | t1 == t2 -> True
   (TypePrimitive (PrimInt _), TypePrimitive (PrimInt _)) -> True
   (TypePrimitive (PrimFloat _), TypePrimitive (PrimFloat _)) -> True
+  -- Two function types are compatible if arity and types match (names and spans ignored)
+  (TypeFunction ft1, TypeFunction ft2) ->
+    let ps1 = map (paramType . unLocated) (funcParams ft1)
+        ps2 = map (paramType . unLocated) (funcParams ft2)
+        r1 = qualType (unLocated (funcReturnType ft1))
+        r2 = qualType (unLocated (funcReturnType ft2))
+     in length ps1 == length ps2
+          && all (\(p1, p2) -> typesCompatible (qualType p1) (qualType p2)) (zip ps1 ps2)
+          && typesCompatible r1 r2
   -- error value (ExprError) is compatible with any orerror(..., E) sharing the same error name
   (TypeResult (ResultType _ e1), TypeResult (ResultType _ e2)) -> e1 == e2
   -- returning a plain success value into an orerror return type

@@ -127,10 +127,26 @@ parseParameter = do
       combinedSpan = nameSpan <> dotsSpan <> typeSpan
   return $ Located combinedSpan (Parameter (VarName name) qt isVariadic)
 
+-- | Parse one parameter in a function type: either @name: type@ or bare @type@.
+-- Bare types (no name) get the synthetic name @_@ since the name is irrelevant
+-- for type-level function references like @(int, str) -> bool@.
+parseTypeParam :: TokenParser (Located Parameter)
+parseTypeParam = MP.try parseParameter MP.<|> parseAnonParam
+  where
+    parseAnonParam = do
+      mDots <- MP.optional (matchSymbol "...")
+      Located typeSpan elemType <- parseType
+      let isVariadic = case mDots of Just _ -> True; Nothing -> False
+          qt = case mDots of
+            Nothing -> QualifiedType Mutable elemType
+            Just _ -> QualifiedType Mutable (TypeArray (ArrayType (QualifiedType Mutable elemType)))
+          dotsSpan = maybe voidSpann locSpan mDots
+      return $ Located (dotsSpan <> typeSpan) (Parameter (VarName "_") qt isVariadic)
+
 parseFunctionType :: TokenParser (Located FunctionType)
 parseFunctionType = do
   Located span _ <- matchSymbol "("
-  params <- MP.sepBy parseParameter (matchSymbol ",")
+  params <- MP.sepBy parseTypeParam (matchSymbol ",")
   Located closeSpan _ <- matchSymbol ")"
   Located arrowSpan _ <- matchSymbol "->"
   ret <- parseQualifiedType

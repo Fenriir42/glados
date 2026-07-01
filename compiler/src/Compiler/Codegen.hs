@@ -158,7 +158,9 @@ data CompileState = CompileState
     csPrivateFunctions :: Set FuncName,
     -- Map from bare-alias name -> "modname." for bare aliases created by import.
     -- A bare alias inherits its origin module's visibility rights.
-    csOriginModules :: Map FuncName Text
+    csOriginModules :: Map FuncName Text,
+    -- Bytecodes for lambda functions compiled inline (collected, emitted at end)
+    csLambdaBytecodes :: [Bytecode]
   }
   deriving stock (Show)
 
@@ -179,7 +181,8 @@ initialState =
       csTempCount = 0,
       csCurrentFunc = FuncName "",
       csPrivateFunctions = Set.empty,
-      csOriginModules = Map.empty
+      csOriginModules = Map.empty,
+      csLambdaBytecodes = []
     }
 
 type Compile a = ExceptT CompileError (State CompileState) a
@@ -274,7 +277,9 @@ compileProgram (Program decls) =
             csPrivateFunctions = privateFuncs,
             csOriginModules = originMods
           }
-      mapM compileFunction funcs
+      topLevelBcs <- mapM compileFunction funcs
+      lambdaBcs <- gets csLambdaBytecodes
+      return (topLevelBcs ++ lambdaBcs)
 
 -- ---------------------------------------------------------------------------
 -- Function
@@ -289,7 +294,9 @@ compileFunction funcDecl = do
         csFuncTypes = csFuncTypes oldState,
         csCurrentFunc = funcName,
         csPrivateFunctions = csPrivateFunctions oldState,
-        csOriginModules = csOriginModules oldState
+        csOriginModules = csOriginModules oldState,
+        -- Thread lambda bytecodes through so nested lambdas bubble up
+        csLambdaBytecodes = csLambdaBytecodes oldState
       }
   -- Parameters are in scope from the start
   let paramNames = [paramName p | Located _ p <- funcDeclParams funcDecl]
@@ -298,14 +305,15 @@ compileFunction funcDecl = do
   compileBlock (funcDeclBody funcDecl)
   void $ emitInstruction (IPush VUnit)
   void $ emitInstruction IRet
-  state <- get
-  put oldState
+  innerState <- get
+  -- Restore outer state but keep any lambdas compiled during this function
+  put oldState {csLambdaBytecodes = csLambdaBytecodes innerState}
   return
     Bytecode
       { bytecodeFunction = funcName,
-        bytecodeInstructions = csInstructions state,
+        bytecodeInstructions = csInstructions innerState,
         bytecodeEntry = InstructionPointer 0,
-        bytecodeStrings = csStringList state
+        bytecodeStrings = csStringList innerState
       }
 
 -- ---------------------------------------------------------------------------
@@ -517,11 +525,16 @@ compileExpr = \case
   ExprLiteral lit -> compileLiteral lit
   ExprVar var -> do
     scope <- gets csScope
+    knownFns <- gets csKnownFunctions
     let vname = unLocated var
-    unless (Set.member vname scope) $
-      throwError $
-        UndefinedVariable (locSpan var) vname
-    void $ emitInstruction (ILoad vname)
+    if Set.member vname scope
+      then void $ emitInstruction (ILoad vname)
+      else do
+        -- Check if it's a known function being used as a first-class value
+        let fname = FuncName (unVarName vname)
+        if isKnownFunction fname knownFns
+          then void $ emitInstruction (ILoadFunc fname)
+          else throwError $ UndefinedVariable (locSpan var) vname
   ExprBinary binOp left right -> do
     compileExpr (unLocated left)
     compileExpr (unLocated right)
@@ -535,41 +548,50 @@ compileExpr = \case
   ExprCall funcName args -> do
     knownFns <- gets csKnownFunctions
     funcTypes <- gets csFuncTypes
+    scope <- gets csScope
     let fname = unLocated funcName
-    unless (isKnownFunction fname knownFns) $
-      throwError $
-        UndefinedFunction (locSpan funcName) fname
-    -- Reject cross-module calls to static (private) imported functions.
-    -- Bare-alias functions (e.g. `double` as alias of `mymod.double`) inherit
-    -- their origin module's visibility rights via csOriginModules.
-    privateFns <- gets csPrivateFunctions
-    when (Set.member fname privateFns) $ do
-      curFunc <- gets csCurrentFunc
-      originMods <- gets csOriginModules
-      let moduleOf n = fst (T.breakOnEnd "." (unFuncName n))
-          callerMod = Map.findWithDefault (moduleOf curFunc) curFunc originMods
-          calleeMod = moduleOf fname
-      when (callerMod /= calleeMod) $
-        throwError $
-          PrivateFunction (locSpan funcName) fname
-    case Map.lookup fname funcTypes >>= find (paramVariadic . unLocated) . funcParams of
-      Nothing -> do
+        vname = VarName (unFuncName fname)
+    if not (isKnownFunction fname knownFns) && Set.member vname scope
+      then do
+        -- Indirect call through a function-typed variable
+        void $ emitInstruction (ILoad vname)
         mapM_ (compileExpr . unLocated) (reverse args)
-        void $ emitInstruction (ICall (FunctionRef fname) (length args))
-      Just _ -> do
-        let ft = funcTypes Map.! fname
-            regularParams = filter (not . paramVariadic . unLocated) (funcParams ft)
-            nRegular = length regularParams
-            regularArgs = take nRegular args
-            varArgs = drop nRegular args
-        void $ emitInstruction INewArray
-        forM_ (zip [0 ..] varArgs) $ \(i, argExpr) -> do
-          void $ emitInstruction IDup
-          void $ emitInstruction (IPush (VInt i))
-          compileExpr (unLocated argExpr)
-          void $ emitInstruction IArraySet
-        mapM_ (compileExpr . unLocated) (reverse regularArgs)
-        void $ emitInstruction (ICall (FunctionRef fname) (nRegular + 1))
+        void $ emitInstruction (ICallIndirect (length args))
+      else do
+        unless (isKnownFunction fname knownFns) $
+          throwError $
+            UndefinedFunction (locSpan funcName) fname
+        -- Reject cross-module calls to static (private) imported functions.
+        -- Bare-alias functions (e.g. `double` as alias of `mymod.double`) inherit
+        -- their origin module's visibility rights via csOriginModules.
+        privateFns <- gets csPrivateFunctions
+        when (Set.member fname privateFns) $ do
+          curFunc <- gets csCurrentFunc
+          originMods <- gets csOriginModules
+          let moduleOf n = fst (T.breakOnEnd "." (unFuncName n))
+              callerMod = Map.findWithDefault (moduleOf curFunc) curFunc originMods
+              calleeMod = moduleOf fname
+          when (callerMod /= calleeMod) $
+            throwError $
+              PrivateFunction (locSpan funcName) fname
+        case Map.lookup fname funcTypes >>= find (paramVariadic . unLocated) . funcParams of
+          Nothing -> do
+            mapM_ (compileExpr . unLocated) (reverse args)
+            void $ emitInstruction (ICall (FunctionRef fname) (length args))
+          Just _ -> do
+            let ft = funcTypes Map.! fname
+                regularParams = filter (not . paramVariadic . unLocated) (funcParams ft)
+                nRegular = length regularParams
+                regularArgs = take nRegular args
+                varArgs = drop nRegular args
+            void $ emitInstruction INewArray
+            forM_ (zip [0 ..] varArgs) $ \(i, argExpr) -> do
+              void $ emitInstruction IDup
+              void $ emitInstruction (IPush (VInt i))
+              compileExpr (unLocated argExpr)
+              void $ emitInstruction IArraySet
+            mapM_ (compileExpr . unLocated) (reverse regularArgs)
+            void $ emitInstruction (ICall (FunctionRef fname) (nRegular + 1))
   ExprIndex arrExpr indexExpr -> do
     compileExpr (unLocated arrExpr)
     compileExpr (unLocated indexExpr)
@@ -603,6 +625,26 @@ compileExpr = \case
   ExprMust innerExpr -> do
     compileExpr (unLocated innerExpr)
     void $ emitInstruction IMustOp
+  ExprLambda params retType body -> do
+    n <- gets csTempCount
+    modify $ \s -> s {csTempCount = n + 1}
+    let lambdaName = FuncName (T.pack ("__lambda_" ++ show n))
+        lambdaDecl =
+          FunctionDecl
+            { funcDeclName = Located (blockSpan body) lambdaName,
+              funcDeclParams = params,
+              funcDeclReturnType = retType,
+              funcDeclBody = body
+            }
+    -- Register the lambda so it can be called
+    modify $ \s ->
+      s
+        { csKnownFunctions = Set.insert lambdaName (csKnownFunctions s),
+          csFuncTypes = Map.insert lambdaName (FunctionType params retType) (csFuncTypes s)
+        }
+    bc <- compileFunction lambdaDecl
+    modify $ \s -> s {csLambdaBytecodes = csLambdaBytecodes s ++ [bc]}
+    void $ emitInstruction (ILoadFunc lambdaName)
   ExprParen expr -> compileExpr (unLocated expr)
   ExprCast expr castType -> do
     compileExpr (unLocated expr)

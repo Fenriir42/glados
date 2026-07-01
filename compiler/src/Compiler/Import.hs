@@ -229,6 +229,8 @@ exprHasCall prefix = \case
   ExprArrayInit _ elems -> any (exprHasCall prefix . unLocated) elems
   ExprTry e -> exprHasCall prefix (unLocated e)
   ExprMust e -> exprHasCall prefix (unLocated e)
+  ExprError _ fields -> any (exprHasCall prefix . unLocated . snd) fields
+  ExprLambda _ _ body -> blockHasCall prefix body
   ExprParen e -> exprHasCall prefix (unLocated e)
   ExprCast e _ -> exprHasCall prefix (unLocated e)
 
@@ -333,6 +335,8 @@ renameExpr names prefix = \case
   ExprArrayInit t elems -> ExprArrayInit t (map (fmap rE) elems)
   ExprTry e -> ExprTry (fmap rE e)
   ExprMust e -> ExprMust (fmap rE e)
+  ExprError ename fields -> ExprError ename [(f, fmap rE e) | (f, e) <- fields]
+  ExprLambda params ret body -> ExprLambda params ret (renameBlock names prefix body)
   ExprParen e -> ExprParen (fmap rE e)
   ExprCast e t -> ExprCast (fmap rE e) t
   where

@@ -42,6 +42,8 @@ data Value
     VStructRef Int
   | -- | error value: name + optional field payload
     VErrorVal ErrorName [(FieldName, Value)]
+  | -- | reference to a named function (first-class function value)
+    VFunction FuncName
   | VUnit
   deriving stock (Show, Eq, Generic)
 
@@ -148,6 +150,10 @@ data Instruction
     IIsOk
   | -- | Peek TOS: push VBool True if IS a VErrorVal with the given name
     IIsErr ErrorName
+  | -- | Push a VFunction (named function reference) onto the stack
+    ILoadFunc FuncName
+  | -- | Call through a VFunction value: pop VFunction (below args), call it with argc args
+    ICallIndirect Int
   deriving stock (Show, Eq, Generic)
 
 instance Hashable Instruction

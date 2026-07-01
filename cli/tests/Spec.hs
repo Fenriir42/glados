@@ -401,6 +401,50 @@ main = hspec $ do
               ]
       runPipeline src >>= (`shouldBe` RunOk)
 
+  describe "Pipeline - first-class functions" $ do
+    it "function reference stored in variable and called indirectly" $ do
+      let src =
+            unlines
+              [ "from math import abs",
+                "fn main() -> void {",
+                "  f: (int) -> int = abs;",
+                "  println(f(-7));",
+                "}"
+              ]
+      runPipelineWithImports src >>= (`shouldBe` RunOk)
+
+    it "function passed as argument and called inside callee" $ do
+      let src =
+            unlines
+              [ "fn apply(f: (int) -> int, x: int) -> int { return f(x); }",
+                "fn double(n: int) -> int { return n * 2; }",
+                "fn main() -> void {",
+                "  println(apply(double, 5));",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "lambda expression stored and called" $ do
+      let src =
+            unlines
+              [ "fn main() -> void {",
+                "  triple: (int) -> int = fn(x: int) -> int { return x * 3; };",
+                "  println(triple(4));",
+                "}",
+                ""
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "lambda passed directly as argument" $ do
+      let src =
+            unlines
+              [ "fn apply(f: (int) -> int, x: int) -> int { return f(x); }",
+                "fn main() -> void {",
+                "  println(apply(fn(x: int) -> int { return x + 10; }, 5));",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
   describe "Pipeline - pub/static visibility" $ do
     let modSrc =
           unlines

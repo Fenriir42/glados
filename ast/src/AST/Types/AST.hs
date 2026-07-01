@@ -228,6 +228,11 @@ data Expr ann
       [(Located FieldName, Located (Expr ann))]
   | ExprTry (Located (Expr ann))
   | ExprMust (Located (Expr ann))
+  | -- Anonymous function expression: fn(params) -> ret { body }
+    ExprLambda
+      [Located Parameter]
+      (Located QualifiedType)
+      (Block ann)
   | -- Parenthesized expression (for preserving source structure if needed)
     ExprParen (Located (Expr ann))
   | -- Type cast (explicit)
