@@ -245,23 +245,66 @@ fn main() -> void {
 
 ### Function Types
 
-Functions are declared with parameter types and a return type.
+Functions are first-class values in Quant. A function type is written as a parenthesised parameter type list followed by `->` and the return type:
 
 ```quant
-fn add(a: int, b: int) -> int {
-    return a + b;
+(int) -> int           // takes one int, returns int
+(int, str) -> bool     // takes int and str, returns bool
+() -> void             // no parameters, no return value
+```
+
+Parameter names are optional in type annotations — `(int) -> int` and `(x: int) -> int` are the same type.
+
+#### Function references
+
+Store a named function in a variable by writing its name without calling it:
+
+```quant
+from math import abs
+
+f: (int) -> int = abs;
+println(f(-7));    // 7
+```
+
+#### Lambda expressions
+
+Use `fn` as an expression to create an anonymous function:
+
+```quant
+double: (int) -> int = fn(x: int) -> int { return x * 2; };
+println(double(5));    // 10
+```
+
+Lambdas use the same `fn(params) -> rettype { body }` syntax as named function declarations, just without a name.
+
+#### Higher-order functions
+
+Pass functions as arguments or accept them as parameters:
+
+```quant
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x);
 }
 
-fn greet(msg: str) -> void {
-    println(msg);
-}
+fn double(n: int) -> int { return n * 2; }
 
-fn process() -> float {
-    return 3.14;
+fn main() -> void {
+    result: int = apply(double, 5);                          // named ref: 10
+    result2: int = apply(fn(n: int) -> int { return n * 3; }, 5);  // lambda: 15
 }
 ```
 
-**Function signature syntax:**
+#### Arrays of functions
+
+Function values can be stored in arrays like any other value:
+
+```quant
+ops: [(int) -> int] = [double, triple];
+g: (int) -> int = ops[0];
+println(g(4));    // 8
+```
+
+**Named function declaration syntax** (top-level or module-level):
 
 ```quant
 fn name(param1: type1, param2: type2, ...) -> return_type {

@@ -56,7 +56,7 @@ Out of scope for V1 (later): package manager, graphics/SDL2 library.
 
 ---
 
-### 1. First-class functions
+### 1. First-class functions *(done)*
 
 Pass functions as arguments, store them in variables, return them from
 functions. This unlocks callbacks, higher-order utilities, and most

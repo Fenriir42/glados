@@ -73,10 +73,16 @@ Terminals are written in `"double quotes"` or described by a rule name in **bold
 ```bnf
 <type>           ::= <primitive-type>
                    | "[" <qualified-type> "]"        -- array type
+                   | "(" <type-param-list>? ")" "->" <qualified-type>  -- function type
                    | <identifier>                     -- named / struct type
                    | "orerror" "(" <type> "," <identifier> ")"  -- result type
 
 <qualified-type> ::= "const"? <type>
+
+<type-param-list> ::= <type-param> ("," <type-param>)*
+
+<type-param>     ::= <identifier> ":" "..."? <type>  -- named param
+                   | "..."? <type>                    -- anonymous param
 
 <primitive-type> ::= "int" | "int" "<" <int-size> ("," <signedness>)? ">"
                    | "float" | "float" "<" <float-size> ">"
@@ -158,9 +164,10 @@ Expressions are listed from **lowest** to **highest** precedence.
                | <identifier> "." <identifier> "(" <arg-list>? ")"  -- dotted call
                | <identifier> "(" <arg-list>? ")"                   -- function call
                | <primitive-type> "(" <expr> ")"                    -- type cast
+               | "fn" "(" <param-list>? ")" "->" <qualified-type> <block>  -- lambda
                | <primary> "[" <expr> "]"                           -- index
                | <primary> "." <identifier>                         -- field access
-               | <identifier>                                        -- variable
+               | <identifier>                                        -- variable / function reference
                | "(" <expr> ")"                                      -- parenthesised
 
 <field-init-list> ::= <identifier> ":" <expr> ("," <identifier> ":" <expr>)*

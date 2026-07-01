@@ -337,6 +337,61 @@ one | two | three
 hello alice and bob
 ```
 
+## First-Class Functions
+
+Functions are values. You can store them in variables, pass them as arguments,
+and create anonymous functions inline with `fn`.
+
+### Function type syntax
+
+A function type is written as `(param-types) -> return-type`:
+
+```quant
+f: (int) -> int          // a function taking int, returning int
+g: (int, str) -> bool    // two params
+h: () -> void            // no params, no return
+```
+
+Parameter names are optional: `(int) -> int` and `(x: int) -> int` are
+interchangeable as types.
+
+### Function references
+
+Write a named function's identifier (without `()`) to get a reference to it:
+
+```quant
+from math import abs
+
+negate: (int) -> int = abs;
+println(negate(-42));    // 42
+```
+
+### Lambda expressions
+
+Use `fn` as an expression to define an anonymous function inline:
+
+```quant
+square: (int) -> int = fn(x: int) -> int { return x * x; };
+println(square(6));    // 36
+```
+
+### Higher-order functions
+
+Accept or return functions through typed parameters:
+
+```quant
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x);
+}
+
+fn double(n: int) -> int { return n * 2; }
+
+fn main() -> void {
+    println(apply(double, 5));                              // 10 (named ref)
+    println(apply(fn(n: int) -> int { return n + 1; }, 5)); // 6 (lambda)
+}
+```
+
 ## Scope
 
 Variables are scoped to the block in which they are declared:
