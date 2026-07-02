@@ -22,6 +22,7 @@ import AST.Types.Type (FunctionType (..), Type)
 import Compiler.Import (resolveImports)
 import Control.Applicative (many)
 import Control.Exception (SomeException, catch)
+import Data.Char (isAlphaNum)
 import Data.List (isSuffixOf)
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
@@ -183,11 +184,13 @@ extractDocs src =
               Nothing -> go [] rest
 
     parseFnName t
-      | T.isPrefixOf "fn " t =
-          let afterFn = T.drop 3 t
-              name = T.takeWhile (\c -> c == '_' || c `elem` ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9']) afterFn
-           in if T.null name then Nothing else Just name
+      | T.isPrefixOf "fn " t = extractName (T.drop 3 t)
+      | T.isPrefixOf "static fn " t = extractName (T.drop 10 t)
       | otherwise = Nothing
+      where
+        extractName after =
+          let name = T.takeWhile (\c -> c == '_' || isAlphaNum c) after
+           in if T.null name then Nothing else Just name
 
 -- | Load doc comments from every *.qa file in the stdlib directory.
 extractStdlibDocs :: FilePath -> IO (Map FuncName Text)
@@ -261,19 +264,19 @@ lineScannedDefSites fp modName text =
                in (qualName, (fp, sp)) : (bareName, (fp, sp)) : go (lineNum + 1) rest
             Nothing -> go (lineNum + 1) rest
 
-    parseFnNameAt t lineNum
-      | T.isPrefixOf "fn " t =
-          let afterFn = T.drop 3 t
-              name = T.takeWhile (\c -> c == '_' || c `elem` ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9']) afterFn
-              col = 4
-              endCol = col + T.length name
-              fp' = FilePath' (T.pack fp)
-              startPos = SourcePos fp' (Line lineNum) (Column col) (Offset 0)
-              endPos = SourcePos fp' (Line lineNum) (Column endCol) (Offset 0)
-           in if T.null name
-                then Nothing
-                else Just (name, SourceSpan startPos endPos)
-      | otherwise = Nothing
+    parseFnNameAt t lineNum =
+      let (afterFn, col)
+            | T.isPrefixOf "fn " t = (T.drop 3 t, 4)
+            | T.isPrefixOf "static fn " t = (T.drop 10 t, 11)
+            | otherwise = ("", 0)
+          name = T.takeWhile (\c -> c == '_' || isAlphaNum c) afterFn
+          endCol = col + T.length name
+          fp' = FilePath' (T.pack fp)
+          startPos = SourcePos fp' (Line lineNum) (Column col) (Offset 0)
+          endPos = SourcePos fp' (Line lineNum) (Column endCol) (Offset 0)
+       in if T.null name
+            then Nothing
+            else Just (name, SourceSpan startPos endPos)
 
 -- ---------------------------------------------------------------------------
 -- Parse error -> LSP diagnostic conversion

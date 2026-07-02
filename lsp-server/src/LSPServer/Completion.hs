@@ -7,7 +7,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import LSPServer.Hover (knownBuiltins, renderSig)
+import LSPServer.Hover (knownBuiltins, renderDoc, renderSig)
 import qualified Language.LSP.Protocol.Types as LSP
 
 -- | Build completion items from all known functions, keywords, and error names.
@@ -57,7 +57,7 @@ mkFuncItem docs (fname, ft) =
     (Just LSP.CompletionItemKind_Function)
     Nothing
     (Just (renderSig fname ft))
-    (fmap (LSP.InR . LSP.MarkupContent LSP.MarkupKind_Markdown) (Map.lookup fname docs))
+    (fmap (LSP.InR . LSP.MarkupContent LSP.MarkupKind_Markdown . renderDoc) (Map.lookup fname docs))
     Nothing
     Nothing
     Nothing
@@ -80,7 +80,7 @@ mkBuiltinItem (fname, (sig, doc)) =
     (Just LSP.CompletionItemKind_Function)
     Nothing
     (Just sig)
-    (Just (LSP.InR (LSP.MarkupContent LSP.MarkupKind_Markdown doc)))
+    (Just (LSP.InR (LSP.MarkupContent LSP.MarkupKind_Markdown (renderDoc doc))))
     Nothing
     Nothing
     Nothing
