@@ -9,13 +9,25 @@ import AST.Types.AST
         funcDeclBody,
         funcDeclName,
         funcDeclParams,
-        funcDeclReturnType
+        funcDeclReturnType,
+        funcDeclTypeParams
       ),
     StructDecl (..),
     Visibility (..),
   )
-import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), Located (..), TypeName (..))
-import AST.Types.Type (ErrorField (..), ErrorSetMember (..), FunctionType (funcParams, funcReturnType), StructField (..))
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), Located (..), TypeName (..), unLocated, unTypeName)
+import AST.Types.Type
+  ( ArrayType (ArrayType),
+    ErrorField (..),
+    ErrorSetMember (..),
+    FunctionType (..),
+    Parameter (..),
+    QualifiedType (..),
+    StructField (..),
+    Type (..),
+  )
+import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
 import Parser.Import (parseImportDecl)
 import Parser.Stmt (parseBlock)
 import Parser.Type (parseFunctionType, parseQualifiedType, parseType)
@@ -45,21 +57,50 @@ parseDeclFunction = do
   Located visSpan visibility <- parseVisibility
   Located fnSpan _ <- matchKeyword "fn"
   Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  -- Optional generic type parameters: fn foo[T, U](...)
+  mTypeParams <- MP.optional $ do
+    _ <- matchSymbol "["
+    tvs <- MP.sepBy1 parseTypeVar (matchSymbol ",")
+    _ <- matchSymbol "]"
+    return tvs
+  let typeParams = fromMaybe [] mTypeParams
   Located typeSpan funcType <- parseFunctionType
   Located bodySpan block <- parseBlock
 
   let combinedSpan = case visibility of
         Static -> visSpan <> fnSpan <> nameSpan <> typeSpan <> bodySpan
         Public -> fnSpan <> nameSpan <> typeSpan <> bodySpan
-
-  let functionDecl =
+      tvSet = Set.fromList (map (unTypeName . unLocated) typeParams)
+      functionDecl =
         FunctionDecl
           { funcDeclName = Located nameSpan (FuncName name),
-            funcDeclParams = funcParams funcType,
-            funcDeclReturnType = funcReturnType funcType,
+            funcDeclTypeParams = typeParams,
+            funcDeclParams = map (fmap (subParam tvSet)) (funcParams funcType),
+            funcDeclReturnType = fmap (subQType tvSet) (funcReturnType funcType),
             funcDeclBody = block
           }
   return $ Located combinedSpan (DeclFunction visibility functionDecl)
+  where
+    parseTypeVar :: TokenParser (Located TypeName)
+    parseTypeVar = do
+      Located sp (TokIdentifier tv) <- MP.satisfy isIdentifier
+      return (Located sp (TypeName tv))
+
+    subQType tvs (QualifiedType c t) = QualifiedType c (subType tvs t)
+
+    subType tvs (TypeStruct (TypeName n))
+      | Set.member n tvs = TypeVar (TypeName n)
+    subType tvs (TypeArray (ArrayType qt)) =
+      TypeArray (ArrayType (subQType tvs qt))
+    subType tvs (TypeFunction ft) =
+      TypeFunction
+        ft
+          { funcParams = map (fmap (subParam tvs)) (funcParams ft),
+            funcReturnType = fmap (subQType tvs) (funcReturnType ft)
+          }
+    subType _ t = t
+
+    subParam tvs p = p {paramType = subQType tvs (paramType p)}
 
 parseStructField :: TokenParser (Located StructField)
 parseStructField = do

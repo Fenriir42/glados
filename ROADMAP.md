@@ -24,8 +24,9 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Match expression | Done | `match` statement with `ok(v)`, `err(E v)`, literal, range `lo..hi`, wildcard `_` arms |
 | LSP server | Done | 12 protocol features -see table below |
 | VS Code extension | Done | Syntax highlighting, snippets, all LSP features wired |
+| Generics | Done | Type-erased parametric polymorphism; `fn foo[T, U](...)`; call-site inference |
 | Docs site | Done | Astro/Starlight; all pages written |
-| Tests | Done | 559 total, 0 failures |
+| Tests | Done | 563 total, 0 failures |
 
 ### LSP feature coverage
 
@@ -242,50 +243,44 @@ VM `VOption`, codegen. Depends on **match** (feature 3) for clean usage.
 
 ---
 
-### 7. Generics / parametric polymorphism
+### 7. Generics / parametric polymorphism *(done)*
 
-Write functions and structs that are parameterised over types.
+Write functions parameterised over types.
 
 ```quant
 fn identity[T](x: T) -> T { return x; }
 
-fn map[T, U](arr: [T], f: (T) -> U) -> [U] {
+fn map_arr[T, U](arr: [T], f: (T) -> U, n: int) -> [U] {
     result: [U] = [];
     i: int = 0;
-    while (i < len(arr)) {
+    while (i < n) {
         push(result, f(arr[i]));
-        i = i + 1;
+        i++;
     };
     return result;
 }
 
-struct Pair[A, B] {
-    first: A;
-    second: B;
-}
-
 fn main() -> void {
-    doubled: [int] = map([1, 2, 3], fn(x: int) -> int { return x * 2; });
-    p: Pair[int, str] = Pair { first: 42, second: "hello" };
+    n: int = identity(42);
+    s: str = identity("hello");
+    doubled: [int] = map_arr([1, 2, 3], fn(x: int) -> int { return x * 2; }, 3);
 }
 ```
 
-**Approach:** monomorphization -the compiler generates one specialised copy of
-each generic function per distinct set of type arguments, similar to C++ templates
-or Rust generics. No runtime type information needed.
+**Approach:** type erasure -a single bytecode body is emitted per generic function.
+The type checker resolves each type variable to a concrete type at every call site,
+verifying safety statically with no runtime overhead.
 
-**Layers that need work:**
+**Layers completed:**
 
 | Layer | Change |
 |-------|--------|
-| Parser | `[T, U, ...]` type-param list on `fn` and `struct` declarations; `T` as a bare type in param/return positions |
-| AST | `funcDeclTypeParams :: [TypeName]` on `FunctionDecl`; `structDeclTypeParams` on `StructDecl`; `TypeVar TypeName` constructor in `Type` |
-| Type checker | Unification: collect constraints from call-site arguments, solve for type vars, verify body under substitution |
-| Codegen | Monomorphization pass: for each call-site instantiation emit a renamed copy (`map__int__str`, etc.) |
-| Import.hs | Propagate type-param renaming through module boundaries |
+| Parser | `[T, U, ...]` type-param list on `fn`; post-parse substitution replaces `TypeStruct "T"` with `TypeVar "T"` |
+| AST | `funcDeclTypeParams :: [Located TypeName]` on `FunctionDecl`; `TypeVar TypeName` constructor in `Type` |
+| Type checker | `envTypeVars`, `envGenericParams` in `Env`; `inferTypeVarBindings` + `applyBindings` for call-site return-type inference |
+| Codegen | No changes needed -type-erased bytecode is already type-agnostic |
 
-Depends on nothing -but significantly unlocks `array.map`, `array.filter`,
-generic containers, and reduces duplicated code across the stdlib.
+Generic structs (`struct Pair[A, B]`) remain post-V1.
 
 ---
 
@@ -344,12 +339,12 @@ FFI (7)                      -last, needs design decision on backend
 ```
 
 Realistic V1 sequence:
-1. Cycle detection
-2. Error field access + match expression (together)
-3. First-class functions
+1. Cycle detection *(done)*
+2. Error field access + match expression *(done)*
+3. First-class functions *(done)*
 4. Dict type
 5. Optional type
-6. Generics / parametric polymorphism
+6. Generics / parametric polymorphism *(done)*
 7. Stdlib additions (json, regex, string.format, generic array.map/filter)
 8. FFI
 

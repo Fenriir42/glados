@@ -312,6 +312,70 @@ fn name(param1: type1, param2: type2, ...) -> return_type {
 }
 ```
 
+## Generic Types
+
+Generic functions are parameterized by one or more *type variables* declared in square brackets immediately after the function name. The type checker resolves each type variable to a concrete type at every call site.
+
+### Syntax
+
+```quant
+fn name[T](param: T) -> T { ... }
+fn name[T, U](a: T, b: U) -> T { ... }
+```
+
+Type variables follow the same naming rules as identifiers. By convention single uppercase letters (`T`, `U`, `K`, `V`) are used for unstructured type parameters.
+
+### Type variable scope
+
+Type variables are in scope for the entire function signature and body. They can appear in parameter types, the return type, and local variable declarations:
+
+```quant
+fn wrap[T](x: T) -> T {
+    copy: T = x;
+    return copy;
+}
+```
+
+### Type inference at call sites
+
+The caller never writes type arguments explicitly. The type checker infers the binding from the concrete argument types:
+
+```quant
+fn identity[T](x: T) -> T { return x; }
+
+fn main() -> void {
+    n: int   = identity(1);       // T = int
+    s: str   = identity("hi");    // T = str
+    f: float = identity(3.14);    // T = float
+}
+```
+
+### Generic function types
+
+A type variable can appear inside a function-type parameter, enabling generic higher-order functions:
+
+```quant
+fn map_arr[T, U](arr: [T], f: (T) -> U, n: int) -> [U] {
+    result: [U] = [];
+    i: int = 0;
+    while (i < n) {
+        push(result, f(arr[i]));
+        i++;
+    };
+    return result;
+}
+
+fn main() -> void {
+    nums: [int] = [10, 20, 30];
+    doubled: [int] = map_arr(nums, fn(x: int) -> int { return x * 2; }, 3);
+    println(doubled[0]);   // 20
+}
+```
+
+<Aside>
+  Quant generics compile to a single set of bytecode instructions per function (type erasure). Runtime values carry no type tags — the type checker guarantees safety statically, with no code duplication or monomorphization overhead.
+</Aside>
+
 ## Type Qualifiers
 
 ### Const Qualifier

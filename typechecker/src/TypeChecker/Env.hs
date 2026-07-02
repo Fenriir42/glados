@@ -6,12 +6,15 @@ module TypeChecker.Env
     lookupFunc,
     lookupStruct,
     lookupError,
+    lookupGenericParams,
     insertVar,
     insertVarWithSpan,
     insertFunc,
     insertStruct,
     insertError,
+    insertGenericParams,
     withVars,
+    withTypeVars,
     setReturnType,
   )
 where
@@ -20,6 +23,8 @@ import AST.Types.Common (ErrorName, FuncName, SourceSpan, TypeName, VarName)
 import AST.Types.Type (ErrorType, FunctionType, QualifiedType, StructType)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 data Env = Env
   { envVars :: Map VarName QualifiedType,
@@ -27,11 +32,15 @@ data Env = Env
     envFuncs :: Map FuncName FunctionType,
     envStructs :: Map TypeName StructType,
     envErrors :: Map ErrorName ErrorType,
-    envReturnType :: Maybe QualifiedType
+    envReturnType :: Maybe QualifiedType,
+    -- | Type variable names in scope inside a generic function body
+    envTypeVars :: Set TypeName,
+    -- | Type parameters per generic function (for call-site inference)
+    envGenericParams :: Map FuncName [TypeName]
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Nothing
+emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty
 
 lookupVar :: VarName -> Env -> Maybe QualifiedType
 lookupVar v = Map.lookup v . envVars
@@ -69,6 +78,17 @@ insertError e et env = env {envErrors = Map.insert e et (envErrors env)}
 
 withVars :: [(VarName, QualifiedType)] -> Env -> Env
 withVars pairs env = foldr (\(v, qt) e -> insertVar v qt e) env pairs
+
+withTypeVars :: [TypeName] -> Env -> Env
+withTypeVars tvs env = env {envTypeVars = Set.fromList tvs}
+
+insertGenericParams :: FuncName -> [TypeName] -> Env -> Env
+insertGenericParams f tvs env =
+  env {envGenericParams = Map.insert f tvs (envGenericParams env)}
+
+lookupGenericParams :: FuncName -> Env -> [TypeName]
+lookupGenericParams f env =
+  Map.findWithDefault [] f (envGenericParams env)
 
 setReturnType :: QualifiedType -> Env -> Env
 setReturnType qt env = env {envReturnType = Just qt}

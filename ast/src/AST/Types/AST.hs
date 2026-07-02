@@ -84,6 +84,7 @@ data Decl ann
 
 data FunctionDecl ann = FunctionDecl
   { funcDeclName :: Located FuncName,
+    funcDeclTypeParams :: [Located TypeName],
     funcDeclParams :: [Located Parameter],
     funcDeclReturnType :: Located QualifiedType,
     funcDeclBody :: Block ann

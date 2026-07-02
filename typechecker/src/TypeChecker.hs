@@ -6,12 +6,12 @@ module TypeChecker
 where
 
 import AST.Types.AST (Decl (..), ErrorDecl (..), FunctionDecl (..), Program (..), StructDecl (..), programDecls)
-import AST.Types.Common (FuncName, Located (..), SourceSpan, VarName, locSpan, unLocated)
+import AST.Types.Common (FuncName, Located (..), SourceSpan, TypeName, VarName, locSpan, unLocated)
 import AST.Types.Type (ErrorType (..), FunctionType (..), StructType (..), Type)
 import Control.Monad.State (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import TypeChecker.Env (Env, emptyEnv, envFuncs, insertError, insertFunc, insertStruct)
+import TypeChecker.Env (Env, emptyEnv, envFuncs, insertError, insertFunc, insertGenericParams, insertStruct)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -53,7 +53,10 @@ typeCheck prog =
   where
     collectFunc :: Located (Decl ()) -> Env -> Env
     collectFunc (Located _ (DeclFunction _ fd)) env =
-      insertFunc (unLocated (funcDeclName fd)) (mkFuncType fd) env
+      let fname = unLocated (funcDeclName fd)
+          tvs = map unLocated (funcDeclTypeParams fd) :: [TypeName]
+          env' = insertFunc fname (mkFuncType fd) env
+       in if null tvs then env' else insertGenericParams fname tvs env'
     collectFunc _ env = env
 
     collectStruct :: Located (Decl ()) -> Env -> Env

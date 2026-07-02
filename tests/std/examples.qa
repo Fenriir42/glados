@@ -139,6 +139,22 @@ fn map_ints(arr: [int], f: (int) -> int, n: int) -> [int] {
     return result;
 }
 
+// Generic identity: return the value unchanged, works for any type T.
+fn identity[T](x: T) -> T {
+    return x;
+}
+
+// Generic map: apply f to each of the first n elements of arr, collect results.
+fn map_arr[T, U](arr: [T], f: (T) -> U, n: int) -> [U] {
+    result: [U] = [];
+    i: int = 0;
+    while (i < n) {
+        push(result, f(arr[i]));
+        i++;
+    };
+    return result;
+}
+
 // Demonstrate first-class functions: references, lambdas, higher-order fns.
 fn demo_first_class() -> void {
     // Store a named function in a variable
@@ -156,6 +172,32 @@ fn demo_first_class() -> void {
     while (i < 4) {
         println(from_int(doubled[i]));                          # 2, 4, 6, 8
         i++;
+    };
+}
+
+// Demonstrate generics: identity with multiple types, generic map over array.
+fn demo_generics() -> void {
+    // identity[T] called at different concrete types
+    n: int = identity(99);
+    s: str = identity("quant");
+    println(labelled("identity(int)", from_int(n)));    # identity(int): 99
+    println(labelled("identity(str)", s));              # identity(str): quant
+
+    // map_arr[int, int]: double each element
+    nums: [int] = [1, 2, 3, 4, 5];
+    doubled: [int] = map_arr(nums, fn(x: int) -> int { return x * 2; }, 5);
+    i: int = 0;
+    while (i < 5) {
+        println(from_int(doubled[i]));                  # 2, 4, 6, 8, 10
+        i++;
+    };
+
+    // map_arr[int, str]: convert each element to a labelled string
+    labels: [str] = map_arr(nums, fn(x: int) -> str { return concat("n=", from_int(x)); }, 3);
+    j: int = 0;
+    while (j < 3) {
+        println(labels[j]);                             # n=1, n=2, n=3
+        j++;
     };
 }
 
@@ -200,6 +242,7 @@ fn main() -> void {
     demo_array();
     demo_loops();
     demo_first_class();
+    demo_generics();
     demo_match();
     println("done");
 }

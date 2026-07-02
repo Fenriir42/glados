@@ -295,8 +295,9 @@ compileFunction funcDecl = do
         csCurrentFunc = funcName,
         csPrivateFunctions = csPrivateFunctions oldState,
         csOriginModules = csOriginModules oldState,
-        -- Thread lambda bytecodes through so nested lambdas bubble up
-        csLambdaBytecodes = csLambdaBytecodes oldState
+        -- Thread lambda bytecodes and the global lambda counter through
+        csLambdaBytecodes = csLambdaBytecodes oldState,
+        csTempCount = csTempCount oldState
       }
   -- Parameters are in scope from the start
   let paramNames = [paramName p | Located _ p <- funcDeclParams funcDecl]
@@ -306,8 +307,8 @@ compileFunction funcDecl = do
   void $ emitInstruction (IPush VUnit)
   void $ emitInstruction IRet
   innerState <- get
-  -- Restore outer state but keep any lambdas compiled during this function
-  put oldState {csLambdaBytecodes = csLambdaBytecodes innerState}
+  -- Restore outer state but keep lambdas and the updated counter
+  put oldState {csLambdaBytecodes = csLambdaBytecodes innerState, csTempCount = csTempCount innerState}
   return
     Bytecode
       { bytecodeFunction = funcName,
@@ -632,6 +633,7 @@ compileExpr = \case
         lambdaDecl =
           FunctionDecl
             { funcDeclName = Located (blockSpan body) lambdaName,
+              funcDeclTypeParams = [],
               funcDeclParams = params,
               funcDeclReturnType = retType,
               funcDeclBody = body

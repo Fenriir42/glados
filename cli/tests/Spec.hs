@@ -445,6 +445,77 @@ main = hspec $ do
               ]
       runPipeline src >>= (`shouldBe` RunOk)
 
+  describe "Pipeline - generics" $ do
+    it "identity function works for int" $ do
+      let src =
+            unlines
+              [ "fn identity[T](x: T) -> T { return x; }",
+                "fn main() -> void {",
+                "  n: int = identity(42);",
+                "  println(n);",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "identity function works for str" $ do
+      let src =
+            unlines
+              [ "fn identity[T](x: T) -> T { return x; }",
+                "fn main() -> void {",
+                "  s: str = identity(\"hello\");",
+                "  println(s);",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "generic pair swap returns correct types" $ do
+      let src =
+            unlines
+              [ "fn first[T, U](a: T, b: U) -> T { return a; }",
+                "fn second[T, U](a: T, b: U) -> U { return b; }",
+                "fn main() -> void {",
+                "  x: int = first(7, \"x\");",
+                "  s: str = second(7, \"y\");",
+                "  println(x);",
+                "  println(s);",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "generic higher-order map over array" $ do
+      let src =
+            unlines
+              [ "fn map_arr[T, U](arr: [T], f: (T) -> U, n: int) -> [U] {",
+                "  result: [U] = [];",
+                "  i: int = 0;",
+                "  while (i < n) {",
+                "    push(result, f(arr[i]));",
+                "    i++;",
+                "  };",
+                "  return result;",
+                "}",
+                "fn main() -> void {",
+                "  nums: [int] = [1, 2, 3];",
+                "  doubled: [int] = map_arr(nums, fn(x: int) -> int { return x * 2; }, 3);",
+                "  println(doubled[0]);",
+                "  println(doubled[2]);",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
+    it "type checker accepts generic called with different concrete types" $ do
+      let src =
+            unlines
+              [ "fn wrap[T](x: T) -> T { return x; }",
+                "fn main() -> void {",
+                "  a: int = wrap(1);",
+                "  b: float = wrap(2.0);",
+                "  c: bool = wrap(True);",
+                "  println(a);",
+                "}"
+              ]
+      runPipeline src >>= (`shouldBe` RunOk)
+
   describe "Pipeline - pub/static visibility" $ do
     let modSrc =
           unlines

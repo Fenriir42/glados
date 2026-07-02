@@ -392,6 +392,71 @@ fn main() -> void {
 }
 ```
 
+## Generics
+
+Quant supports parametric polymorphism through type parameters declared in square brackets after the function name. A generic function works with any concrete type supplied at the call site; the type checker verifies correctness for each use.
+
+### Declaring a generic function
+
+```quant
+fn identity[T](x: T) -> T {
+    return x;
+}
+```
+
+`T` is a *type parameter* — a placeholder filled in by the caller. The same function can be called with any type:
+
+```quant
+fn main() -> void {
+    n: int = identity(42);
+    s: str = identity("hello");
+    println(n);   // 42
+    println(s);   // hello
+}
+```
+
+### Multiple type parameters
+
+List additional type parameters separated by commas:
+
+```quant
+fn first[T, U](a: T, b: U) -> T {
+    return a;
+}
+
+fn main() -> void {
+    x: int = first(7, "ignored");
+    println(x);   // 7
+}
+```
+
+### Generics with first-class functions
+
+Type parameters interact naturally with function types, enabling generic higher-order functions:
+
+```quant
+fn map_arr[T, U](arr: [T], f: (T) -> U, n: int) -> [U] {
+    result: [U] = [];
+    i: int = 0;
+    while (i < n) {
+        push(result, f(arr[i]));
+        i++;
+    };
+    return result;
+}
+
+fn main() -> void {
+    nums: [int] = [1, 2, 3];
+    doubled: [int] = map_arr(nums, fn(x: int) -> int { return x * 2; }, 3);
+    println(doubled[0]);   // 2
+    println(doubled[2]);   // 6
+}
+```
+
+<Aside>
+  Quant generics use *type erasure*: the same compiled bytecode handles all concrete types. The type checker enforces type safety at each call site with no runtime overhead and no code duplication.
+</Aside>
+
 ## Scope
 
 Variables are scoped to the block in which they are declared:

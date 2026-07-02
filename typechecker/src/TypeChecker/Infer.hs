@@ -48,6 +48,7 @@ import AST.Types.Type
     ErrorField (..),
     ErrorType (..),
     FunctionType (..),
+    Parameter (..),
     PrimitiveType (..),
     QualifiedType (..),
     ResultType (..),
@@ -61,6 +62,7 @@ import AST.Types.Type
     paramName,
     paramType,
     paramVariadic,
+    qualConstness,
     qualType,
   )
 import Control.Monad (foldM_, forM_, unless, void, when)
@@ -68,6 +70,7 @@ import Control.Monad.State (State, modify)
 import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (catMaybes)
 import TypeChecker.Builtins (builtinReturnType, isKnownBuiltin)
 import TypeChecker.Env
   ( Env (..),
@@ -75,10 +78,12 @@ import TypeChecker.Env
     insertVarWithSpan,
     lookupError,
     lookupFunc,
+    lookupGenericParams,
     lookupStruct,
     lookupVar,
     lookupVarDef,
     setReturnType,
+    withTypeVars,
   )
 import TypeChecker.Error (TypeCheckError (..))
 
@@ -246,7 +251,18 @@ inferExpr env (Located sp expr) = do
       case lookupFunc fname env of
         Just ft -> do
           let params = funcParams ft
-          let retType = qualType (unLocated (funcReturnType ft))
+          let tvs = lookupGenericParams fname env
+          -- For generic functions, infer type-variable bindings and apply to return type
+          let binding =
+                if null tvs
+                  then Map.empty
+                  else
+                    inferTypeVarBindings
+                      tvs
+                      (map (qualType . paramType . unLocated) params)
+                      (catMaybes argResults)
+          let rawRet = qualType (unLocated (funcReturnType ft))
+          let retType = if Map.null binding then rawRet else applyBindings binding rawRet
           recordCallSite nameSpan fname ft
           recordCallWithArgs callSp fname ft argSpans
           let regularParams = filter (not . paramVariadic . unLocated) params
@@ -384,10 +400,11 @@ checkFunction :: Env -> FunctionDecl () -> TC ()
 checkFunction baseEnv fd = do
   let retQt = unLocated (funcDeclReturnType fd)
   let params = funcDeclParams fd
+  let tvs = map unLocated (funcDeclTypeParams fd)
   let env =
         foldr
           (\(Located psp p) e -> insertVarWithSpan (paramName p) (paramType p) psp e)
-          (setReturnType retQt baseEnv)
+          (setReturnType retQt (withTypeVars tvs baseEnv))
           params
   mapM_ (\(Located psp p) -> recordVarUse psp (paramName p) psp) params
   checkBlock env (funcDeclBody fd)
@@ -442,11 +459,17 @@ lvalueType env (Located _ lv) = case lv of
 -- | Two types are compatible when they can be used interchangeably.
 -- We allow any int width with any other int width, and similarly for float,
 -- so that e.g. int<8> and int<32> don't generate spurious errors in practice.
+-- TypeVar is compatible with any type (type erasure: checked at call site).
 typesCompatible :: Type -> Type -> Bool
 typesCompatible t1 t2 = case (t1, t2) of
   _ | t1 == t2 -> True
+  (TypeVar _, _) -> True
+  (_, TypeVar _) -> True
   (TypePrimitive (PrimInt _), TypePrimitive (PrimInt _)) -> True
   (TypePrimitive (PrimFloat _), TypePrimitive (PrimFloat _)) -> True
+  -- Arrays are compatible if element types are compatible
+  (TypeArray (ArrayType qt1), TypeArray (ArrayType qt2)) ->
+    typesCompatible (qualType qt1) (qualType qt2)
   -- Two function types are compatible if arity and types match (names and spans ignored)
   (TypeFunction ft1, TypeFunction ft2) ->
     let ps1 = map (paramType . unLocated) (funcParams ft1)
@@ -461,6 +484,46 @@ typesCompatible t1 t2 = case (t1, t2) of
   -- returning a plain success value into an orerror return type
   (t, TypeResult (ResultType expected _)) -> typesCompatible t expected
   _ -> False
+
+-- ---------------------------------------------------------------------------
+-- Generic type-variable inference helpers
+
+-- | Build a binding map from type variable names to concrete types by
+-- unifying formal parameter types (which may contain TypeVar) with the
+-- actual argument types supplied at a call site.
+inferTypeVarBindings :: [TypeName] -> [Type] -> [Type] -> Map TypeName Type
+inferTypeVarBindings tvs formals actuals =
+  foldl (\m (f, a) -> unifyOne tvs f a m) Map.empty (zip formals actuals)
+  where
+    unifyOne :: [TypeName] -> Type -> Type -> Map TypeName Type -> Map TypeName Type
+    unifyOne tvs' (TypeVar n) actual m
+      | n `elem` tvs' = Map.insertWith (\_ old -> old) n actual m
+    unifyOne tvs' (TypeArray (ArrayType fqt)) (TypeArray (ArrayType aqt)) m =
+      unifyOne tvs' (qualType fqt) (qualType aqt) m
+    unifyOne tvs' (TypeFunction ft1) (TypeFunction ft2) m =
+      let ps1 = map (qualType . paramType . unLocated) (funcParams ft1)
+          ps2 = map (qualType . paramType . unLocated) (funcParams ft2)
+          r1 = qualType (unLocated (funcReturnType ft1))
+          r2 = qualType (unLocated (funcReturnType ft2))
+          m' = foldl (\acc (f, a) -> unifyOne tvs' f a acc) m (zip ps1 ps2)
+       in unifyOne tvs' r1 r2 m'
+    unifyOne _ _ _ m = m
+
+-- | Apply a type-variable binding map to a type, substituting TypeVar nodes.
+applyBindings :: Map TypeName Type -> Type -> Type
+applyBindings m (TypeVar n) = Map.findWithDefault (TypeVar n) n m
+applyBindings m (TypeArray (ArrayType qt)) =
+  TypeArray (ArrayType (QualifiedType (qualConstness qt) (applyBindings m (qualType qt))))
+applyBindings m (TypeFunction ft) =
+  TypeFunction
+    ft
+      { funcParams = map (fmap applyInParam) (funcParams ft),
+        funcReturnType = fmap applyInQType (funcReturnType ft)
+      }
+  where
+    applyInParam p = p {paramType = applyInQType (paramType p)}
+    applyInQType qt = QualifiedType (qualConstness qt) (applyBindings m (qualType qt))
+applyBindings _ t = t
 
 -- | All casts between primitive types are considered valid.
 isCastValid :: Type -> Type -> Bool

@@ -318,8 +318,10 @@ data Type
     TypeStruct TypeName
   | -- | Result/error types: @int | Error@
     TypeResult ResultType
-  | -- | Reference to a named type (for forward refs)
+  | -- | Reference to a named type (for forward refs / error-match bindings)
     TypeNamed TypeName
+  | -- | Generic type variable: @T@ in @fn foo[T](x: T) -> T@
+    TypeVar TypeName
   deriving stock (Eq, Ord, Generic)
 
 instance Hashable Type
@@ -331,6 +333,7 @@ instance Show Type where
   show (TypeStruct name) = T.unpack (unTypeName name)
   show (TypeResult res) = show res
   show (TypeNamed name) = T.unpack (unTypeName name)
+  show (TypeVar name) = T.unpack (unTypeName name)
 
 isNumericType :: Type -> Bool
 isNumericType (TypePrimitive (PrimInt _)) = True
