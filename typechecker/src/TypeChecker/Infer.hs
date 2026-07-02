@@ -93,11 +93,12 @@ data TCState = TCState
     tcsCallSites :: Map SourceSpan (FuncName, FunctionType),
     tcsBuiltinCallSites :: Map SourceSpan FuncName,
     tcsCallWithArgs :: Map SourceSpan (FuncName, FunctionType, [SourceSpan]),
-    tcsVarUseSites :: Map SourceSpan (VarName, SourceSpan)
+    tcsVarUseSites :: Map SourceSpan (VarName, SourceSpan),
+    tcsVarDeclSites :: Map SourceSpan (VarName, SourceSpan)
   }
 
 initialTCState :: TCState
-initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty
+initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type TC = State TCState
 
@@ -122,6 +123,11 @@ recordCallWithArgs sp fname ft argSpans =
 recordVarUse :: SourceSpan -> VarName -> SourceSpan -> TC ()
 recordVarUse useSp name defSp =
   modify $ \s -> s {tcsVarUseSites = Map.insert useSp (name, defSp) (tcsVarUseSites s)}
+
+-- | Record that a variable was declared at NAME_SPAN with its full STMT_SPAN.
+recordVarDecl :: SourceSpan -> VarName -> SourceSpan -> TC ()
+recordVarDecl nameSp name stmtSp =
+  modify $ \s -> s {tcsVarDeclSites = Map.insert nameSp (name, stmtSp) (tcsVarDeclSites s)}
 
 -- ---------------------------------------------------------------------------
 -- Expression inference
@@ -318,6 +324,7 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
       forM_ mT $ \t ->
         unless (typesCompatible t (qualType qt)) $
           recordError (TCTypeMismatch (locSpan initExpr) (qualType qt) t)
+    recordVarDecl declSpan name stmtSpan
     recordVarUse declSpan name declSpan
     return (insertVarWithSpan name qt declSpan env)
   StmtAssign lvalue _ rhs -> do

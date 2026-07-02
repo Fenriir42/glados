@@ -24,6 +24,7 @@ executable glados-lsp
   hs-source-dirs:     src
   other-modules:
     LSPServer.Analyze
+    LSPServer.CodeAction
     LSPServer.Completion
     LSPServer.Definition
     LSPServer.DocumentSymbol

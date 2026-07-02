@@ -3,7 +3,7 @@
 
 module LSPServer.Analyze (AnalyzeResult (..), analyzeText, emptyResult) where
 
-import AST.Types.AST (Block (..), Decl (..), ErrorDecl (..), FunctionDecl (..), Program (..), Stmt (..))
+import AST.Types.AST (Block (..), Decl (..), ErrorDecl (..), FunctionDecl (..), ImportDecl (..), ImportTarget (..), ModulePath (..), Program (..), Stmt (..))
 import AST.Types.Common
   ( Column (..),
     ErrorName (..),
@@ -11,12 +11,15 @@ import AST.Types.Common
     FuncName (..),
     Line (..),
     Located (..),
+    ModuleName (..),
     Offset (..),
     SourcePos (..),
     SourceSpan (..),
-    VarName,
+    VarName (..),
     locSpan,
     unLocated,
+    unModuleName,
+    unVarName,
   )
 import AST.Types.Type (FunctionType (..), Type)
 import Compiler.Import (resolveImports)
@@ -27,11 +30,13 @@ import Data.List (isSuffixOf)
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Language.LSP.Protocol.Types
   ( Diagnostic (..),
     DiagnosticSeverity (..),
+    DiagnosticTag (..),
     Position (..),
     Range (..),
     UInt,
@@ -62,6 +67,7 @@ import TypeChecker
     tcFuncDefSites,
     tcFuncEnv,
     tcTypes,
+    tcVarDeclSites,
     tcVarUseSites,
     typeCheck,
   )
@@ -80,12 +86,14 @@ data AnalyzeResult = AnalyzeResult
     arFuncSymbols :: [(FuncName, FunctionType, SourceSpan, SourceSpan)],
     arFoldingRanges :: [SourceSpan],
     arVarUseSites :: Map SourceSpan (VarName, SourceSpan),
-    arErrorNames :: [ErrorName]
+    arErrorNames :: [ErrorName],
+    arVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
+    arImportDecls :: [(SourceSpan, ImportDecl)]
   }
 
 emptyResult :: [Diagnostic] -> AnalyzeResult
 emptyResult diags =
-  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty []
+  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty []
 
 -- | Lex, resolve imports, type-check a source file.
 analyzeText :: FilePath -> Text -> IO AnalyzeResult
@@ -100,12 +108,23 @@ analyzeText fp text = do
         Left bundle ->
           return (emptyResult (bundleToDiags bundle))
         Right rawDecls -> do
+          let importDecls =
+                [(sp, d) | Located sp (DeclImport d) <- rawDecls]
           resolvedOrErr <- resolveImports [takeDirectory fp, stdlibDir] rawDecls
           let decls = case resolvedOrErr of
                 Left _ -> rawDecls
                 Right ds -> ds
               result = typeCheck (Program decls)
               diags = map tcErrToDiag (tcErrors result)
+              usedFuncNames =
+                Set.fromList $
+                  map fst (Map.elems (tcCallSites result))
+                    ++ Map.elems (tcBuiltinCallSites result)
+              unusedVarDiags =
+                computeUnusedVarDiags (tcVarDeclSites result) (tcVarUseSites result)
+              unusedImportDiags =
+                computeUnusedImportDiags importDecls usedFuncNames
+              allDiags = diags ++ unusedVarDiags ++ unusedImportDiags
               userDocs = extractDocs text
               funcSymbols =
                 [ let nameSpan = locSpan (funcDeclName fd)
@@ -128,7 +147,7 @@ analyzeText fp text = do
           let allDocs = Map.union userDocs stdDocs
           return $
             AnalyzeResult
-              diags
+              allDiags
               (tcTypes result)
               (tcCallSites result)
               (tcBuiltinCallSites result)
@@ -141,6 +160,8 @@ analyzeText fp text = do
               foldingRanges
               (tcVarUseSites result)
               errorNames
+              (tcVarDeclSites result)
+              importDecls
 
 -- ---------------------------------------------------------------------------
 -- Folding range collection
@@ -277,6 +298,75 @@ lineScannedDefSites fp modName text =
        in if T.null name
             then Nothing
             else Just (name, SourceSpan startPos endPos)
+
+-- ---------------------------------------------------------------------------
+-- Unused-symbol detection
+
+-- | Produce Hint diagnostics with DiagnosticTag_Unnecessary for local
+-- variables that are declared but never read.
+computeUnusedVarDiags ::
+  Map SourceSpan (VarName, SourceSpan) ->
+  Map SourceSpan (VarName, SourceSpan) ->
+  [Diagnostic]
+computeUnusedVarDiags declSites useSites =
+  let readDecls =
+        Set.fromList
+          [ declSp
+            | (useSp, (_, declSp)) <- Map.toList useSites,
+              useSp /= declSp
+          ]
+   in [ makeHintDiag (spanToRange nameSp) ("`" <> unVarName vname <> "` is declared but never used")
+        | (nameSp, (vname, _)) <- Map.toList declSites,
+          not (nameSp `Set.member` readDecls)
+      ]
+
+-- | Produce Hint diagnostics for imported names that are never called.
+-- Wildcard imports (@from M import *@) are silently skipped.
+computeUnusedImportDiags ::
+  [(SourceSpan, ImportDecl)] ->
+  Set.Set FuncName ->
+  [Diagnostic]
+computeUnusedImportDiags importDecls usedNames = concatMap check importDecls
+  where
+    check (sp, ImportDecl modPath ImportAll) =
+      let prefix = modStr modPath <> "."
+          anyUsed = any (\(FuncName n) -> prefix `T.isPrefixOf` n) (Set.toList usedNames)
+       in [ makeHintDiag (spanToRange sp) ("Module `" <> modStr modPath <> "` is imported but never used")
+            | not anyUsed
+          ]
+    check (sp, ImportDecl _ (ImportNames names)) =
+      let unused = [Located nameSp vn | Located nameSp vn <- names, FuncName (unVarName vn) `Set.notMember` usedNames]
+       in if null unused
+            then []
+            else
+              if length unused == length names
+                then -- All names unused: dim entire import line
+                  [makeHintDiag (spanToRange sp) (unusedMsg unused)]
+                else -- Some names unused: dim each unused name individually
+                  [ makeHintDiag (spanToRange nameSp) ("`" <> unVarName vn <> "` is imported but never used")
+                    | Located nameSp vn <- unused
+                  ]
+    check _ = []
+
+    modStr mp = T.intercalate "." (map (unModuleName . unLocated) (modulePathParts mp))
+
+    unusedMsg locs =
+      let ns = T.intercalate ", " ["`" <> unVarName vn <> "`" | Located _ vn <- locs]
+       in ns <> (if length locs == 1 then " is" else " are") <> " imported but never used"
+
+makeHintDiag :: Range -> Text -> Diagnostic
+makeHintDiag range msg =
+  Diagnostic
+    { _range = range,
+      _severity = Just DiagnosticSeverity_Hint,
+      _code = Nothing,
+      _codeDescription = Nothing,
+      _source = Just "quant",
+      _message = msg,
+      _tags = Just [DiagnosticTag_Unnecessary],
+      _relatedInformation = Nothing,
+      _data_ = Nothing
+    }
 
 -- ---------------------------------------------------------------------------
 -- Parse error -> LSP diagnostic conversion

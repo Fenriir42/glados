@@ -1,5 +1,6 @@
 module Main (main) where
 
+import AST.Types.AST (ImportDecl)
 import AST.Types.Common (ErrorName, FuncName, SourceSpan, VarName)
 import AST.Types.Type (FunctionType, Type)
 import Control.Concurrent.STM
@@ -15,6 +16,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import LSPServer.Analyze (AnalyzeResult (..), analyzeText)
+import LSPServer.CodeAction (makeCodeActions)
 import LSPServer.Completion (makeCompletionItems)
 import LSPServer.Definition (findDefinition)
 import LSPServer.DocumentSymbol (makeDocumentSymbols)
@@ -46,6 +48,8 @@ data FileState = FileState
     fsFoldingRanges :: [SourceSpan],
     fsVarUseSites :: Map SourceSpan (VarName, SourceSpan),
     fsErrorNames :: [ErrorName],
+    fsVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
+    fsImportDecls :: [(SourceSpan, ImportDecl)],
     fsFilePath :: FilePath,
     fsFileText :: Text
   }
@@ -82,7 +86,8 @@ serverOptions =
               LSP._save = Nothing
             },
       optCompletionTriggerCharacters = Just ['.'],
-      optSignatureHelpTriggerCharacters = Just ['(', ',']
+      optSignatureHelpTriggerCharacters = Just ['(', ','],
+      optCodeActionKinds = Just [LSP.CodeActionKind_QuickFix]
     }
 
 mkHandlers :: TVar State -> Handlers (LspM ())
@@ -290,6 +295,23 @@ mkHandlers stateVar =
               Nothing -> []
               Just fs -> makeInlayHints (fsCallWithArgs fs) range
         responder (Right (LSP.InL hints)),
+      -- Code actions (quick fixes for unused symbols)
+      requestHandler SMethod_TextDocumentCodeAction $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.CodeActionParams _ _ tdId range ctx) = req
+            LSP.TextDocumentIdentifier uri = tdId
+            LSP.CodeActionContext diags _ _ = ctx
+            nuri = LSP.toNormalizedUri uri
+        st <- liftIO $ readTVarIO stateVar
+        let actions = case Map.lookup nuri st of
+              Nothing -> []
+              Just fs ->
+                makeCodeActions
+                  (fsVarDeclSites fs)
+                  (fsImportDecls fs)
+                  (fsFilePath fs)
+                  range
+                  diags
+        responder (Right (LSP.InL (map LSP.InR actions))),
       -- Semantic tokens (full)
       requestHandler SMethod_TextDocumentSemanticTokensFull $ \req responder -> do
         let TRequestMessage _ _ _ (LSP.SemanticTokensParams _ _ tdId) = req
@@ -336,6 +358,8 @@ analyzeAndPublish stateVar nuri version = do
               (arFoldingRanges result)
               (arVarUseSites result)
               (arErrorNames result)
+              (arVarDeclSites result)
+              (arImportDecls result)
               filePath
               text
       liftIO $ atomically $ modifyTVar' stateVar (Map.insert nuri fs)

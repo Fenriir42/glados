@@ -23,7 +23,8 @@ data TypeCheckResult = TypeCheckResult
     tcFuncEnv :: Map FuncName FunctionType,
     tcFuncDefSites :: Map FuncName SourceSpan,
     tcCallWithArgs :: Map SourceSpan (FuncName, FunctionType, [SourceSpan]),
-    tcVarUseSites :: Map SourceSpan (VarName, SourceSpan)
+    tcVarUseSites :: Map SourceSpan (VarName, SourceSpan),
+    tcVarDeclSites :: Map SourceSpan (VarName, SourceSpan)
   }
 
 -- | Type-check a parsed program.  Returns all diagnostics, a map from
@@ -50,6 +51,7 @@ typeCheck prog =
         defSites
         (tcsCallWithArgs finalState)
         (tcsVarUseSites finalState)
+        (tcsVarDeclSites finalState)
   where
     collectFunc :: Located (Decl ()) -> Env -> Env
     collectFunc (Located _ (DeclFunction _ fd)) env =
