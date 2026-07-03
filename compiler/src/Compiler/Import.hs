@@ -227,8 +227,12 @@ exprHasCall prefix = \case
   ExprField e _ -> exprHasCall prefix (unLocated e)
   ExprStructInit _ fields -> any (exprHasCall prefix . unLocated . snd) fields
   ExprArrayInit _ elems -> any (exprHasCall prefix . unLocated) elems
+  ExprDictLit pairs ->
+    any (\(k, v) -> exprHasCall prefix (unLocated k) || exprHasCall prefix (unLocated v)) pairs
   ExprTry e -> exprHasCall prefix (unLocated e)
   ExprMust e -> exprHasCall prefix (unLocated e)
+  ExprSome e -> exprHasCall prefix (unLocated e)
+  ExprNone -> False
   ExprError _ fields -> any (exprHasCall prefix . unLocated . snd) fields
   ExprLambda _ _ body -> blockHasCall prefix body
   ExprParen e -> exprHasCall prefix (unLocated e)
@@ -333,8 +337,11 @@ renameExpr names prefix = \case
   ExprField e f -> ExprField (fmap rE e) f
   ExprStructInit t fields -> ExprStructInit t [(f, fmap rE e) | (f, e) <- fields]
   ExprArrayInit t elems -> ExprArrayInit t (map (fmap rE) elems)
+  ExprDictLit pairs -> ExprDictLit [(fmap rE k, fmap rE v) | (k, v) <- pairs]
   ExprTry e -> ExprTry (fmap rE e)
   ExprMust e -> ExprMust (fmap rE e)
+  ExprSome e -> ExprSome (fmap rE e)
+  ExprNone -> ExprNone
   ExprError ename fields -> ExprError ename [(f, fmap rE e) | (f, e) <- fields]
   ExprLambda params ret body -> ExprLambda params ret (renameBlock names prefix body)
   ExprParen e -> ExprParen (fmap rE e)

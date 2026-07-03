@@ -15,7 +15,7 @@ import AST.Types.Type
     QualifiedType (QualifiedType),
     ResultType (ResultType),
     Signedness (..),
-    Type (TypeArray, TypeFunction, TypeOption, TypePrimitive, TypeResult, TypeStruct),
+    Type (TypeArray, TypeDict, TypeFunction, TypeOption, TypePrimitive, TypeResult, TypeStruct),
     defaultFloatType,
     defaultIntType,
   )
@@ -180,11 +180,26 @@ parseOptionType = MP.try $ do
   Located endSpan _ <- matchSymbol ")"
   return $ Located (startSpan <> endSpan) (TypeOption innerType)
 
+isDictIdent :: Located TokenContent -> Bool
+isDictIdent (Located _ (TokIdentifier "dict")) = True
+isDictIdent _ = False
+
+parseDictType :: TokenParser (Located Type)
+parseDictType = MP.try $ do
+  Located startSpan _ <- MP.satisfy isDictIdent
+  _ <- matchSymbol "("
+  Located _ keyType <- parseType
+  _ <- matchSymbol ","
+  Located _ valType <- parseType
+  Located endSpan _ <- matchSymbol ")"
+  return $ Located (startSpan <> endSpan) (TypeDict keyType valType)
+
 parseType :: TokenParser (Located Type)
 parseType =
   MP.choice
     [ parseErrorOrType,
       parseOptionType,
+      parseDictType,
       fmap TypePrimitive <$> parsePrimitiveType,
       fmap TypeArray <$> parseArrayType,
       fmap TypeFunction <$> parseFunctionType,

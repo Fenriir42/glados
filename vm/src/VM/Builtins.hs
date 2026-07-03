@@ -6,7 +6,7 @@ module VM.Builtins
   )
 where
 
-import AST.Types.Common (ErrorName (..), unErrorName)
+import AST.Types.Common (ErrorName (..), FuncName (..), unErrorName)
 import Compiler.Bytecode (Value (..))
 import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, try)
@@ -46,7 +46,7 @@ isBuiltin name =
 
 -- | True if the function needs heap access (handled in Interpreter directly).
 isHeapBuiltin :: Text -> Bool
-isHeapBuiltin name = name `elem` heapBuiltins
+isHeapBuiltin name = name `elem` heapBuiltins || "dict." `T.isPrefixOf` name
 
 pureBuiltins :: [Text]
 pureBuiltins = ["print", "println"]
@@ -114,7 +114,9 @@ renderValue _ (VInt n) _ = T.pack (show n)
 renderValue _ (VFloat f) _ = T.pack (formatFloat f)
 renderValue _ (VBool b) _ = if b then "True" else "False"
 renderValue _ (VArrayRef i) _ = T.pack ("<array#" ++ show i ++ ">")
+renderValue _ (VDictRef i) _ = T.pack ("<dict#" ++ show i ++ ">")
 renderValue _ (VStructRef i) _ = T.pack ("<struct#" ++ show i ++ ">")
+renderValue _ (VFunction (FuncName n)) _ = T.pack ("<fn:" ++ T.unpack n ++ ">")
 renderValue _ (VErrorVal name _) _ = T.pack ("error " ++ T.unpack (unErrorName name))
 renderValue _ VUnit _ = ""
 

@@ -38,6 +38,8 @@ data Value
   | -- | dynamically produced string (runtime only, never serialised)
     VString Text
   | VArrayRef Int
+  | -- | reference into the dict heap
+    VDictRef Int
   | -- | reference into the struct heap
     VStructRef Int
   | -- | error value: name + optional field payload
@@ -45,7 +47,7 @@ data Value
   | -- | reference to a named function (first-class function value)
     VFunction FuncName
   | VUnit
-  deriving stock (Show, Eq, Generic)
+  deriving stock (Show, Eq, Ord, Generic)
 
 instance Hashable Value
 
@@ -123,6 +125,8 @@ data Instruction
     IRet
   | -- | No operation
     INop
+  | -- | Create a new empty dict; push its reference
+    INewDict
   | -- | Create a new empty array; push its reference
     INewArray
   | -- | Array read: pop index, pop array ref, push element

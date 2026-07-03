@@ -135,7 +135,7 @@ isKnownFunction :: FuncName -> Set FuncName -> Bool
 isKnownFunction fname known =
   Set.member fname known
     || Set.member fname builtinFunctions
-    || any (`T.isPrefixOf` unFuncName fname) ["math.", "string.", "sys.", "io.", "file.", "buf."]
+    || any (`T.isPrefixOf` unFuncName fname) ["math.", "string.", "sys.", "io.", "file.", "buf.", "dict.", "array."]
 
 -- ---------------------------------------------------------------------------
 -- Compile state
@@ -344,6 +344,8 @@ compileStmt = \case
             void $ emitInstruction (IPush (VFloat 0.0))
           TypeOption _ ->
             void $ emitInstruction (INewError (ErrorName "None") [])
+          TypeDict _ _ ->
+            void $ emitInstruction INewDict
           _ ->
             void $ emitInstruction (IPush VUnit)
     void $ emitInstruction (IStore (unLocated name))
@@ -609,6 +611,16 @@ compileExpr = \case
       void $ emitInstruction IDup
       compileExpr (unLocated locExpr)
       void $ emitInstruction (IFieldSet (unLocated locFname))
+  ExprDictLit pairs -> do
+    void $ emitInstruction INewDict
+    mapM_
+      ( \(keyExpr, valExpr) -> do
+          void $ emitInstruction IDup
+          compileExpr (unLocated keyExpr)
+          compileExpr (unLocated valExpr)
+          void $ emitInstruction IArraySet
+      )
+      pairs
   ExprArrayInit _typ elems -> do
     void $ emitInstruction INewArray
     mapM_

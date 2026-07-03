@@ -52,6 +52,11 @@ builtinReturnType (FuncName n)
   | n `elem` ["buf.write", "buf.writeln", "buf.clear"] = voidT
   | n == "buf.to_str" = stringT
   | n `elem` ["buf.len", "buf.flush"] = intT
+  -- dict.*
+  | n == "dict.has" = boolT
+  | n == "dict.len" = intT
+  | n == "dict.delete" = voidT
+  | n `elem` ["dict.keys", "dict.values"] = Nothing -- return type depends on dict type
   | otherwise = Nothing
   where
     voidFuncs =
@@ -123,4 +128,4 @@ isKnownBuiltin (FuncName n) =
     || any (`T.isPrefixOf` n) modulePrefixes
   where
     standaloneBuiltins = ["print", "println", "len", "push", "pop"]
-    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf."]
+    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict."]

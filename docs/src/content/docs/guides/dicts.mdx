@@ -1,0 +1,231 @@
+---
+title: Dicts
+description: Working with dictionaries (hash maps) in Quant
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Dicts (dictionaries) map keys to values. They support O(1) average-case lookup and are the go-to structure for counting, indexing, and accumulating key-value data.
+
+## Declaration
+
+```quant
+fn main() -> void {
+    scores: dict(str, int);           // empty dict
+    headers: dict(str, str);          // string -> string
+}
+```
+
+## Literals
+
+Use `{ key: value, ... }` syntax. An empty `{}` is compatible with any `dict(K, V)`.
+
+```quant
+fn main() -> void {
+    ages: dict(str, int) = {"alice": 30, "bob": 25};
+    empty: dict(str, int) = {};
+}
+```
+
+## Reading and Writing
+
+Use square-bracket subscript syntax for both reads and writes.
+
+```quant
+fn main() -> void {
+    d: dict(str, int) = {};
+    d["hits"] = 1;
+    d["hits"] = d["hits"] + 1;
+    println(d["hits"]);    // 2
+}
+```
+
+<Aside type="caution">
+Reading a key that does not exist is a runtime error. Always guard with `dict.has` or use `get_or` from `std/dict`.
+</Aside>
+
+## Built-in Functions
+
+### dict.has
+
+Check whether a key is present before reading:
+
+```quant
+fn main() -> void {
+    cache: dict(str, int) = {"x": 10};
+    if (dict.has(cache, "x")) {
+        println(cache["x"]);   // 10
+    };
+}
+```
+
+### dict.len
+
+```quant
+fn main() -> void {
+    d: dict(str, int) = {"a": 1, "b": 2};
+    println(dict.len(d));   // 2
+}
+```
+
+### dict.delete
+
+Removes a key. Safe to call even when the key is absent.
+
+```quant
+fn main() -> void {
+    d: dict(str, int) = {"a": 1, "b": 2};
+    dict.delete(d, "a");
+    println(dict.len(d));   // 1
+}
+```
+
+### dict.keys and dict.values
+
+Retrieve all keys or values as arrays:
+
+```quant
+fn main() -> void {
+    prices: dict(str, int) = {"apple": 3, "banana": 1};
+    keys: [str] = dict.keys(prices);
+    vals: [int] = dict.values(prices);
+    i: int = 0;
+    while (i < array.len(keys)) {
+        println(keys[i]);
+        i++;
+    };
+}
+```
+
+<Aside>
+The order of keys returned by `dict.keys` and `dict.values` is not guaranteed.
+</Aside>
+
+## std/dict Module
+
+Import `std/dict.qa` for higher-level helpers. All helpers use `dict(str, int)` -- the most common dict type.
+
+### Safe lookup with a default
+
+```quant
+import dict
+
+fn main() -> void {
+    d: dict(str, int) = {"x": 5};
+    println(get_or(d, "x", 0));      // 5
+    println(get_or(d, "missing", 0)); // 0
+}
+```
+
+### Counting occurrences
+
+`count` builds a frequency map from a string array in one call:
+
+```quant
+import dict
+
+fn main() -> void {
+    words: [str] = ["apple", "banana", "apple", "cherry", "apple"];
+    freq: dict(str, int) = count(words);
+    println(freq["apple"]);    // 3
+    println(freq["banana"]);   // 1
+}
+```
+
+### Incrementing a counter
+
+`increment` adds to an existing key or creates it when absent:
+
+```quant
+import dict
+
+fn main() -> void {
+    hits: dict(str, int) = {};
+    increment(hits, "home", 1);
+    increment(hits, "home", 1);
+    increment(hits, "about", 1);
+    println(hits["home"]);    // 2
+    println(hits["about"]);   // 1
+}
+```
+
+### Merging two dicts
+
+```quant
+import dict
+
+fn main() -> void {
+    defaults: dict(str, int) = {"timeout": 30, "retries": 3};
+    overrides: dict(str, int) = {"timeout": 10};
+    config: dict(str, int) = merge(defaults, overrides);
+    println(config["timeout"]);   // 10  (overrides wins)
+    println(config["retries"]);   // 3   (from defaults)
+}
+```
+
+### Building a dict from a key list
+
+```quant
+import dict
+
+fn main() -> void {
+    endpoints: [str] = ["/health", "/api/v1", "/metrics"];
+    status: dict(str, int) = from_keys(endpoints, 200);
+    println(status["/health"]);    // 200
+}
+```
+
+### Filtering by value
+
+```quant
+import dict
+
+fn main() -> void {
+    scores: dict(str, int) = {"alice": 90, "bob": 55, "carol": 75};
+    passing: dict(str, int) = filter_gte(scores, 60);
+    println(dict.len(passing));    // 2  (alice and carol)
+}
+```
+
+## Common Patterns
+
+### Caching / memoization
+
+```quant
+fn main() -> void {
+    cache: dict(str, int) = {};
+    key: str = "fib_10";
+    if (!dict.has(cache, key)) {
+        cache[key] = 55;   // computed value
+    };
+    println(cache[key]);   // 55
+}
+```
+
+### Grouping / accumulating
+
+```quant
+import dict
+
+fn main() -> void {
+    log: [str] = ["GET", "POST", "GET", "DELETE", "GET"];
+    method_counts: dict(str, int) = count(log);
+    println(method_counts["GET"]);   // 3
+}
+```
+
+### Iterating over all entries
+
+```quant
+fn main() -> void {
+    config: dict(str, int) = {"port": 8080, "workers": 4};
+    keys: [str] = dict.keys(config);
+    i: int = 0;
+    while (i < array.len(keys)) {
+        k: str = keys[i];
+        println(k);
+        println(config[k]);
+        i++;
+    };
+}
+```

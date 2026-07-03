@@ -178,6 +178,7 @@ inferExpr env (Located sp expr) = do
       void $ inferExpr env idxExpr
       case mArrType of
         Just (TypeArray (ArrayType elemQt)) -> return (Just (qualType elemQt))
+        Just (TypeDict _ valType) -> return (Just valType)
         Just t -> recordError (TCIndexNonArray (locSpan arrExpr) t) >> return Nothing
         Nothing -> return Nothing
     go (ExprField structExpr locField) = do
@@ -228,6 +229,16 @@ inferExpr env (Located sp expr) = do
       return (fmap TypeOption mT)
     go ExprNone =
       return (Just (TypeOption (TypePrimitive PrimNone)))
+    go (ExprDictLit pairs) = do
+      case pairs of
+        [] -> return (Just (TypeDict (TypePrimitive PrimNone) (TypePrimitive PrimNone)))
+        ((k, v) : rest) -> do
+          mKey <- inferExpr env k
+          mVal <- inferExpr env v
+          mapM_ (\(ke, ve) -> inferExpr env ke >> inferExpr env ve) rest
+          case (mKey, mVal) of
+            (Just kt, Just vt) -> return (Just (TypeDict kt vt))
+            _ -> return Nothing
     go (ExprLambda params retQType body) = do
       let paramEnv =
             foldl
@@ -466,6 +477,7 @@ lvalueType env (Located _ lv) = case lv of
   LArrayIndex inner _ ->
     case lvalueType env inner of
       Just (TypeArray (ArrayType elemQt)) -> Just (qualType elemQt)
+      Just (TypeDict _ valType) -> Just valType
       _ -> Nothing
   LFieldAccess inner locField ->
     case lvalueType env inner of
@@ -509,6 +521,11 @@ typesCompatible t1 t2 = case (t1, t2) of
   (TypeOption _, TypeOption _) -> True
   -- returning a plain value into an option type
   (t, TypeOption expected) -> typesCompatible t expected
+  -- dict types: compatible if key and value types are compatible;
+  -- PrimNone key/val means "empty literal" and is compatible with any dict
+  (TypeDict (TypePrimitive PrimNone) (TypePrimitive PrimNone), TypeDict _ _) -> True
+  (TypeDict k1 v1, TypeDict k2 v2) ->
+    typesCompatible k1 k2 && typesCompatible v1 v2
   _ -> False
 
 -- ---------------------------------------------------------------------------
@@ -526,6 +543,10 @@ inferTypeVarBindings tvs formals actuals =
       | n `elem` tvs' = Map.insertWith (\_ old -> old) n actual m
     unifyOne tvs' (TypeArray (ArrayType fqt)) (TypeArray (ArrayType aqt)) m =
       unifyOne tvs' (qualType fqt) (qualType aqt) m
+    unifyOne tvs' (TypeOption ft) (TypeOption at) m =
+      unifyOne tvs' ft at m
+    unifyOne tvs' (TypeDict fk fv) (TypeDict ak av) m =
+      unifyOne tvs' fk ak (unifyOne tvs' fv av m)
     unifyOne tvs' (TypeFunction ft1) (TypeFunction ft2) m =
       let ps1 = map (qualType . paramType . unLocated) (funcParams ft1)
           ps2 = map (qualType . paramType . unLocated) (funcParams ft2)
@@ -540,6 +561,8 @@ applyBindings :: Map TypeName Type -> Type -> Type
 applyBindings m (TypeVar n) = Map.findWithDefault (TypeVar n) n m
 applyBindings m (TypeArray (ArrayType qt)) =
   TypeArray (ArrayType (QualifiedType (qualConstness qt) (applyBindings m (qualType qt))))
+applyBindings m (TypeOption t) = TypeOption (applyBindings m t)
+applyBindings m (TypeDict k v) = TypeDict (applyBindings m k) (applyBindings m v)
 applyBindings m (TypeFunction ft) =
   TypeFunction
     ft

@@ -177,6 +177,69 @@ matrix: [[const int]];            // 2D array of immutable integers
 
 See the [Arrays Guide](/guides/arrays/) for more details on array usage.
 
+### Dict Types
+
+Dicts (dictionaries / hash maps) associate keys with values. Both the key type and value type are specified.
+
+#### Syntax
+
+```quant
+d: dict(str, int);            // Maps strings to integers
+headers: dict(str, str);      // Maps strings to strings
+```
+
+#### Literals
+
+Use `{ key: value, ... }` to create a dict inline. An empty `{}` is compatible with any `dict(K, V)`.
+
+```quant
+fn main() -> void {
+    scores: dict(str, int) = {"alice": 95, "bob": 80};
+    empty: dict(str, int) = {};
+}
+```
+
+#### Subscript access
+
+```quant
+fn main() -> void {
+    d: dict(str, int) = {};
+    d["x"] = 42;              // write
+    v: int = d["x"];          // read
+}
+```
+
+Reading a missing key is a runtime error. Use `dict.has` or `get_or` from `std/dict` before accessing.
+
+#### Built-in functions
+
+| Function | Description |
+|----------|-------------|
+| `dict.has(d, key)` | Returns `true` if the key is present |
+| `dict.len(d)` | Number of entries |
+| `dict.delete(d, key)` | Remove a key (no-op if absent) |
+| `dict.keys(d)` | All keys as an array |
+| `dict.values(d)` | All values as an array |
+
+See the [Dicts Guide](/guides/dicts/) for usage patterns and the `std/dict` module reference.
+
+### Option Types
+
+An `option(T)` value is either `Some(v)` of type `T` or `None` -- the language-level nullable type.
+
+```quant
+fn find(arr: [int], target: int) -> option(int) {
+    i: int = 0;
+    while (i < array.len(arr)) {
+        if (arr[i] == target) {
+            return Some(arr[i]);
+        };
+        i++;
+    };
+    return None;
+}
+```
+
 ### Struct Types
 
 Structs define named composite types that group related fields together.

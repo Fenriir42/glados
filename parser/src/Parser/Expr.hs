@@ -197,6 +197,19 @@ parseExprNone = do
   Located sp _ <- MP.satisfy isNoneIdent
   return $ Located sp ExprNone
 
+parseExprDictLit :: TokenParser (Located (Expr ann))
+parseExprDictLit = MP.try $ do
+  Located startSpan _ <- matchSymbol "{"
+  pairs <- MP.sepEndBy parsePair (matchSymbol ",")
+  Located endSpan _ <- matchSymbol "}"
+  return $ Located (startSpan <> endSpan) (ExprDictLit pairs)
+  where
+    parsePair = do
+      key <- parseExpr
+      _ <- matchSymbol ":"
+      val <- parseExpr
+      return (key, val)
+
 parseExprError :: TokenParser (Located (Expr ann))
 parseExprError = do
   Located startSpan _ <- matchKeyword "error"
@@ -240,6 +253,7 @@ parsePrimary =
       MP.try parseExprCall,
       parseExprCast,
       parseExprParen,
+      parseExprDictLit,
       MP.try parseExprStructInit,
       parseExprAccessChain
     ]

@@ -63,6 +63,7 @@ data VMState = VMState
     vmStrings :: [Text],
     vmCallStack :: [Frame],
     vmHeap :: Map Int (Map Int Value),
+    vmDictHeap :: Map Int (Map Value Value),
     vmStructHeap :: Map Int (Map Text Value),
     vmNextId :: Int,
     vmFunctions :: Map FuncName Bytecode,
@@ -90,6 +91,7 @@ runProgram bytecodes = do
                 vmStrings = bytecodeStrings mainBc,
                 vmCallStack = [],
                 vmHeap = Map.empty,
+                vmDictHeap = Map.empty,
                 vmStructHeap = Map.empty,
                 vmNextId = 0,
                 vmFunctions = funcs,
@@ -229,6 +231,15 @@ execInstr = \case
             }
         return Nothing
   INop -> return Nothing
+  INewDict -> do
+    nid <- gets vmNextId
+    modify $ \s ->
+      s
+        { vmDictHeap = Map.insert nid Map.empty (vmDictHeap s),
+          vmNextId = nid + 1
+        }
+    push (VDictRef nid)
+    return Nothing
   INewArray -> do
     nid <- gets vmNextId
     modify $ \s ->
@@ -249,6 +260,16 @@ execInstr = \case
           Just arr ->
             case Map.lookup (fromIntegral i) arr of
               Nothing -> throwError $ VMOutOfBounds (fromIntegral i) (Map.size arr)
+              Just v -> push v >> return Nothing
+      (VDictRef did, key) -> do
+        dheap <- gets vmDictHeap
+        strings <- gets vmStrings
+        let resolvedKey = resolveStringRef strings key
+        case Map.lookup did dheap of
+          Nothing -> throwError $ VMRuntimeError $ "Dict #" ++ show did ++ " not found"
+          Just d ->
+            case Map.lookup resolvedKey d of
+              Nothing -> throwError $ VMRuntimeError $ "Dict key not found: " ++ show resolvedKey
               Just v -> push v >> return Nothing
       _ -> throwError $ VMTypeMismatch $ "IArrayGet: bad types " ++ show ref ++ " " ++ show idx
   IArrayGetOrNew -> do
@@ -282,6 +303,14 @@ execInstr = \case
         modify $ \s ->
           s
             { vmHeap = Map.adjust (Map.insert (fromIntegral i) val) aid (vmHeap s)
+            }
+        return Nothing
+      (VDictRef did, key) -> do
+        strings <- gets vmStrings
+        let resolvedKey = resolveStringRef strings key
+        modify $ \s ->
+          s
+            { vmDictHeap = Map.adjust (Map.insert resolvedKey val) did (vmDictHeap s)
             }
         return Nothing
       _ -> throwError $ VMTypeMismatch $ "IArraySet: bad types " ++ show ref ++ " " ++ show idx
@@ -540,6 +569,47 @@ callHeapBuiltin name args = case (name, args) of
     case r of
       Left _ -> return ()
       Right txt -> mapM_ (heapPush aid . VString) (T.lines txt)
+    return $ VArrayRef aid
+  -- dict.has : dict(K,V) -> K -> bool
+  ("dict.has", [VDictRef did, key]) -> do
+    strings <- gets vmStrings
+    let resolvedKey = resolveStringRef strings key
+    dheap <- gets vmDictHeap
+    case Map.lookup did dheap of
+      Nothing -> return $ VBool False
+      Just d -> return $ VBool (Map.member resolvedKey d)
+
+  -- dict.len : dict(K,V) -> int
+  ("dict.len", [VDictRef did]) -> do
+    dheap <- gets vmDictHeap
+    case Map.lookup did dheap of
+      Nothing -> return $ VInt 0
+      Just d -> return $ VInt (fromIntegral (Map.size d))
+
+  -- dict.delete : dict(K,V) -> K -> void
+  ("dict.delete", [VDictRef did, key]) -> do
+    strings <- gets vmStrings
+    let resolvedKey = resolveStringRef strings key
+    modify $ \s ->
+      s {vmDictHeap = Map.adjust (Map.delete resolvedKey) did (vmDictHeap s)}
+    return VUnit
+
+  -- dict.keys : dict(str,V) -> [str]
+  ("dict.keys", [VDictRef did]) -> do
+    dheap <- gets vmDictHeap
+    aid <- allocArray
+    case Map.lookup did dheap of
+      Nothing -> return ()
+      Just d -> mapM_ (heapPush aid) (Map.keys d)
+    return $ VArrayRef aid
+
+  -- dict.values : dict(K,V) -> [V]
+  ("dict.values", [VDictRef did]) -> do
+    dheap <- gets vmDictHeap
+    aid <- allocArray
+    case Map.lookup did dheap of
+      Nothing -> return ()
+      Just d -> mapM_ (heapPush aid) (Map.elems d)
     return $ VArrayRef aid
   _ ->
     throwError $

@@ -1,0 +1,118 @@
+# Quant Standard Library - Dict Module
+
+// Returns the number of key-value pairs in `d`.
+fn len(d: dict(str, int)) -> int {
+    return dict.len(d);
+}
+
+// Returns true if `key` exists in `d`.
+fn has(d: dict(str, int), key: str) -> bool {
+    return dict.has(d, key);
+}
+
+// Removes `key` from `d`. No-op if the key does not exist.
+fn remove(d: dict(str, int), key: str) -> void {
+    dict.delete(d, key);
+}
+
+// Returns `d[key]` if the key exists, otherwise returns `default_val`.
+fn get_or(d: dict(str, int), key: str, default_val: int) -> int {
+    if (dict.has(d, key)) {
+        return d[key];
+    };
+    return default_val;
+}
+
+// Increments `d[key]` by `amount`. Sets the key to `amount` if not present.
+fn increment(d: dict(str, int), key: str, amount: int) -> void {
+    if (dict.has(d, key)) {
+        d[key] = d[key] + amount;
+    } else {
+        d[key] = amount;
+    };
+}
+
+// Inserts `key -> value` only when `key` is not already present in `d`.
+fn set_if_absent(d: dict(str, int), key: str, value: int) -> void {
+    if (!dict.has(d, key)) {
+        d[key] = value;
+    };
+}
+
+// Returns a new dict containing all entries from `a`, then all from `b`.
+//
+// When the same key appears in both, `b`'s value wins.
+fn merge(a: dict(str, int), b: dict(str, int)) -> dict(str, int) {
+    result: dict(str, int) = {};
+    a_keys: [str] = dict.keys(a);
+    i: int = 0;
+    while (i < array.len(a_keys)) {
+        k: str = a_keys[i];
+        result[k] = a[k];
+        i++;
+    };
+    b_keys: [str] = dict.keys(b);
+    i = 0;
+    while (i < array.len(b_keys)) {
+        k: str = b_keys[i];
+        result[k] = b[k];
+        i++;
+    };
+    return result;
+}
+
+// Returns a new dict mapping every key in `keys` to `value`.
+fn from_keys(keys: [str], value: int) -> dict(str, int) {
+    result: dict(str, int) = {};
+    i: int = 0;
+    while (i < array.len(keys)) {
+        result[keys[i]] = value;
+        i++;
+    };
+    return result;
+}
+
+// Counts occurrences of each string in `arr`.
+//
+// Returns a dict mapping each distinct element to its frequency.
+fn count(arr: [str]) -> dict(str, int) {
+    result: dict(str, int) = {};
+    i: int = 0;
+    while (i < array.len(arr)) {
+        key: str = arr[i];
+        if (dict.has(result, key)) {
+            result[key] = result[key] + 1;
+        } else {
+            result[key] = 1;
+        };
+        i++;
+    };
+    return result;
+}
+
+// Returns a new dict retaining only keys whose value is >= `threshold`.
+fn filter_gte(d: dict(str, int), threshold: int) -> dict(str, int) {
+    result: dict(str, int) = {};
+    keys: [str] = dict.keys(d);
+    i: int = 0;
+    while (i < array.len(keys)) {
+        k: str = keys[i];
+        if (d[k] >= threshold) {
+            result[k] = d[k];
+        };
+        i++;
+    };
+    return result;
+}
+
+// Returns the sum of all values in `d`.
+fn sum_values(d: dict(str, int)) -> int {
+    total: int = 0;
+    keys: [str] = dict.keys(d);
+    i: int = 0;
+    while (i < array.len(keys)) {
+        total = total + d[keys[i]];
+        i++;
+    };
+    return total;
+}

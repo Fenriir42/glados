@@ -320,6 +320,8 @@ data Type
     TypeResult ResultType
   | -- | Nullable/optional type: @option(T)@
     TypeOption Type
+  | -- | Dictionary/map type: @dict(K, V)@
+    TypeDict Type Type
   | -- | Reference to a named type (for forward refs / error-match bindings)
     TypeNamed TypeName
   | -- | Generic type variable: @T@ in @fn foo[T](x: T) -> T@
@@ -335,6 +337,7 @@ instance Show Type where
   show (TypeStruct name) = T.unpack (unTypeName name)
   show (TypeResult res) = show res
   show (TypeOption t) = "option(" ++ show t ++ ")"
+  show (TypeDict k v) = "dict(" ++ show k ++ ", " ++ show v ++ ")"
   show (TypeNamed name) = T.unpack (unTypeName name)
   show (TypeVar name) = T.unpack (unTypeName name)
 

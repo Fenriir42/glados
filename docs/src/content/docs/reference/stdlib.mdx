@@ -176,6 +176,70 @@ Array operations. The built-in array functions operate on `[int]` arrays at the 
   </TabItem>
 </Tabs>
 
+## dict
+
+Dictionary (hash map) operations. Dicts map keys to values and support O(1) average-case lookup, insertion, and deletion. The `std/dict.qa` wrappers add higher-level helpers on top of the primitives below.
+
+### Primitives
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `dict.has` | `(dict(K,V), K) -> bool` | True if key is present |
+| `dict.len` | `(dict(K,V)) -> int` | Number of key-value pairs |
+| `dict.delete` | `(dict(K,V), K) -> void` | Remove a key (no-op if absent) |
+| `dict.keys` | `(dict(K,V)) -> [K]` | All keys as an array |
+| `dict.values` | `(dict(K,V)) -> [V]` | All values as an array |
+
+### std/dict helpers
+
+Import `std/dict.qa` for higher-level utilities that all operate on `dict(str, int)`.
+
+| Function | Description |
+|----------|-------------|
+| `get_or(d, key, default)` | Safe lookup -- returns `default` when key is absent |
+| `increment(d, key, amount)` | Add `amount` to an existing key, or set it if missing |
+| `set_if_absent(d, key, value)` | Insert only when the key does not yet exist |
+| `merge(a, b)` | New dict combining both; `b` wins on duplicate keys |
+| `from_keys(keys, value)` | Build a dict mapping every key in an array to the same value |
+| `count(arr)` | Frequency map -- count occurrences of each string in an array |
+| `filter_gte(d, n)` | New dict keeping only entries whose value is `>= n` |
+| `sum_values(d)` | Sum of all values |
+
+<Tabs>
+  <TabItem label="Module prefix">
+    ```quant
+    import dict
+
+    fn main() -> void {
+        scores: dict(str, int) = {"alice": 90, "bob": 75};
+        println(dict.has(scores, "alice"));    // True
+        println(dict.len(scores));             // 2
+
+        dict.delete(scores, "bob");
+        println(dict.len(scores));             // 1
+
+        keys: [str] = dict.keys(scores);
+        println(keys[0]);                      // alice
+    }
+    ```
+  </TabItem>
+  <TabItem label="Named import">
+    ```quant
+    from dict import get_or, increment, count
+
+    fn main() -> void {
+        words: [str] = ["go", "quant", "go", "go"];
+        freq: dict(str, int) = count(words);
+        println(get_or(freq, "go", 0));        // 3
+        println(get_or(freq, "rust", 0));      // 0
+
+        increment(freq, "quant", 5);
+        println(freq["quant"]);                // 6
+    }
+    ```
+  </TabItem>
+</Tabs>
+
 ## sys
 
 System, environment, and raw file-descriptor functions.

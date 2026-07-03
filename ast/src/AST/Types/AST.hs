@@ -228,6 +228,9 @@ data Expr ann
   | ExprArrayInit
       (Located Type)
       [Located (Expr ann)]
+  | -- | Dict literal: @{ key: val, ... }@ or @{}@
+    ExprDictLit
+      [(Located (Expr ann), Located (Expr ann))]
   | ExprError
       (Located ErrorName)
       [(Located FieldName, Located (Expr ann))]
