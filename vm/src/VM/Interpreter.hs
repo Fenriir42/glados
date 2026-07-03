@@ -20,12 +20,19 @@ import Control.Exception (SomeException, try)
 import Control.Monad.Except (ExceptT, catchError, runExceptT, throwError)
 import Control.Monad.State (StateT, gets, modify, runStateT)
 import qualified Control.Monad.State as S
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as AesonKey
+import qualified Data.Aeson.KeyMap as AesonKM
 import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
+import qualified Data.ByteString.Lazy as BL
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Scientific as Scientific
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
+import qualified Data.Vector as V
 import System.Environment (getArgs)
 import System.Exit (ExitCode (..), exitWith)
 import System.Posix.IO (fdWrite)
@@ -611,10 +618,149 @@ callHeapBuiltin name args = case (name, args) of
       Nothing -> return ()
       Just d -> mapM_ (heapPush aid) (Map.elems d)
     return $ VArrayRef aid
+  -- json.encode : value -> str
+  ("json.encode", [val]) -> do
+    st <- S.get
+    strings <- gets vmStrings
+    let jv = quantToAeson st strings val
+    return $ VString (TE.decodeUtf8 (BL.toStrict (Aeson.encode jv)))
+  -- json.decode_str : str -> str -> str
+  ("json.decode_str", [s, key]) -> do
+    strings <- gets vmStrings
+    let jsStr = resolveStr' strings s
+        keyStr = resolveStr' strings key
+    obj <- parseJsonObj jsStr
+    case AesonKM.lookup (AesonKey.fromText keyStr) obj of
+      Just (Aeson.String t) -> return (VString t)
+      Just (Aeson.Number n) -> return (VString (T.pack (show (floor n :: Int))))
+      Just (Aeson.Bool b) -> return (VString (if b then "true" else "false"))
+      Just Aeson.Null -> return (VString "null")
+      Just v -> return (VString (TE.decodeUtf8 (BL.toStrict (Aeson.encode v))))
+      Nothing -> throwError $ VMRuntimeError $ "json.decode_str: key not found: " ++ T.unpack keyStr
+  -- json.decode_int : str -> str -> int
+  ("json.decode_int", [s, key]) -> do
+    strings <- gets vmStrings
+    obj <- parseJsonObj (resolveStr' strings s)
+    let keyStr = resolveStr' strings key
+    case AesonKM.lookup (AesonKey.fromText keyStr) obj of
+      Just (Aeson.Number n) -> case Scientific.toBoundedInteger n :: Maybe Int of
+        Just i -> return (VInt (fromIntegral i))
+        Nothing -> return (VInt (floor (Scientific.toRealFloat n :: Double)))
+      Just _ -> throwError $ VMRuntimeError $ "json.decode_int: field '" ++ T.unpack keyStr ++ "' is not a number"
+      Nothing -> throwError $ VMRuntimeError $ "json.decode_int: key not found: " ++ T.unpack keyStr
+  -- json.decode_float : str -> str -> float
+  ("json.decode_float", [s, key]) -> do
+    strings <- gets vmStrings
+    obj <- parseJsonObj (resolveStr' strings s)
+    let keyStr = resolveStr' strings key
+    case AesonKM.lookup (AesonKey.fromText keyStr) obj of
+      Just (Aeson.Number n) -> return (VFloat (Scientific.toRealFloat n))
+      Just _ -> throwError $ VMRuntimeError $ "json.decode_float: field '" ++ T.unpack keyStr ++ "' is not a number"
+      Nothing -> throwError $ VMRuntimeError $ "json.decode_float: key not found: " ++ T.unpack keyStr
+  -- json.decode_bool : str -> str -> bool
+  ("json.decode_bool", [s, key]) -> do
+    strings <- gets vmStrings
+    obj <- parseJsonObj (resolveStr' strings s)
+    let keyStr = resolveStr' strings key
+    case AesonKM.lookup (AesonKey.fromText keyStr) obj of
+      Just (Aeson.Bool b) -> return (VBool b)
+      Just _ -> throwError $ VMRuntimeError $ "json.decode_bool: field '" ++ T.unpack keyStr ++ "' is not a boolean"
+      Nothing -> throwError $ VMRuntimeError $ "json.decode_bool: key not found: " ++ T.unpack keyStr
+  -- json.has : str -> str -> bool
+  ("json.has", [s, key]) -> do
+    strings <- gets vmStrings
+    obj <- parseJsonObj (resolveStr' strings s)
+    let keyStr = resolveStr' strings key
+    return $ VBool $ AesonKM.member (AesonKey.fromText keyStr) obj
+  -- json.is_null : str -> str -> bool
+  ("json.is_null", [s, key]) -> do
+    strings <- gets vmStrings
+    obj <- parseJsonObj (resolveStr' strings s)
+    let keyStr = resolveStr' strings key
+    return $ VBool $ AesonKM.lookup (AesonKey.fromText keyStr) obj == Just Aeson.Null
+  -- json.keys : str -> [str]
+  ("json.keys", [s]) -> do
+    strings <- gets vmStrings
+    obj <- parseJsonObj (resolveStr' strings s)
+    aid <- allocArray
+    mapM_ (heapPush aid . VString . AesonKey.toText) (AesonKM.keys obj)
+    return (VArrayRef aid)
+  -- json.parse : str -> dict(str, str)  -- all values coerced to string
+  ("json.parse", [s]) -> do
+    strings <- gets vmStrings
+    obj <- parseJsonObj (resolveStr' strings s)
+    did <- allocDict
+    mapM_ (\(k, v) -> dictInsert did (VString (AesonKey.toText k)) (aesonToStr v)) (AesonKM.toList obj)
+    return (VDictRef did)
   _ ->
     throwError $
       VMRuntimeError $
         "Heap builtin '" ++ show name ++ "' called with bad args: " ++ show args
+
+-- ---------------------------------------------------------------------------
+-- JSON helpers
+
+resolveStr' :: [Text] -> Value -> Text
+resolveStr' strings (VStringRef i)
+  | i < length strings = strings !! i
+resolveStr' _ (VString t) = t
+resolveStr' _ v = T.pack (show v)
+
+parseJsonObj :: Text -> VM (AesonKM.KeyMap Aeson.Value)
+parseJsonObj s =
+  case Aeson.decode (BL.fromStrict (TE.encodeUtf8 s)) of
+    Just (Aeson.Object obj) -> return obj
+    Just _ -> throwError $ VMRuntimeError "json: expected a JSON object"
+    Nothing -> throwError $ VMRuntimeError $ "json: invalid JSON: " ++ T.unpack s
+
+aesonToStr :: Aeson.Value -> Value
+aesonToStr (Aeson.String t) = VString t
+aesonToStr (Aeson.Number n) = case Scientific.toBoundedInteger n :: Maybe Int of
+  Just i -> VString (T.pack (show i))
+  Nothing -> VString (T.pack (show (Scientific.toRealFloat n :: Double)))
+aesonToStr (Aeson.Bool True) = VString "true"
+aesonToStr (Aeson.Bool False) = VString "false"
+aesonToStr Aeson.Null = VString "null"
+aesonToStr v = VString (TE.decodeUtf8 (BL.toStrict (Aeson.encode v)))
+
+quantToAeson :: VMState -> [Text] -> Value -> Aeson.Value
+quantToAeson st strings val = case val of
+  VInt n -> Aeson.toJSON n
+  VFloat f -> Aeson.toJSON f
+  VBool b -> Aeson.Bool b
+  VUnit -> Aeson.Null
+  VString t -> Aeson.String t
+  VStringRef i
+    | i < length strings -> Aeson.String (strings !! i)
+    | otherwise -> Aeson.Null
+  VArrayRef aid -> case Map.lookup aid (vmHeap st) of
+    Nothing -> Aeson.Array V.empty
+    Just m -> Aeson.Array (V.fromList (map (quantToAeson st strings) (Map.elems m)))
+  VDictRef did -> case Map.lookup did (vmDictHeap st) of
+    Nothing -> Aeson.Object AesonKM.empty
+    Just d ->
+      Aeson.Object $
+        AesonKM.fromList
+          [ (AesonKey.fromText (resolveStr' strings k), quantToAeson st strings v)
+            | (k, v) <- Map.toList d
+          ]
+  VStructRef sid -> case Map.lookup sid (vmStructHeap st) of
+    Nothing -> Aeson.Object AesonKM.empty
+    Just m ->
+      Aeson.Object $
+        AesonKM.fromList
+          [(AesonKey.fromText f, quantToAeson st strings v) | (f, v) <- Map.toList m]
+  _ -> Aeson.String (T.pack (show val))
+
+allocDict :: VM Int
+allocDict = do
+  nid <- gets vmNextId
+  modify $ \s -> s {vmDictHeap = Map.insert nid Map.empty (vmDictHeap s), vmNextId = nid + 1}
+  return nid
+
+dictInsert :: Int -> Value -> Value -> VM ()
+dictInsert did k v =
+  modify $ \s -> s {vmDictHeap = Map.adjust (Map.insert k v) did (vmDictHeap s)}
 
 -- ---------------------------------------------------------------------------
 -- Helpers

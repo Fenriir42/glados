@@ -46,7 +46,10 @@ isBuiltin name =
 
 -- | True if the function needs heap access (handled in Interpreter directly).
 isHeapBuiltin :: Text -> Bool
-isHeapBuiltin name = name `elem` heapBuiltins || "dict." `T.isPrefixOf` name
+isHeapBuiltin name =
+  name `elem` heapBuiltins
+    || "dict." `T.isPrefixOf` name
+    || "json." `T.isPrefixOf` name
 
 pureBuiltins :: [Text]
 pureBuiltins = ["print", "println"]

@@ -240,6 +240,70 @@ Import `std/dict.qa` for higher-level utilities that all operate on `dict(str, i
   </TabItem>
 </Tabs>
 
+## json
+
+JSON encoding and decoding. `json.encode` handles any Quant value; the decode functions extract typed fields from a JSON object string. The `std/json.qa` module re-exports these with the same names.
+
+### Primitives
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `json.encode` | `(value) -> str` | Encode any value to a JSON string |
+| `json.decode_str` | `(str, key: str) -> str` | Extract a string field |
+| `json.decode_int` | `(str, key: str) -> int` | Extract an integer field |
+| `json.decode_float` | `(str, key: str) -> float` | Extract a float field |
+| `json.decode_bool` | `(str, key: str) -> bool` | Extract a boolean field |
+| `json.has` | `(str, key: str) -> bool` | True if the key is present |
+| `json.is_null` | `(str, key: str) -> bool` | True if the field is `null` |
+| `json.keys` | `(str) -> [str]` | All keys of the JSON object |
+| `json.parse` | `(str) -> dict(str, str)` | Parse an object; all values coerced to strings |
+
+### std/json helpers
+
+| Function | Description |
+|----------|-------------|
+| `get_or(s, key, default)` | Safe field read with a fallback string |
+| `from_str_dict(d)` | Encode a `dict(str, str)` to JSON |
+| `from_int_dict(d)` | Encode a `dict(str, int)` to JSON |
+
+<Tabs>
+  <TabItem label="Encoding">
+    ```quant
+    fn main() -> void {
+        d: dict(str, int) = {"port": 8080, "workers": 4};
+        println(json.encode(d));          // {"port":8080,"workers":4}
+        println(json.encode("hello"));    // "hello"
+        println(json.encode(True));       // true
+        println(json.encode(42));         // 42
+    }
+    ```
+  </TabItem>
+  <TabItem label="Decoding">
+    ```quant
+    fn main() -> void {
+        s: str = "{\"name\":\"alice\",\"age\":30,\"active\":true}";
+        println(json.decode_str(s, "name"));    // alice
+        println(json.decode_int(s, "age"));     // 30
+        println(json.decode_bool(s, "active")); // True
+        println(json.has(s, "missing"));        // False
+    }
+    ```
+  </TabItem>
+  <TabItem label="Named import">
+    ```quant
+    from json import encode, decode_str, decode_int, get_or
+
+    fn main() -> void {
+        body: dict(str, str) = {"token": "abc123"};
+        req: str = encode(body);
+        resp: str = "{\"status\":\"ok\",\"user\":\"alice\"}";
+        println(get_or(resp, "user", "unknown"));  // alice
+        println(get_or(resp, "role", "guest"));    // guest
+    }
+    ```
+  </TabItem>
+</Tabs>
+
 ## sys
 
 System, environment, and raw file-descriptor functions.

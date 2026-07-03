@@ -1,0 +1,138 @@
+---
+title: JSON
+description: Encoding and decoding JSON in Quant
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Quant's `json` module handles JSON encoding and decoding. `json.encode` converts any Quant value to a JSON string; the `json.decode_*` functions extract typed fields from a JSON object string. For API testing and HTTP work, import `std/json.qa` which re-exports all builtins and adds a few helpers.
+
+## Encoding
+
+`json.encode` accepts any value — primitives, arrays, dicts, and structs.
+
+```quant
+fn main() -> void {
+    println(json.encode(42));            // 42
+    println(json.encode(3.14));          // 3.14
+    println(json.encode(True));          // true
+    println(json.encode("hello"));       // "hello"
+
+    arr: [int] = [1, 2, 3];
+    println(json.encode(arr));           // [1,2,3]
+
+    d: dict(str, int) = {"port": 8080, "workers": 4};
+    println(json.encode(d));             // {"port":8080,"workers":4}
+}
+```
+
+## Decoding typed fields
+
+Extract a specific field from a JSON object string with the typed decode functions.
+
+```quant
+fn main() -> void {
+    s: str = "{\"name\":\"alice\",\"age\":30,\"active\":true,\"score\":9.5}";
+
+    name: str   = json.decode_str(s, "name");     // alice
+    age: int    = json.decode_int(s, "age");      // 30
+    ok: bool    = json.decode_bool(s, "active");  // True
+    sc: float   = json.decode_float(s, "score");  // 9.5
+
+    println(name);
+    println(age);
+    println(ok);
+    println(sc);
+}
+```
+
+<Aside type="caution">
+`json.decode_*` is a runtime error when the key is absent or the value is the wrong type. Guard with `json.has` or use `get_or` from `std/json`.
+</Aside>
+
+## Checking keys
+
+```quant
+fn main() -> void {
+    s: str = "{\"user\":\"alice\",\"role\":null}";
+    println(json.has(s, "user"));      // True
+    println(json.has(s, "missing"));   // False
+    println(json.is_null(s, "role"));  // True
+}
+```
+
+## Listing keys
+
+```quant
+fn main() -> void {
+    s: str = "{\"a\":1,\"b\":2,\"c\":3}";
+    keys: [str] = json.keys(s);
+    i: int = 0;
+    while (i < array.len(keys)) {
+        println(keys[i]);
+        i++;
+    };
+}
+```
+
+## Parsing an object to a dict
+
+`json.parse` converts a JSON object into a `dict(str, str)`, coercing all values to strings. Useful when field types vary or are unknown ahead of time.
+
+```quant
+fn main() -> void {
+    s: str = "{\"status\":\"ok\",\"code\":200}";
+    d: dict(str, str) = json.parse(s);
+    println(d["status"]);   // ok
+    println(d["code"]);     // 200
+}
+```
+
+## Safe field access with a default
+
+Import `std/json.qa` for `get_or`:
+
+```quant
+from json import get_or
+
+fn main() -> void {
+    s: str = "{\"role\":\"admin\"}";
+    println(get_or(s, "role", "guest"));      // admin
+    println(get_or(s, "name", "anonymous"));  // anonymous
+}
+```
+
+## API testing pattern
+
+Combine the JSON module with `net` (coming soon) for HTTP API tests:
+
+```quant
+import json
+
+fn check_health(resp: str) -> bool {
+    if (!json.has(resp, "status")) {
+        return False;
+    };
+    return json.decode_str(resp, "status") == "ok";
+}
+
+fn main() -> void {
+    // Simulate a response for now
+    resp: str = "{\"status\":\"ok\",\"latency_ms\":12}";
+    println(check_health(resp));                        // True
+    println(json.decode_int(resp, "latency_ms"));       // 12
+}
+```
+
+## Building request bodies
+
+```quant
+fn main() -> void {
+    payload: dict(str, str) = {
+        "username": "alice",
+        "action": "login"
+    };
+    body: str = json.encode(payload);
+    println(body);   // {"username":"alice","action":"login"}
+}
+```

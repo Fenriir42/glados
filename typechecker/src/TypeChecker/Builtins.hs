@@ -57,6 +57,14 @@ builtinReturnType (FuncName n)
   | n == "dict.len" = intT
   | n == "dict.delete" = voidT
   | n `elem` ["dict.keys", "dict.values"] = Nothing -- return type depends on dict type
+  -- json.*
+  | n == "json.encode" = stringT
+  | n `elem` ["json.has", "json.is_null", "json.decode_bool"] = boolT
+  | n == "json.decode_int" = intT
+  | n == "json.decode_float" = floatT
+  | n == "json.decode_str" = stringT
+  | n == "json.keys" = Nothing -- returns [str]
+  | n == "json.parse" = Nothing -- returns dict(str, str)
   | otherwise = Nothing
   where
     voidFuncs =
@@ -128,4 +136,4 @@ isKnownBuiltin (FuncName n) =
     || any (`T.isPrefixOf` n) modulePrefixes
   where
     standaloneBuiltins = ["print", "println", "len", "push", "pop"]
-    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict."]
+    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict.", "json."]

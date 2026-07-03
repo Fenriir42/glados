@@ -1,0 +1,71 @@
+# Quant Standard Library - JSON Module
+
+// Encodes any Quant value (int, float, bool, str, array, dict, struct) to a
+// JSON string.
+fn encode(value: int) -> str {
+    return json.encode(value);
+}
+
+// Returns the string field `key` from the JSON object string `s`.
+//
+// Runtime error if the key is absent or the value is not a string-compatible
+// type.
+fn decode_str(s: str, key: str) -> str {
+    return json.decode_str(s, key);
+}
+
+// Returns the integer field `key` from the JSON object string `s`.
+fn decode_int(s: str, key: str) -> int {
+    return json.decode_int(s, key);
+}
+
+// Returns the float field `key` from the JSON object string `s`.
+fn decode_float(s: str, key: str) -> float {
+    return json.decode_float(s, key);
+}
+
+// Returns the boolean field `key` from the JSON object string `s`.
+fn decode_bool(s: str, key: str) -> bool {
+    return json.decode_bool(s, key);
+}
+
+// Returns true if `key` is present in the JSON object string `s`.
+fn has(s: str, key: str) -> bool {
+    return json.has(s, key);
+}
+
+// Returns true if the value of `key` in the JSON object string `s` is null.
+fn is_null(s: str, key: str) -> bool {
+    return json.is_null(s, key);
+}
+
+// Returns all keys of the JSON object string `s` as an array of strings.
+fn keys(s: str) -> [str] {
+    return json.keys(s);
+}
+
+// Parses the JSON object string `s` into a dict(str, str).
+//
+// All values are coerced to their string representation.
+// Nested objects and arrays are encoded as JSON strings.
+fn parse(s: str) -> dict(str, str) {
+    return json.parse(s);
+}
+
+// Returns `s[key]` if the key exists, otherwise returns `default_val`.
+fn get_or(s: str, key: str, default_val: str) -> str {
+    if (json.has(s, key)) {
+        return json.decode_str(s, key);
+    };
+    return default_val;
+}
+
+// Builds a JSON object string from a dict(str, str).
+fn from_str_dict(d: dict(str, str)) -> str {
+    return json.encode(d);
+}
+
+// Builds a JSON object string from a dict(str, int).
+fn from_int_dict(d: dict(str, int)) -> str {
+    return json.encode(d);
+}
