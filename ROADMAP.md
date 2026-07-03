@@ -284,7 +284,64 @@ Generic structs (`struct Pair[A, B]`) remain post-V1.
 
 ---
 
-### 8. FFI -call C functions
+### 8. Install / distribution
+
+A way to install and uninstall the full toolchain system-wide so `quant` and
+the LSP are available without knowing anything about Cabal or this repo.
+
+```bash
+# Debian/Ubuntu
+sudo apt install ./quant_1.0_amd64.deb
+
+# Arch (AUR)
+yay -S quant-lang
+
+# Nix / NixOS
+nix profile install github:org/glados
+
+# Windows (PowerShell)
+winget install quant-lang       # or: iwr https://... | iex
+
+quant run hello.qa              # works from any directory, stdlib auto-resolved
+```
+
+**Target platforms (V1):**
+
+| Platform | Format | Status |
+|----------|--------|--------|
+| Debian / Ubuntu | `.deb` package + `install.sh` script | V1 |
+| Arch Linux | `PKGBUILD` for AUR | V1 |
+| Nix / NixOS | `flake.nix` overlay (likely already usable via the existing flake) | V1 |
+| Windows | zip with binaries + PowerShell installer or `winget` manifest | V1 if feasible |
+| Red Hat / Fedora | RPM | deferred |
+| macOS / Homebrew | `Formula` | deferred |
+
+**What needs to exist:**
+
+| Artifact | Install path (Linux) | Notes |
+|----------|---------------------|-------|
+| CLI binary | `/usr/local/bin/quant` | built with `cabal build cli` |
+| LSP binary | `/usr/local/bin/quant-lsp` | built with `cabal build lsp-server` |
+| Stdlib `.qa` files | `/usr/local/share/quant/lib/` | whole `stdlib/` tree |
+| Uninstall | `make uninstall` / package manager | removes all three |
+
+**Layers that need work:**
+
+| Layer | Change |
+|-------|--------|
+| CLI | Fall back to `/usr/local/share/quant/lib/` when `--stdlib` is not given and the repo-relative path does not exist |
+| Makefile | `install` / `uninstall` targets: `cabal build`, then `install -m 755` + `cp -r` stdlib |
+| `packaging/debian/` | `control`, `rules`, `postinst`; `make deb` produces `.deb` |
+| `packaging/arch/PKGBUILD` | Downloads release tarball, runs `make install` |
+| `flake.nix` | `packages.default` overlay already close; expose `quant` and `quant-lsp` as apps |
+| VS Code extension | `quant-lsp` setting should default to the installed binary path |
+| Docs | "Getting started / install" page per platform |
+
+No new language features needed -purely build and packaging work.
+
+---
+
+### 9. FFI -call C functions
 
 Bind to C libraries directly from Quant.
 
@@ -319,7 +376,8 @@ The current stdlib is comprehensive. Remaining gaps:
 | `math` | `pi` and `tau` constants, `log2`, `log10`, `hypot`, `is_nan`, `is_inf` |
 | `json` | `encode(value) -> str`, `decode(s) -> ...` -needs dict and option first |
 | `regex` | basic `match`, `find`, `replace` -can wrap Haskell's `regex-compat` |
-| `net` | `http.get`, `http.post` -post-V1 in practice |
+| `net` | `http.get`, `http.post`, `http.put`, `http.delete`; response struct with `status`, `body`, `headers` -wraps `http-conduit`; needs dict for headers |
+| `socket` | raw TCP/UDP: `socket.connect`, `socket.listen`, `socket.accept`, `socket.send`, `socket.recv`, `socket.close`; wraps Haskell's `network` package |
 
 ---
 
@@ -334,8 +392,9 @@ match (3)               ─┴─ do together, match enables field binding
 first-class functions (1)    -independent, can parallelize
 dict (4)                     -independent
 optional (6)            ─── depends on match for clean usage
-stdlib additions             -fill in as language features land
-FFI (7)                      -last, needs design decision on backend
+stdlib additions        ─── fill in as language features land; net needs dict for headers
+install / distribution  ─── do before any public release; CLI path fallback is trivial
+FFI (9)                      -last, needs design decision on backend
 ```
 
 Realistic V1 sequence:
@@ -345,8 +404,9 @@ Realistic V1 sequence:
 4. Dict type
 5. Optional type *(done)*
 6. Generics / parametric polymorphism *(done)*
-7. Stdlib additions (json, regex, string.format, generic array.map/filter)
-8. FFI
+7. Stdlib additions (json, regex, string.format, generic array.map/filter, net/http, socket)
+8. Install / distribution (deb + PKGBUILD + flake, CLI stdlib path fallback)
+9. FFI
 
 ---
 
