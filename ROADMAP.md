@@ -23,7 +23,8 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Import cycle detection | Done | Circular imports detected and reported with the full cycle path |
 | Match expression | Done | `match` statement with `ok(v)`, `err(E v)`, literal, range `lo..hi`, wildcard `_` arms |
 | LSP server | Done | 12 protocol features -see table below |
-| VS Code extension | Done | Syntax highlighting, snippets, all LSP features wired |
+| VS Code extension (highlighting) | Done | Syntax highlighting, snippets, language config; published separately as a standalone extension |
+| VS Code extension (LSP client) | Pending | TypeScript `main` with `vscode-languageclient` to auto-start `quant-lsp`; published as a second extension |
 | Generics | Done | Type-erased parametric polymorphism; `fn foo[T, U](...)`; call-site inference |
 | Docs site | Done | Astro/Starlight; all pages written |
 | Tests | Done | 563 total, 0 failures |
@@ -286,58 +287,76 @@ Generic structs (`struct Pair[A, B]`) remain post-V1.
 
 ### 8. Install / distribution
 
-A way to install and uninstall the full toolchain system-wide so `quant` and
+A way to install and uninstall the full toolchain system-wide so `glados` and
 the LSP are available without knowing anything about Cabal or this repo.
 
 ```bash
 # Debian/Ubuntu
-sudo apt install ./quant_1.0_amd64.deb
-
-# Arch (AUR)
-yay -S quant-lang
-
-# Nix / NixOS
-nix profile install github:org/glados
-
-# Windows (PowerShell)
-winget install quant-lang       # or: iwr https://... | iex
-
-quant run hello.qa              # works from any directory, stdlib auto-resolved
+sudo dpkg -i glados_1.0.0_amd64.deb
+glados compiler run hello.qa   # stdlib auto-resolved from /usr/local/share/quant/lib/
 ```
 
 **Target platforms (V1):**
 
 | Platform | Format | Status |
 |----------|--------|--------|
-| Debian / Ubuntu | `.deb` package + `install.sh` script | V1 |
-| Arch Linux | `PKGBUILD` for AUR | V1 |
-| Nix / NixOS | `flake.nix` overlay (likely already usable via the existing flake) | V1 |
-| Windows | zip with binaries + PowerShell installer or `winget` manifest | V1 if feasible |
+| Debian / Ubuntu | `.deb` via `make deb` | Done |
+| Arch Linux | `PKGBUILD` for AUR | Pending |
+| Nix / NixOS | `flake.nix` packages + apps; see `packaging/nix/NOTES.md` | Pending |
+| Windows | deferred | — |
 | Red Hat / Fedora | RPM | deferred |
 | macOS / Homebrew | `Formula` | deferred |
 
-**What needs to exist:**
+**Installed artifacts:**
 
-| Artifact | Install path (Linux) | Notes |
-|----------|---------------------|-------|
-| CLI binary | `/usr/local/bin/quant` | built with `cabal build cli` |
-| LSP binary | `/usr/local/bin/quant-lsp` | built with `cabal build lsp-server` |
-| Stdlib `.qa` files | `/usr/local/share/quant/lib/` | whole `stdlib/` tree |
-| Uninstall | `make uninstall` / package manager | removes all three |
+| Artifact | Install path (Linux) | Status |
+|----------|---------------------|--------|
+| CLI binary | `/usr/local/bin/glados` | Done |
+| LSP binary | `/usr/local/bin/quant-lsp` | Done |
+| Stdlib `.qa` files | `/usr/local/share/quant/lib/` | Done |
+| Uninstall | `make uninstall` / `dpkg -r glados` | Done |
+| Installation docs | `docs/guides/installation.mdx` | Done |
 
-**Layers that need work:**
+**Stdlib path resolution** (CLI, in order):
+1. `--stdlib DIR` flag
+2. `$QUANT_STDLIB` env var
+3. `/usr/local/share/quant/lib/` (system install)
+4. `./std` (dev fallback)
+
+**Remaining:**
 
 | Layer | Change |
 |-------|--------|
-| CLI | Fall back to `/usr/local/share/quant/lib/` when `--stdlib` is not given and the repo-relative path does not exist |
-| Makefile | `install` / `uninstall` targets: `cabal build`, then `install -m 755` + `cp -r` stdlib |
-| `packaging/debian/` | `control`, `rules`, `postinst`; `make deb` produces `.deb` |
 | `packaging/arch/PKGBUILD` | Downloads release tarball, runs `make install` |
-| `flake.nix` | `packages.default` overlay already close; expose `quant` and `quant-lsp` as apps |
-| VS Code extension | `quant-lsp` setting should default to the installed binary path |
-| Docs | "Getting started / install" page per platform |
+| `flake.nix` | Expose `glados` and `quant-lsp` as Nix packages/apps; wrap with `QUANT_STDLIB`; see `packaging/nix/NOTES.md` |
 
 No new language features needed -purely build and packaging work.
+
+---
+
+### 8b. VS Code extension publishing
+
+Two extensions will be published to the VS Code Marketplace:
+
+| Extension | Publisher ID | Contents | Status |
+|-----------|-------------|----------|--------|
+| Quant Language (highlighting) | `quant-team.quant` | Grammar, snippets, language config | Ready to publish via `vsce` |
+| Quant Language (LSP) | `quant-team.quant-lsp` | TypeScript client that auto-starts `quant-lsp` | Pending TypeScript client |
+
+**Highlighting extension** is self-contained and can be published now:
+
+```bash
+cd extension/vscode/quant-highlighter
+vsce publish
+```
+
+**LSP extension** needs a TypeScript `main` entry point using `vscode-languageclient` to auto-start the `quant-lsp` binary. Layers:
+
+| Layer | Change |
+|-------|--------|
+| `package.json` | Add `main`, `activationEvents`, `contributes.configuration` (LSP path setting), `vscode-languageclient` dep |
+| `src/extension.ts` | Start `quant-lsp` as a child process; connect with `LanguageClient`; read `quant-lsp.path` setting with fallback to `PATH` |
+| `packaging/` | New directory `extension/vscode/quant-lsp/` for the second extension |
 
 ---
 
