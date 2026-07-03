@@ -29,6 +29,7 @@ export default defineConfig({
 				{
 					label: 'Guides',
 					items: [
+						{ label: 'Installation', slug: 'guides/installation' },
 						{ label: 'Getting Started', slug: 'guides/getting-started' },
 						{ label: 'Editor Setup', slug: 'guides/editor-setup' },
 						{ label: 'Language Basics', slug: 'guides/language-basics' },

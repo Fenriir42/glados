@@ -1,0 +1,132 @@
+---
+title: Installation
+description: Install the Quant language toolchain on your system
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+The Quant toolchain ships two binaries:
+
+- **`glados`** -- the compiler and runtime (runs `.qa` files)
+- **`quant-lsp`** -- the Language Server Protocol server (IDE integration)
+
+The standard library (`.qa` files) is installed automatically alongside them.
+
+---
+
+## Debian / Ubuntu
+
+<Steps>
+
+1. Download the latest `.deb` package from the [releases page](https://github.com/Sigmapitech/glados/releases).
+
+2. Install it with `dpkg`:
+
+   ```bash
+   sudo dpkg -i glados_1.0.0_amd64.deb
+   ```
+
+3. Verify the installation:
+
+   ```bash
+   glados --help
+   ```
+
+</Steps>
+
+The package installs to:
+
+| Path | Contents |
+|------|----------|
+| `/usr/local/bin/glados` | Compiler and runtime CLI |
+| `/usr/local/bin/quant-lsp` | LSP server |
+| `/usr/local/share/quant/lib/` | Standard library `.qa` files |
+
+To uninstall:
+
+```bash
+sudo dpkg -r glados
+```
+
+---
+
+## From source
+
+Requires GHC 9.8+ and `cabal-install`. The easiest way to get them is via [GHCup](https://www.haskell.org/ghcup/).
+
+<Steps>
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/Sigmapitech/glados
+   cd glados
+   ```
+
+2. Build and install:
+
+   ```bash
+   sudo make install
+   ```
+
+   This builds `glados` and `quant-lsp` with `cabal`, then copies the binaries
+   and stdlib to `/usr/local/`.
+
+3. Verify:
+
+   ```bash
+   glados --help
+   ```
+
+</Steps>
+
+To install to a custom prefix (e.g. `~/.local`):
+
+```bash
+make install PREFIX=~/.local
+```
+
+To uninstall:
+
+```bash
+sudo make uninstall
+```
+
+---
+
+## Nix / NixOS
+
+<Aside type="note">
+Native Nix packaging is in progress. For now, use the development shell which
+provides the full toolchain:
+
+```bash
+nix develop github:Sigmapitech/glados
+glados --help
+```
+</Aside>
+
+---
+
+## Verifying the stdlib
+
+The compiler auto-detects the standard library in this order:
+
+1. `--stdlib DIR` flag (explicit override)
+2. `$QUANT_STDLIB` environment variable
+3. `/usr/local/share/quant/lib/` (system install path)
+4. `./std` (repo-relative fallback for development)
+
+After a system install no configuration is needed. To point at a custom stdlib:
+
+```bash
+export QUANT_STDLIB=/path/to/your/std
+glados compiler run hello.qa
+```
+
+---
+
+## Next steps
+
+- [Editor Setup](/guides/editor-setup/) -- VS Code extension and LSP configuration
+- [Getting Started](/guides/getting-started/) -- Write your first Quant program
