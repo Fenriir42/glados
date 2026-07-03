@@ -212,7 +212,7 @@ Circular imports currently cause a stack overflow.
 
 ---
 
-### 6. Optional / nullable type
+### 6. Optional / nullable type *(done)*
 
 A built-in `option(T)` (or `?T`) that makes null-safety explicit.
 
@@ -343,7 +343,7 @@ Realistic V1 sequence:
 2. Error field access + match expression *(done)*
 3. First-class functions *(done)*
 4. Dict type
-5. Optional type
+5. Optional type *(done)*
 6. Generics / parametric polymorphism *(done)*
 7. Stdlib additions (json, regex, string.format, generic array.map/filter)
 8. FFI

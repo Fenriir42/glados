@@ -183,6 +183,14 @@ isWildcardIdent :: Located TokenContent -> Bool
 isWildcardIdent (Located _ (TokIdentifier "_")) = True
 isWildcardIdent _ = False
 
+isSomePat :: Located TokenContent -> Bool
+isSomePat (Located _ (TokIdentifier "some")) = True
+isSomePat _ = False
+
+isNonePat :: Located TokenContent -> Bool
+isNonePat (Located _ (TokIdentifier "none")) = True
+isNonePat _ = False
+
 parseMatchPattern :: TokenParser (MatchPattern ann)
 parseMatchPattern =
   MP.choice
@@ -201,6 +209,17 @@ parseMatchPattern =
         Located vspan (TokIdentifier v) <- MP.satisfy isIdentifier
         _ <- matchSymbol ")"
         return (MatchErr (Located espan (ErrorName ename)) (Located vspan (VarName v))),
+      -- some(v)
+      MP.try $ do
+        _ <- MP.satisfy isSomePat
+        _ <- matchSymbol "("
+        Located vspan (TokIdentifier v) <- MP.satisfy isIdentifier
+        _ <- matchSymbol ")"
+        return (MatchSome (Located vspan (VarName v))),
+      -- none
+      MP.try $ do
+        _ <- MP.satisfy isNonePat
+        return MatchNone,
       -- range: expr..expr  (must be tried before MatchLit)
       MP.try $ do
         lo <- parseExpr

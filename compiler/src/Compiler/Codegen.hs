@@ -23,7 +23,8 @@ import AST.Types.AST
     Visibility (..),
   )
 import AST.Types.Common
-  ( FuncName (..),
+  ( ErrorName (..),
+    FuncName (..),
     Located (..),
     SourceSpan,
     VarName (..),
@@ -341,6 +342,8 @@ compileStmt = \case
             void $ emitInstruction (IPush (VInt 0))
           TypePrimitive (PrimFloat _) ->
             void $ emitInstruction (IPush (VFloat 0.0))
+          TypeOption _ ->
+            void $ emitInstruction (INewError (ErrorName "None") [])
           _ ->
             void $ emitInstruction (IPush VUnit)
     void $ emitInstruction (IStore (unLocated name))
@@ -626,6 +629,8 @@ compileExpr = \case
   ExprMust innerExpr -> do
     compileExpr (unLocated innerExpr)
     void $ emitInstruction IMustOp
+  ExprSome innerExpr -> compileExpr (unLocated innerExpr)
+  ExprNone -> void $ emitInstruction (INewError (ErrorName "None") [])
   ExprLambda params retType body -> do
     n <- gets csTempCount
     modify $ \s -> s {csTempCount = n + 1}
@@ -704,6 +709,28 @@ compileMatchArm subjVar (MatchArm pat body) = case pat of
     void $ emitInstruction (ILoad subjVar)
     void $ emitInstruction (IStore v)
     addToScope v
+    compileStmt (unLocated body)
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    nextArm <- gets (InstructionPointer . csInstructionCounter)
+    modify $ \s -> s {csInstructions = patchJump (csInstructions s) falseJmp nextArm}
+    return [exitJmp]
+  MatchSome locVar -> do
+    void $ emitInstruction (ILoad subjVar)
+    void $ emitInstruction IIsOk
+    falseJmp <- emitInstruction (IJumpFalse (InstructionPointer 0))
+    let v = unLocated locVar
+    void $ emitInstruction (ILoad subjVar)
+    void $ emitInstruction (IStore v)
+    addToScope v
+    compileStmt (unLocated body)
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    nextArm <- gets (InstructionPointer . csInstructionCounter)
+    modify $ \s -> s {csInstructions = patchJump (csInstructions s) falseJmp nextArm}
+    return [exitJmp]
+  MatchNone -> do
+    void $ emitInstruction (ILoad subjVar)
+    void $ emitInstruction (IIsErr (ErrorName "None"))
+    falseJmp <- emitInstruction (IJumpFalse (InstructionPointer 0))
     compileStmt (unLocated body)
     exitJmp <- emitInstruction (IJump (InstructionPointer 0))
     nextArm <- gets (InstructionPointer . csInstructionCounter)

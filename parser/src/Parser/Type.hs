@@ -15,7 +15,7 @@ import AST.Types.Type
     QualifiedType (QualifiedType),
     ResultType (ResultType),
     Signedness (..),
-    Type (TypeArray, TypeFunction, TypePrimitive, TypeResult, TypeStruct),
+    Type (TypeArray, TypeFunction, TypeOption, TypePrimitive, TypeResult, TypeStruct),
     defaultFloatType,
     defaultIntType,
   )
@@ -168,10 +168,23 @@ parseErrorOrType = do
   Located endSpan _ <- matchSymbol ")"
   return $ Located (startSpan <> errSpan <> endSpan) (TypeResult (ResultType successType (ErrorName errName)))
 
+isOptionIdent :: Located TokenContent -> Bool
+isOptionIdent (Located _ (TokIdentifier "option")) = True
+isOptionIdent _ = False
+
+parseOptionType :: TokenParser (Located Type)
+parseOptionType = MP.try $ do
+  Located startSpan _ <- MP.satisfy isOptionIdent
+  _ <- matchSymbol "("
+  Located _ innerType <- parseType
+  Located endSpan _ <- matchSymbol ")"
+  return $ Located (startSpan <> endSpan) (TypeOption innerType)
+
 parseType :: TokenParser (Located Type)
 parseType =
   MP.choice
     [ parseErrorOrType,
+      parseOptionType,
       fmap TypePrimitive <$> parsePrimitiveType,
       fmap TypeArray <$> parseArrayType,
       fmap TypeFunction <$> parseFunctionType,

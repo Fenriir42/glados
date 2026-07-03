@@ -316,8 +316,10 @@ data Type
     TypeFunction FunctionType
   | -- | Reference to a struct type by name
     TypeStruct TypeName
-  | -- | Result/error types: @int | Error@
+  | -- | Result/error types: @orerror(T, E)@
     TypeResult ResultType
+  | -- | Nullable/optional type: @option(T)@
+    TypeOption Type
   | -- | Reference to a named type (for forward refs / error-match bindings)
     TypeNamed TypeName
   | -- | Generic type variable: @T@ in @fn foo[T](x: T) -> T@
@@ -332,6 +334,7 @@ instance Show Type where
   show (TypeFunction func) = show func
   show (TypeStruct name) = T.unpack (unTypeName name)
   show (TypeResult res) = show res
+  show (TypeOption t) = "option(" ++ show t ++ ")"
   show (TypeNamed name) = T.unpack (unTypeName name)
   show (TypeVar name) = T.unpack (unTypeName name)
 

@@ -176,6 +176,10 @@ data MatchPattern ann
     MatchOk (Located VarName)
   | -- | Matches a specific error: @err(ErrorName v)@
     MatchErr (Located ErrorName) (Located VarName)
+  | -- | Matches the some branch of an option value: @some(v)@
+    MatchSome (Located VarName)
+  | -- | Matches the none branch of an option value: @none@
+    MatchNone
   | -- | Matches a literal value (int, string, bool)
     MatchLit (Located (Expr ann))
   | -- | Matches an inclusive integer range: @lo..hi@
@@ -229,6 +233,10 @@ data Expr ann
       [(Located FieldName, Located (Expr ann))]
   | ExprTry (Located (Expr ann))
   | ExprMust (Located (Expr ann))
+  | -- | Wrap a value in an option: @some(expr)@
+    ExprSome (Located (Expr ann))
+  | -- | The empty option value: @none@
+    ExprNone
   | -- Anonymous function expression: fn(params) -> ret { body }
     ExprLambda
       [Located Parameter]

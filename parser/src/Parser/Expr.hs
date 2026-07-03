@@ -176,6 +176,27 @@ parseExprTry = do
   expr <- parseExpr
   return $ Located (startSpan <> getSpan expr) (ExprTry expr)
 
+isSomeIdent :: Located TokenContent -> Bool
+isSomeIdent (Located _ (TokIdentifier "some")) = True
+isSomeIdent _ = False
+
+isNoneIdent :: Located TokenContent -> Bool
+isNoneIdent (Located _ (TokIdentifier "none")) = True
+isNoneIdent _ = False
+
+parseExprSome :: TokenParser (Located (Expr ann))
+parseExprSome = MP.try $ do
+  Located startSpan _ <- MP.satisfy isSomeIdent
+  _ <- matchSymbol "("
+  inner <- parseExpr
+  Located endSpan _ <- matchSymbol ")"
+  return $ Located (startSpan <> endSpan) (ExprSome inner)
+
+parseExprNone :: TokenParser (Located (Expr ann))
+parseExprNone = do
+  Located sp _ <- MP.satisfy isNoneIdent
+  return $ Located sp ExprNone
+
 parseExprError :: TokenParser (Located (Expr ann))
 parseExprError = do
   Located startSpan _ <- matchKeyword "error"
@@ -229,6 +250,8 @@ parseUnary =
     [ parseExprMust,
       parseExprTry,
       parseExprError,
+      parseExprSome,
+      parseExprNone,
       do
         op <- parseUnaryOp
         expr <- parseUnary

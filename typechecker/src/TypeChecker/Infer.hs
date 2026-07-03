@@ -215,12 +215,19 @@ inferExpr env (Located sp expr) = do
       mInner <- inferExpr env inner
       case mInner of
         Just (TypeResult (ResultType successType _)) -> return (Just successType)
+        Just (TypeOption innerType) -> return (Just innerType)
         other -> return other
     go (ExprMust inner) = do
       mInner <- inferExpr env inner
       case mInner of
         Just (TypeResult (ResultType successType _)) -> return (Just successType)
+        Just (TypeOption innerType) -> return (Just innerType)
         other -> return other
+    go (ExprSome inner) = do
+      mT <- inferExpr env inner
+      return (fmap TypeOption mT)
+    go ExprNone =
+      return (Just (TypeOption (TypePrimitive PrimNone)))
     go (ExprLambda params retQType body) = do
       let paramEnv =
             foldl
@@ -433,6 +440,14 @@ checkMatchArm env mSubjType (MatchArm pat body) = do
       let errQt = QualifiedType Mutable (TypeNamed (TypeName (unErrorName ename)))
       recordVarUse vsp v vsp
       return (insertVarWithSpan v errQt vsp env)
+    MatchSome (Located vsp v) -> do
+      let innerQt = case mSubjType of
+            Just (TypeOption t) -> QualifiedType Mutable t
+            Just t -> QualifiedType Mutable t
+            Nothing -> QualifiedType Mutable (TypePrimitive PrimNone)
+      recordVarUse vsp v vsp
+      return (insertVarWithSpan v innerQt vsp env)
+    MatchNone -> return env
     MatchLit e -> void (inferExpr env e) >> return env
     MatchRange lo hi -> do
       void (inferExpr env lo)
@@ -490,6 +505,10 @@ typesCompatible t1 t2 = case (t1, t2) of
   (TypeResult (ResultType _ e1), TypeResult (ResultType _ e2)) -> e1 == e2
   -- returning a plain success value into an orerror return type
   (t, TypeResult (ResultType expected _)) -> typesCompatible t expected
+  -- any two option types are compatible (none has inner type PrimNone)
+  (TypeOption _, TypeOption _) -> True
+  -- returning a plain value into an option type
+  (t, TypeOption expected) -> typesCompatible t expected
   _ -> False
 
 -- ---------------------------------------------------------------------------
