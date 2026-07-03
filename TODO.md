@@ -173,6 +173,77 @@ Functions: `new`, `push_front`, `push_back`, `pop_front`, `pop_back`,
 
 ## Nice to have
 
+### `std/conv.qa`: type conversion and character classification
+
+`string.to_int` / `string.from_int` already exist (the atoi/itoa equivalents).
+This module adds the missing pieces: base conversion, safe parsing, and
+single-character predicates.
+
+```quant
+from conv import to_hex, from_hex, to_bin, from_bin, parse_int, is_digit, is_alpha
+
+fn main() -> void {
+    println(to_hex(255));           // ff
+    println(from_hex("ff"));        // 255
+    println(to_bin(10));            // 1010
+    println(from_bin("1010"));      // 10
+
+    r: option(int) = parse_int("42");
+    bad: option(int) = parse_int("nope");
+
+    println(is_digit("7"));         // True
+    println(is_alpha("z"));         // True
+    println(is_space(" "));         // True
+}
+```
+
+**Base conversion (pure Quant: lookup table via `string.index_of`):**
+
+| Function | Description |
+|----------|-------------|
+| `to_hex(n)` | int → lowercase hex string (`255` → `"ff"`) |
+| `from_hex(s)` | hex string → int |
+| `to_bin(n)` | int → binary string (`10` → `"1010"`) |
+| `from_bin(s)` | binary string → int |
+| `to_oct(n)` | int → octal string |
+| `from_oct(s)` | octal string → int |
+| `to_base(n, base)` | int → string in arbitrary base 2–36 |
+
+**Safe parsing (pure Quant: returns `option(T)`, never panics):**
+
+| Function | Description |
+|----------|-------------|
+| `parse_int(s)` | `option(int)`/`None` on invalid input |
+| `parse_float(s)` | `option(float)` |
+| `parse_bool(s)` | `bool`/`"true"`/`"True"`/`"1"` → `True`, everything else `False` |
+
+**Character predicates (pure Quant: `string.contains` over a constant string):**
+
+| Function | Description |
+|----------|-------------|
+| `is_digit(c)` | `"0"`..`"9"` |
+| `is_lower(c)` | `"a"`..`"z"` |
+| `is_upper(c)` | `"A"`..`"Z"` |
+| `is_alpha(c)` | letter |
+| `is_alnum(c)` | letter or digit |
+| `is_space(c)` | space, tab, newline, carriage return |
+| `is_hex_digit(c)` | `"0"`..`"9"`, `"a"`..`"f"`, `"A"`..`"F"` |
+| `is_punct(c)` | common punctuation |
+
+**Needs a builtin (one small addition to VM):**
+
+| Function | Description |
+|----------|-------------|
+| `ord(c)` | single-char string → ASCII code (`"A"` → `65`) |
+| `chr(n)` | ASCII code → single-char string (`65` → `"A"`) |
+
+`ord`/`chr` require mapping 128 characters to integers. A pure Quant
+implementation is possible (build a lookup dict at call time) but
+too slow to be useful, worth adding as a two-line Haskell builtin
+(`Data.Char.ord` / `Data.Char.chr`).
+
+---
+
 ### `std/base64.qa`: Base64 encoding/decoding
 
 Useful for `Authorization: Basic ...` headers in HTTP requests. Pure
@@ -241,8 +312,10 @@ option         standalone
 test           needs println, sys.exit
 set            needs dict.*
 iter           needs array.*, first-class functions (done)
+conv           needs string.char_at, string.index_of, option (for parse_int/float)
+               ord/chr need one small Haskell builtin (Data.Char.ord/chr)
 csv            needs string.split, string.join
-url            needs string.char_at, string.substring
+url            needs string.char_at, string.substring, conv (is_alnum)
 queue/deque    needs array.*
 base64         needs string.char_at, string.repeat, array.*
 math extras    standalone
