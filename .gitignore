@@ -10,6 +10,8 @@ out/
 
 # outputs
 lisp-interpreter
+*.deb
+.deb-staging/
 
 # nix
 result

@@ -1,0 +1,16 @@
+Package: glados
+Version: VERSION
+Architecture: amd64
+Maintainer: Fenriir42 <raid3r2205@gmail.com>
+Section: devel
+Priority: optional
+Depends: libgmp10 (>= 2:6.0), libc6 (>= 2.17), zlib1g (>= 1:1.2.11)
+Description: The Quant programming language
+ Quant is a statically-typed scripting language with a stack-based bytecode VM,
+ a full type checker, generics, structs, error handling, and a Language Server
+ Protocol server for IDE integration.
+ .
+ Installed components:
+  - glados      -- compiler and runtime CLI
+  - quant-lsp   -- LSP server (works with VS Code and any LSP client)
+  - stdlib       -- standard library .qa files

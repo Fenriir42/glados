@@ -76,6 +76,44 @@ fclean: clean
 .PHONY: re
 re: fclean all
 
+# ---------------------------------------------------------------------------
+# Install / uninstall / packaging
+
+VERSION := 1.0.0
+DESTDIR  ?=
+PREFIX   ?= /usr/local
+
+BIN_DEST   = $(DESTDIR)$(PREFIX)/bin
+SHARE_DEST = $(DESTDIR)$(PREFIX)/share/quant/lib
+
+.PHONY: install
+install:
+	@ cabal build cli glados-lsp
+	@ install -d $(BIN_DEST) $(SHARE_DEST)
+	@ install -m 755 $(shell cabal -v0 list-bin exe:cli) $(BIN_DEST)/glados
+	@ install -m 755 $(shell cabal -v0 list-bin exe:glados-lsp) $(BIN_DEST)/quant-lsp
+	@ cp -r std/. $(SHARE_DEST)/
+	@ $(LOG_TIME) "Install $(C_GREEN)glados$(C_RESET) -> $(BIN_DEST)/glados"
+	@ $(LOG_TIME) "Install $(C_GREEN)quant-lsp$(C_RESET) -> $(BIN_DEST)/quant-lsp"
+	@ $(LOG_TIME) "Install $(C_GREEN)stdlib$(C_RESET) -> $(SHARE_DEST)"
+
+.PHONY: uninstall
+uninstall:
+	@ rm -f $(PREFIX)/bin/glados $(PREFIX)/bin/quant-lsp
+	@ rm -rf $(PREFIX)/share/quant
+	@ $(LOG_TIME) "Uninstall $(C_RED)glados$(C_RESET)"
+
+.PHONY: deb
+deb:
+	@ rm -rf .deb-staging
+	@ $(MAKE) install DESTDIR=.deb-staging PREFIX=/usr/local
+	@ install -d .deb-staging/DEBIAN
+	@ sed 's/VERSION/$(VERSION)/g' packaging/debian/control > .deb-staging/DEBIAN/control
+	@ install -m 755 packaging/debian/postinst .deb-staging/DEBIAN/postinst
+	@ dpkg-deb --build .deb-staging quant_$(VERSION)_amd64.deb
+	@ rm -rf .deb-staging
+	@ $(LOG_TIME) "Package $(C_CYAN)quant_$(VERSION)_amd64.deb$(C_RESET)"
+
 ifneq ($(shell command -v tput),)
   ifneq ($(shell tput colors),0)
 

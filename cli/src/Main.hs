@@ -21,6 +21,8 @@ import qualified Data.Text as T
 import Lib (lexFile)
 import Options.Applicative
 import Parser.Decl (parseDecl)
+import System.Directory (doesDirectoryExist)
+import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
 import System.FilePath (takeDirectory)
 import System.IO (hIsTerminalDevice, stdout)
@@ -59,8 +61,21 @@ opts =
 main :: IO ()
 main = execParser opts >>= runCompiler
 
+-- | Resolve the stdlib directory: --stdlib flag > $QUANT_STDLIB env > system
+-- install path > repo-relative fallback for development.
+resolveStdlib :: Maybe FilePath -> IO FilePath
+resolveStdlib (Just dir) = return dir
+resolveStdlib Nothing = do
+  env <- lookupEnv "QUANT_STDLIB"
+  case env of
+    Just dir -> return dir
+    Nothing -> do
+      let systemPath = "/usr/local/share/quant/lib"
+      exists <- doesDirectoryExist systemPath
+      return (if exists then systemPath else "./std")
+
 runCompiler :: Compiler.Options -> IO ()
-runCompiler (Compiler.Options mFile dump mOut mLoad stdlibDir) =
+runCompiler (Compiler.Options mFile dump mOut mLoad mStdlib) =
   case mLoad of
     Just bcFile -> do
       bs <- BSL.readFile bcFile
@@ -68,6 +83,7 @@ runCompiler (Compiler.Options mFile dump mOut mLoad stdlibDir) =
       execute bytecodes
     Nothing -> do
       filePath <- maybe (die "Specify a source file or --load FILE") return mFile
+      stdlibDir <- resolveStdlib mStdlib
       bytecodes <- compileSource stdlibDir filePath
       if dump
         then putStr (disassemble bytecodes)
