@@ -1,0 +1,59 @@
+# Quant Standard Library - Socket Module
+
+// Opens a TCP connection to `host`:`port`.
+// Returns a socket id (>= 0) on success, -1 on failure.
+fn connect(host: str, port: int) -> int {
+    return socket.connect(host, port);
+}
+
+// Creates a TCP server socket bound to `port` with the given `backlog`.
+// Returns a socket id (>= 0) on success, -1 on failure.
+fn listen(port: int, backlog: int) -> int {
+    return socket.listen(port, backlog);
+}
+
+// Accepts one incoming connection on a server socket.
+// Blocks until a client connects.
+// Returns a client socket id (>= 0) on success, -1 on failure.
+fn accept(server: int) -> int {
+    return socket.accept(server);
+}
+
+// Sends `data` on socket `sock`.
+// Returns the number of bytes sent, or -1 on error.
+fn send(sock: int, data: str) -> int {
+    return socket.send(sock, data);
+}
+
+// Receives up to `n` bytes from socket `sock`.
+// Returns the received data, or "" on close or error.
+fn recv(sock: int, n: int) -> str {
+    return socket.recv(sock, n);
+}
+
+// Closes socket `sock`. Returns true on success.
+fn close(sock: int) -> bool {
+    return socket.close(sock);
+}
+
+// Returns the remote address as "host:port", or "" on error.
+fn peer_addr(sock: int) -> str {
+    return socket.peer_addr(sock);
+}
+
+// Sends a full HTTP/1.0 GET request and returns the raw response.
+// Closes the connection after receiving `buf_size` bytes.
+fn http_get(host: str, port: int, path: str, buf_size: int) -> str {
+    sock: int = socket.connect(host, port);
+    if (sock < 0) {
+        return "";
+    };
+    req: str = string.concat("GET ", path);
+    req = string.concat(req, " HTTP/1.0\r\nHost: ");
+    req = string.concat(req, host);
+    req = string.concat(req, "\r\nConnection: close\r\n\r\n");
+    socket.send(sock, req);
+    resp: str = socket.recv(sock, buf_size);
+    socket.close(sock);
+    return resp;
+}

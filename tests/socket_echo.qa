@@ -1,0 +1,69 @@
+// TCP echo server and a self-test using two sequential connections.
+// Because Quant has no concurrency, this demo shows the server API
+// and error path only -- a real echo server would loop on accept().
+//
+// Run: glados compiler run tests/socket_echo.qa
+
+fn run_server(port: int) -> void {
+    srv: int = socket.listen(port, 1);
+    if (srv < 0) {
+        println("listen failed -- port may be in use");
+        return;
+    };
+    println("server listening on port 8089");
+
+    client: int = socket.accept(srv);
+    if (client < 0) {
+        println("accept failed");
+        socket.close(srv);
+        return;
+    };
+
+    addr: str = socket.peer_addr(client);
+    println(string.concat("client connected from ", addr));
+
+    msg: str = socket.recv(client, 256);
+    println(string.concat("received: ", msg));
+
+    n: int = socket.send(client, msg);
+    println(string.concat("echoed ", string.from_int(n)));
+    println(string.concat(" bytes to ", addr));
+
+    socket.close(client);
+    socket.close(srv);
+}
+
+fn run_client(port: int) -> void {
+    sock: int = socket.connect("127.0.0.1", port);
+    if (sock < 0) {
+        println("client connect failed");
+        return;
+    };
+    socket.send(sock, "hello from quant");
+    reply: str = socket.recv(sock, 256);
+    println(string.concat("echo reply: ", reply));
+    socket.close(sock);
+}
+
+fn main() -> void {
+    // Demonstrate the server-side path inline (no threading -- just API smoke test)
+    println("-- server listen/close smoke test --");
+    srv: int = socket.listen(18089, 1);
+    if (srv >= 0) {
+        println("listen ok");
+        socket.close(srv);
+        println("close ok");
+    } else {
+        println("listen returned -1 (port in use -- ok to skip)");
+    };
+
+    // Demonstrate the client error path
+    println("");
+    println("-- client connect to closed port --");
+    sock: int = socket.connect("127.0.0.1", 19999);
+    if (sock < 0) {
+        println("connect returned -1 (expected -- nothing listening)");
+    } else {
+        socket.close(sock);
+    };
+}

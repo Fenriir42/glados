@@ -24,6 +24,7 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as AesonKey
 import qualified Data.Aeson.KeyMap as AesonKM
 import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -33,6 +34,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
+import qualified Network.Socket as NS
+import qualified Network.Socket.ByteString as NSB
 import System.Environment (getArgs)
 import System.Exit (ExitCode (..), exitWith)
 import System.Posix.IO (fdWrite)
@@ -72,6 +75,7 @@ data VMState = VMState
     vmHeap :: Map Int (Map Int Value),
     vmDictHeap :: Map Int (Map Value Value),
     vmStructHeap :: Map Int (Map Text Value),
+    vmSocketHeap :: Map Int NS.Socket,
     vmNextId :: Int,
     vmFunctions :: Map FuncName Bytecode,
     vmCurrentFunc :: FuncName
@@ -100,6 +104,7 @@ runProgram bytecodes = do
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
                 vmStructHeap = Map.empty,
+                vmSocketHeap = Map.empty,
                 vmNextId = 0,
                 vmFunctions = funcs,
                 vmCurrentFunc = FuncName "main"
@@ -692,6 +697,105 @@ callHeapBuiltin name args = case (name, args) of
     did <- allocDict
     mapM_ (\(k, v) -> dictInsert did (VString (AesonKey.toText k)) (aesonToStr v)) (AesonKM.toList obj)
     return (VDictRef did)
+  -- socket.connect : str -> int -> int  (TCP client; returns socket id or -1)
+  ("socket.connect", [host, VInt port]) -> do
+    strings <- gets vmStrings
+    let h = T.unpack (resolveStr' strings host)
+    r <- S.liftIO $ try $ do
+      infos <-
+        NS.getAddrInfo
+          (Just NS.defaultHints {NS.addrSocketType = NS.Stream})
+          (Just h)
+          (Just (show port))
+      case infos of
+        [] -> return Nothing
+        (ai : _) -> do
+          sock <- NS.socket (NS.addrFamily ai) NS.Stream NS.defaultProtocol
+          NS.connect sock (NS.addrAddress ai)
+          return (Just sock)
+    case (r :: Either SomeException (Maybe NS.Socket)) of
+      Left _ -> return (VInt (-1))
+      Right Nothing -> return (VInt (-1))
+      Right (Just sock) -> VInt . fromIntegral <$> allocSocket sock
+
+  -- socket.listen : int -> int -> int  (TCP server; returns socket id or -1)
+  ("socket.listen", [VInt port, VInt backlog]) -> do
+    r <- S.liftIO $ try $ do
+      infos <-
+        NS.getAddrInfo
+          (Just NS.defaultHints {NS.addrSocketType = NS.Stream, NS.addrFlags = [NS.AI_PASSIVE]})
+          Nothing
+          (Just (show port))
+      case infos of
+        [] -> ioError $ userError "socket.listen: getAddrInfo returned no results"
+        (ai : _) -> do
+          sock <- NS.socket (NS.addrFamily ai) NS.Stream NS.defaultProtocol
+          NS.setSocketOption sock NS.ReuseAddr 1
+          NS.bind sock (NS.addrAddress ai)
+          NS.listen sock (fromIntegral backlog)
+          return sock
+    case (r :: Either SomeException NS.Socket) of
+      Left _ -> return (VInt (-1))
+      Right sock -> VInt . fromIntegral <$> allocSocket sock
+
+  -- socket.accept : int -> int  (blocks until a client connects; returns client socket id or -1)
+  ("socket.accept", [VInt sid]) -> do
+    sockHeap <- gets vmSocketHeap
+    case Map.lookup (fromIntegral sid) sockHeap of
+      Nothing -> return (VInt (-1))
+      Just srv -> do
+        r <- S.liftIO $ try $ NS.accept srv
+        case (r :: Either SomeException (NS.Socket, NS.SockAddr)) of
+          Left _ -> return (VInt (-1))
+          Right (conn, _) -> VInt . fromIntegral <$> allocSocket conn
+
+  -- socket.send : int -> str -> int  (returns bytes sent or -1)
+  ("socket.send", [VInt sid, val]) -> do
+    strings <- gets vmStrings
+    let bs = TE.encodeUtf8 (resolveStr' strings val)
+    sockHeap <- gets vmSocketHeap
+    case Map.lookup (fromIntegral sid) sockHeap of
+      Nothing -> return (VInt (-1))
+      Just sock -> do
+        r <- S.liftIO $ try $ NSB.send sock bs
+        case (r :: Either SomeException Int) of
+          Left _ -> return (VInt (-1))
+          Right n -> return (VInt (fromIntegral n))
+
+  -- socket.recv : int -> int -> str  (returns received data or "" on close/error)
+  ("socket.recv", [VInt sid, VInt n]) -> do
+    sockHeap <- gets vmSocketHeap
+    case Map.lookup (fromIntegral sid) sockHeap of
+      Nothing -> return (VString "")
+      Just sock -> do
+        r <- S.liftIO $ try $ NSB.recv sock (fromIntegral n)
+        case (r :: Either SomeException BS.ByteString) of
+          Left _ -> return (VString "")
+          Right bs -> return (VString (TE.decodeUtf8Lenient bs))
+
+  -- socket.close : int -> bool
+  ("socket.close", [VInt sid]) -> do
+    sockHeap <- gets vmSocketHeap
+    case Map.lookup (fromIntegral sid) sockHeap of
+      Nothing -> return (VBool False)
+      Just sock -> do
+        r <- S.liftIO $ try $ NS.close sock
+        case (r :: Either SomeException ()) of
+          Left _ -> return (VBool False)
+          Right _ -> do
+            modify $ \s -> s {vmSocketHeap = Map.delete (fromIntegral sid) (vmSocketHeap s)}
+            return (VBool True)
+
+  -- socket.peer_addr : int -> str  (returns "host:port" of the remote end)
+  ("socket.peer_addr", [VInt sid]) -> do
+    sockHeap <- gets vmSocketHeap
+    case Map.lookup (fromIntegral sid) sockHeap of
+      Nothing -> return (VString "")
+      Just sock -> do
+        r <- S.liftIO $ try $ NS.getPeerName sock
+        case (r :: Either SomeException NS.SockAddr) of
+          Left _ -> return (VString "")
+          Right addr -> return (VString (T.pack (show addr)))
   _ ->
     throwError $
       VMRuntimeError $
@@ -751,6 +855,12 @@ quantToAeson st strings val = case val of
         AesonKM.fromList
           [(AesonKey.fromText f, quantToAeson st strings v) | (f, v) <- Map.toList m]
   _ -> Aeson.String (T.pack (show val))
+
+allocSocket :: NS.Socket -> VM Int
+allocSocket sock = do
+  sid <- gets vmNextId
+  modify $ \s -> s {vmSocketHeap = Map.insert sid sock (vmSocketHeap s), vmNextId = sid + 1}
+  return sid
 
 allocDict :: VM Int
 allocDict = do

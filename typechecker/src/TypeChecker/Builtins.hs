@@ -65,6 +65,11 @@ builtinReturnType (FuncName n)
   | n == "json.decode_str" = stringT
   | n == "json.keys" = Nothing -- returns [str]
   | n == "json.parse" = Nothing -- returns dict(str, str)
+  -- socket.*
+  | n `elem` ["socket.connect", "socket.listen", "socket.accept", "socket.send"] = intT
+  | n == "socket.recv" = stringT
+  | n == "socket.close" = boolT
+  | n == "socket.peer_addr" = stringT
   | otherwise = Nothing
   where
     voidFuncs =
@@ -136,4 +141,4 @@ isKnownBuiltin (FuncName n) =
     || any (`T.isPrefixOf` n) modulePrefixes
   where
     standaloneBuiltins = ["print", "println", "len", "push", "pop"]
-    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict.", "json."]
+    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict.", "json.", "socket."]

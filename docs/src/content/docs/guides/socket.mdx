@@ -1,0 +1,159 @@
+---
+title: Sockets
+description: TCP networking with Quant's socket module
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Quant's `socket` module provides raw TCP networking. Sockets are identified by an integer handle returned by `socket.connect` or `socket.listen`. All operations return `-1` (or `""` / `False`) on failure, there are no exceptions to catch.
+
+For higher-level helpers, import `std/socket.qa`.
+
+---
+
+## TCP client
+
+```quant
+fn main() -> void {
+    sock: int = socket.connect("example.com", 80);
+    if (sock < 0) {
+        println("connection failed");
+        return;
+    };
+
+    req: str = "GET / HTTP/1.0\r\nHost: example.com\r\nConnection: close\r\n\r\n";
+    socket.send(sock, req);
+
+    resp: str = socket.recv(sock, 4096);
+    println(resp);
+    socket.close(sock);
+}
+```
+
+`socket.connect` resolves the hostname and opens the connection in one call. The returned handle is used for all subsequent operations on that connection.
+
+---
+
+## TCP server
+
+```quant
+fn main() -> void {
+    srv: int = socket.listen(8080, 5);
+    if (srv < 0) {
+        println("listen failed");
+        return;
+    };
+    println("listening on :8080");
+
+    // accept one client and echo back what it sends
+    client: int = socket.accept(srv);
+    if (client >= 0) {
+        data: str = socket.recv(client, 1024);
+        socket.send(client, data);
+        socket.close(client);
+    };
+
+    socket.close(srv);
+}
+```
+
+<Aside type="note">
+`socket.accept` blocks until a client connects. Quant has no concurrency primitives yet, so each `accept` handles one connection at a time.
+</Aside>
+
+---
+
+## Error handling
+
+Every socket operation signals failure with a sentinel value instead of throwing a runtime error:
+
+| Operation | Failure value |
+|-----------|--------------|
+| `socket.connect` | `-1` |
+| `socket.listen` | `-1` |
+| `socket.accept` | `-1` |
+| `socket.send` | `-1` |
+| `socket.recv` | `""` (empty string) |
+| `socket.close` | `False` |
+
+Always check the return value before continuing:
+
+```quant
+fn main() -> void {
+    sock: int = socket.connect("127.0.0.1", 9999);
+    if (sock < 0) {
+        println("could not connect");
+        return;
+    };
+    n: int = socket.send(sock, "hello");
+    if (n < 0) {
+        println("send failed");
+        socket.close(sock);
+        return;
+    };
+    socket.close(sock);
+}
+```
+
+---
+
+## Peer address
+
+```quant
+fn handle(client: int) -> void {
+    addr: str = socket.peer_addr(client);
+    println(addr);           // e.g. "93.184.216.34:51234"
+    socket.close(client);
+}
+```
+
+---
+
+## std/socket helpers
+
+`std/socket.qa` re-exports all primitives under shorter names and adds one convenience function:
+
+```quant
+from socket import connect, send, recv, close, http_get
+
+fn main() -> void {
+    // http_get builds and sends a minimal HTTP/1.0 GET request,
+    // reads up to buf_size bytes of response, and closes the socket.
+    resp: str = http_get("example.com", 80, "/", 8192);
+    println(resp);
+}
+```
+
+`http_get` is useful for quick API calls before a full `net/http` module exists. It does not follow redirects or parse headers.
+
+---
+
+## Raw HTTP request
+
+<Tabs>
+  <TabItem label="With std/socket">
+    ```quant
+    from socket import http_get
+
+    fn main() -> void {
+        body: str = http_get("httpbin.org", 80, "/ip", 4096);
+        println(body);
+    }
+    ```
+  </TabItem>
+  <TabItem label="Raw builtins">
+    ```quant
+    fn main() -> void {
+        sock: int = socket.connect("httpbin.org", 80);
+        if (sock < 0) { return; };
+
+        req: str = "GET /ip HTTP/1.0\r\nHost: httpbin.org\r\nConnection: close\r\n\r\n";
+        socket.send(sock, req);
+
+        resp: str = socket.recv(sock, 4096);
+        println(resp);
+        socket.close(sock);
+    }
+    ```
+  </TabItem>
+</Tabs>

@@ -50,6 +50,7 @@ isHeapBuiltin name =
   name `elem` heapBuiltins
     || "dict." `T.isPrefixOf` name
     || "json." `T.isPrefixOf` name
+    || "socket." `T.isPrefixOf` name
 
 pureBuiltins :: [Text]
 pureBuiltins = ["print", "println"]

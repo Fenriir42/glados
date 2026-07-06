@@ -1,0 +1,34 @@
+// Minimal HTTP/1.0 client using raw socket builtins.
+// Connects to httpbin.org, fetches /ip, and prints the response.
+//
+// Run: glados compiler run tests/socket_http.qa
+
+fn send_request(sock: int, host: str, path: str) -> void {
+    req: str = "GET ";
+    req = string.concat(req, path);
+    req = string.concat(req, " HTTP/1.0\r\nHost: ");
+    req = string.concat(req, host);
+    req = string.concat(req, "\r\nConnection: close\r\n\r\n");
+    socket.send(sock, req);
+}
+
+fn http_get(host: str, port: int, path: str) -> str {
+    sock: int = socket.connect(host, port);
+    if (sock < 0) {
+        return "";
+    };
+    send_request(sock, host, path);
+    resp: str = socket.recv(sock, 8192);
+    socket.close(sock);
+    return resp;
+}
+
+fn main() -> void {
+    println("connecting to httpbin.org:80 ...");
+    resp: str = http_get("httpbin.org", 80, "/ip");
+    if (string.is_empty(resp)) {
+        println("error: connection failed");
+        sys.exit(1);
+    };
+    println(resp);
+}

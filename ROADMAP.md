@@ -303,7 +303,7 @@ glados compiler run hello.qa   # stdlib auto-resolved from /usr/local/share/quan
 | Debian / Ubuntu | `.deb` via `make deb` | Done |
 | Arch Linux | `PKGBUILD` for AUR | Pending |
 | Nix / NixOS | `flake.nix` packages + apps; see `packaging/nix/NOTES.md` | Pending |
-| Windows | deferred | — |
+| Windows | deferred | / |
 | Red Hat / Fedora | RPM | deferred |
 | macOS / Homebrew | `Formula` | deferred |
 

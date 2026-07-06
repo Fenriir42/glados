@@ -35,6 +35,9 @@ export default defineConfig({
 						{ label: 'Language Basics', slug: 'guides/language-basics' },
 						{ label: 'Control Flow', slug: 'guides/control-flow' },
 						{ label: 'Arrays', slug: 'guides/arrays' },
+						{ label: 'Dicts', slug: 'guides/dicts' },
+						{ label: 'JSON', slug: 'guides/json' },
+						{ label: 'Sockets', slug: 'guides/socket' },
 					],
 				},
 				{

@@ -93,6 +93,7 @@
               hspec
               hspec-expectations
               megaparsec
+              network
               optparse-applicative
               parsec
               parsec

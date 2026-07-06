@@ -304,6 +304,71 @@ JSON encoding and decoding. `json.encode` handles any Quant value; the decode fu
   </TabItem>
 </Tabs>
 
+## socket
+
+Raw TCP networking. Sockets are identified by an integer handle. All operations return `-1` / `""` / `False` on failure. See the [Socket guide](/guides/socket/) for full examples.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `socket.connect` | `(host: str, port: int) -> int` | Open a TCP connection; returns socket id or `-1` |
+| `socket.listen` | `(port: int, backlog: int) -> int` | Bind and listen on port; returns socket id or `-1` |
+| `socket.accept` | `(server: int) -> int` | Accept one connection; blocks until a client arrives |
+| `socket.send` | `(sock: int, data: str) -> int` | Send data; returns bytes sent or `-1` |
+| `socket.recv` | `(sock: int, n: int) -> str` | Receive up to `n` bytes; `""` on close or error |
+| `socket.close` | `(sock: int) -> bool` | Close the socket |
+| `socket.peer_addr` | `(sock: int) -> str` | Remote `"host:port"`, or `""` on error |
+
+### std/socket helpers
+
+| Function | Description |
+|----------|-------------|
+| `connect(host, port)` | Alias for `socket.connect` |
+| `listen(port, backlog)` | Alias for `socket.listen` |
+| `accept(server)` | Alias for `socket.accept` |
+| `send(sock, data)` | Alias for `socket.send` |
+| `recv(sock, n)` | Alias for `socket.recv` |
+| `close(sock)` | Alias for `socket.close` |
+| `peer_addr(sock)` | Alias for `socket.peer_addr` |
+| `http_get(host, port, path, buf_size)` | Full HTTP/1.0 GET: connect, send request, recv response, close |
+
+<Tabs>
+  <TabItem label="TCP client">
+    ```quant
+    fn main() -> void {
+        sock: int = socket.connect("example.com", 80);
+        if (sock < 0) { println("failed"); return; };
+        socket.send(sock, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
+        println(socket.recv(sock, 4096));
+        socket.close(sock);
+    }
+    ```
+  </TabItem>
+  <TabItem label="TCP server">
+    ```quant
+    fn main() -> void {
+        srv: int = socket.listen(8080, 5);
+        client: int = socket.accept(srv);
+        if (client >= 0) {
+            data: str = socket.recv(client, 1024);
+            socket.send(client, data);   // echo
+            socket.close(client);
+        };
+        socket.close(srv);
+    }
+    ```
+  </TabItem>
+  <TabItem label="http_get helper">
+    ```quant
+    from socket import http_get
+
+    fn main() -> void {
+        resp: str = http_get("httpbin.org", 80, "/ip", 4096);
+        println(resp);
+    }
+    ```
+  </TabItem>
+</Tabs>
+
 ## sys
 
 System, environment, and raw file-descriptor functions.
