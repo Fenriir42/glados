@@ -141,6 +141,7 @@ mkHandlers stateVar =
                   (fsFuncEnv fs)
                   (fsDocs fs)
                   (fsErrorNames fs)
+                  (fsVarDeclSites fs)
                   (fsFileText fs)
                   (fromIntegral lspLine)
                   (fromIntegral lspChar)
