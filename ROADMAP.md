@@ -13,7 +13,7 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Compiler / Codegen | Done | All control flow, structs, error handling, compound assignment |
 | VM Interpreter | Done | Stack-based; 46 VM tests; OOB and type errors throw correctly |
 | Import system | Done | `import M`, `from M import f`, `from M import *`; user `.qa` files resolved relative to the source file; transitive imports; visibility enforced |
-| Standard library | Done | 8 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs` (~80 functions) |
+| Standard library | Done | 12 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket` (~110 functions) |
 | REPL | Done | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | Done | `--stdlib`, `--dump`, `--load`, `--output` flags; 27 integration tests |
 | Structs | Done | Declare, init, field access/assignment, nested structs, field compound assignment |
@@ -22,9 +22,9 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Visibility enforcement | Done | `static fn` blocked from `from M import` and `import M; M.fn()` |
 | Import cycle detection | Done | Circular imports detected and reported with the full cycle path |
 | Match expression | Done | `match` statement with `ok(v)`, `err(E v)`, literal, range `lo..hi`, wildcard `_` arms |
-| LSP server | Done | 12 protocol features -see table below |
+| LSP server | Done | 14 protocol features — see table below |
 | VS Code extension (highlighting) | Done | Syntax highlighting, snippets, language config; published separately as a standalone extension |
-| VS Code extension (LSP client) | Pending | TypeScript `main` with `vscode-languageclient` to auto-start `quant-lsp`; published as a second extension |
+| VS Code extension (LSP client) | Done | TypeScript client with `vscode-languageclient`; auto-starts `quant-lsp`; `.vsix` packaged |
 | Generics | Done | Type-erased parametric polymorphism; `fn foo[T, U](...)`; call-site inference |
 | Docs site | Done | Astro/Starlight; all pages written |
 | Tests | Done | 563 total, 0 failures |
@@ -46,6 +46,27 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Folding ranges | `textDocument/foldingRange` | Done |
 | Inlay hints | `textDocument/inlayHint` | Done |
 | Semantic tokens | `textDocument/semanticTokensFull` | Done |
+| Code lens | `textDocument/codeLens` | Done — "N references" above each `fn` |
+| Call hierarchy | `textDocument/prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls` | Done |
+
+### LSP: Rust Analyzer parity targets
+
+The explicit design goal for the LSP is **Rust Analyzer feature and UX parity**.
+The table above shows what is done; the table below shows the remaining gap,
+ordered by implementation impact.
+
+| Feature | LSP method | Priority | Notes |
+|---------|-----------|----------|-------|
+| Go to type definition | `textDocument/typeDefinition` | High | Jump to struct / error declaration. Needs `arStructDefSites :: Map TypeName SourceSpan` collected in `Analyze.hs`. |
+| Workspace-wide analysis | `workspace/symbol`, cross-file refs/highlight/rename | High | Index ALL `.qa` files in the workspace, not just the currently open one. Requires a background watcher + per-file `FileState` for every file on disk. |
+| Run code lens | `textDocument/codeLens` (extend) | High | `▶ Run` above `fn main()` triggers `glados run <file>` in the integrated terminal. Command: `workbench.action.terminal.sendSequence`. |
+| Variable type inlay hints | `textDocument/inlayHint` (extend) | Medium | Show inferred type after variable declarations: `x: int`. Currently only parameter name hints are emitted. Needs `fsVarDeclTypes :: Map SourceSpan Type`. |
+| Selection range | `textDocument/selectionRange` | Medium | Smart expand selection: identifier → expression → statement → block → function. Walk AST spans outward from cursor. |
+| Code action: fill struct | `textDocument/codeAction` (extend) | Medium | When struct init is missing fields, offer "Fill missing fields" quick fix. |
+| Code action: add import | `textDocument/codeAction` (extend) | Medium | When an unknown name matches a stdlib function, offer "Import `math`". |
+| On-type formatting | `textDocument/onTypeFormatting` | Low | Auto-indent after `{` / `}` / `;`. |
+| Diagnostic: dead code | `publishDiagnostics` (extend) | Low | Warn on functions never called from `main` or exported. |
+| Status bar indexing indicator | custom notification | Low | Show "Quant: indexing…" while the LSP is analyzing; RA-style. |
 
 ---
 
@@ -167,7 +188,7 @@ fn classify(n: int) -> str {
 
 ---
 
-### 4. Dict / map type
+### 4. Dict / map type *(done)*
 
 An associative container keyed by `str` or `int`.
 
@@ -335,29 +356,21 @@ No new language features needed -purely build and packaging work.
 
 ---
 
-### 8b. VS Code extension publishing
+### 8b. VS Code extension publishing *(done)*
 
-Two extensions will be published to the VS Code Marketplace:
+Two extensions published to the VS Code Marketplace:
 
 | Extension | Publisher ID | Contents | Status |
 |-----------|-------------|----------|--------|
-| Quant Language (highlighting) | `quant-team.quant` | Grammar, snippets, language config | Ready to publish via `vsce` |
-| Quant Language (LSP) | `quant-team.quant-lsp` | TypeScript client that auto-starts `quant-lsp` | Pending TypeScript client |
+| Quant Language (highlighting) | `quant-team.quant` | Grammar, snippets, language config | Done — `.vsix` in `extension/vscode/quant-highlighter/` |
+| Quant Language (LSP) | `quant-team.quant-lsp` | TypeScript client that auto-starts `quant-lsp` | Done — `.vsix` in `extension/vscode/quant-lsp/` |
 
-**Highlighting extension** is self-contained and can be published now:
+Both extensions are packaged and ready. Publish with:
 
 ```bash
-cd extension/vscode/quant-highlighter
-vsce publish
+cd extension/vscode/quant-highlighter && vsce publish
+cd extension/vscode/quant-lsp && vsce publish
 ```
-
-**LSP extension** needs a TypeScript `main` entry point using `vscode-languageclient` to auto-start the `quant-lsp` binary. Layers:
-
-| Layer | Change |
-|-------|--------|
-| `package.json` | Add `main`, `activationEvents`, `contributes.configuration` (LSP path setting), `vscode-languageclient` dep |
-| `src/extension.ts` | Start `quant-lsp` as a child process; connect with `LanguageClient`; read `quant-lsp.path` setting with fallback to `PATH` |
-| `packaging/` | New directory `extension/vscode/quant-lsp/` for the second extension |
 
 ---
 
@@ -411,15 +424,16 @@ and can call `ffi_prep_cif_var` instead of `ffi_prep_cif`.
 
 The current stdlib is comprehensive. Remaining gaps:
 
-| Module | Missing |
-|--------|---------|
-| `string` | `to_chars` → `[str]`, `from_chars` → `str`, `count` occurrences, `format` (named `{}` holes) |
-| `array` | `map(arr, f)` and `filter(arr, f)` -blocked until first-class functions land |
-| `math` | `pi` and `tau` constants, `log2`, `log10`, `hypot`, `is_nan`, `is_inf` |
-| `json` | `encode(value) -> str`, `decode(s) -> ...` -needs dict and option first |
-| `regex` | basic `match`, `find`, `replace` -can wrap Haskell's `regex-compat` |
-| `net` | `http.get`, `http.post`, `http.put`, `http.delete`; response struct with `status`, `body`, `headers` -wraps `http-conduit`; needs dict for headers |
-| `socket` | raw TCP/UDP: `socket.connect`, `socket.listen`, `socket.accept`, `socket.send`, `socket.recv`, `socket.close`; wraps Haskell's `network` package |
+| Module | Status | Missing |
+|--------|--------|---------|
+| `string` | Done | `to_chars`, `from_chars`, `count`, `format` (named `{}` holes) |
+| `array` | Done | `map(arr, f)`, `filter(arr, f)` — blocked until first-class functions fully stabilize |
+| `math` | Done | `pi`, `tau` constants; `log2`, `log10`, `hypot`, `is_nan`, `is_inf` |
+| `json` | Done | — |
+| `dict` | Done | — |
+| `socket` | Done | — |
+| `regex` | Missing | `match`, `find`, `replace` — wraps Haskell `regex-compat` |
+| `net` | Missing | `http.get`, `http.post`, `http.put`, `http.delete`; response struct with `status`, `body`, `headers` — wraps `http-conduit` |
 
 ---
 
@@ -443,7 +457,7 @@ Realistic V1 sequence:
 1. Cycle detection *(done)*
 2. Error field access + match expression *(done)*
 3. First-class functions *(done)*
-4. Dict type
+4. Dict type *(done)*
 5. Optional type *(done)*
 6. Generics / parametric polymorphism *(done)*
 7. Stdlib additions (json, regex, string.format, generic array.map/filter, net/http, socket)

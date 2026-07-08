@@ -24,7 +24,9 @@ executable glados-lsp
   hs-source-dirs:     src
   other-modules:
     LSPServer.Analyze
+    LSPServer.CallHierarchy
     LSPServer.CodeAction
+    LSPServer.CodeLens
     LSPServer.Completion
     LSPServer.Definition
     LSPServer.DocumentSymbol
@@ -45,6 +47,7 @@ executable glados-lsp
 
   ghc-options:        -threaded -rtsopts -with-rtsopts=-N -O2
   build-depends:
+    , aeson
     , ast
     , base         >=4.11 && <5
     , compiler

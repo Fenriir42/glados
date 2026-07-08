@@ -88,12 +88,13 @@ data AnalyzeResult = AnalyzeResult
     arVarUseSites :: Map SourceSpan (VarName, SourceSpan),
     arErrorNames :: [ErrorName],
     arVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
-    arImportDecls :: [(SourceSpan, ImportDecl)]
+    arImportDecls :: [(SourceSpan, ImportDecl)],
+    arCallsByFunc :: Map FuncName [(FuncName, SourceSpan)]
   }
 
 emptyResult :: [Diagnostic] -> AnalyzeResult
 emptyResult diags =
-  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty []
+  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty [] Map.empty
 
 -- | Lex, resolve imports, type-check a source file.
 analyzeText :: FilePath -> Text -> IO AnalyzeResult
@@ -121,7 +122,7 @@ analyzeText fp text = do
                   map fst (Map.elems (tcCallSites result))
                     ++ Map.elems (tcBuiltinCallSites result)
               unusedVarDiags =
-                computeUnusedVarDiags (tcVarDeclSites result) (tcVarUseSites result)
+                computeUnusedVarDiags (tcVarDeclSites result) (tcVarUseSites result) (tcCallSites result)
               unusedImportDiags =
                 computeUnusedImportDiags importDecls usedFuncNames
               allDiags = diags ++ unusedVarDiags ++ unusedImportDiags
@@ -138,6 +139,16 @@ analyzeText fp text = do
                   | Located _ (DeclFunction _ fd) <- rawDecls
                 ]
               foldingRanges = collectFoldingRanges rawDecls
+              callsByFunc =
+                Map.fromList
+                  [ ( fname,
+                      [ (callee, sp)
+                        | (sp, (callee, _)) <- Map.toList (tcCallSites result),
+                          spanContains fullSpan sp
+                      ]
+                    )
+                    | (fname, _, _, fullSpan) <- funcSymbols
+                  ]
               errorNames =
                 [ unLocated (errorDeclName ed)
                   | Located _ (DeclError _ ed) <- rawDecls
@@ -162,6 +173,7 @@ analyzeText fp text = do
               errorNames
               (tcVarDeclSites result)
               importDecls
+              callsByFunc
 
 -- ---------------------------------------------------------------------------
 -- Folding range collection
@@ -183,6 +195,13 @@ collectFoldingRanges = concatMap collectDecl
     collectStmt (StmtBlock block) = collectBlock block
     collectStmt (StmtMatch _ _) = []
     collectStmt _ = []
+
+-- | True when `inner` is fully enclosed by `outer` (line/col comparison).
+spanContains :: SourceSpan -> SourceSpan -> Bool
+spanContains outer inner =
+  let cmp sp = (unLine (posLine sp), unColumn (posColumn sp))
+   in cmp (spanStart outer) <= cmp (spanStart inner)
+        && cmp (spanEnd inner) <= cmp (spanEnd outer)
 
 -- ---------------------------------------------------------------------------
 -- Doc-comment extraction
@@ -307,17 +326,21 @@ lineScannedDefSites fp modName text =
 computeUnusedVarDiags ::
   Map SourceSpan (VarName, SourceSpan) ->
   Map SourceSpan (VarName, SourceSpan) ->
+  Map SourceSpan (FuncName, FunctionType) ->
   [Diagnostic]
-computeUnusedVarDiags declSites useSites =
+computeUnusedVarDiags declSites useSites callSites =
   let readDecls =
         Set.fromList
           [ declSp
             | (useSp, (_, declSp)) <- Map.toList useSites,
               useSp /= declSp
           ]
+      calledNames =
+        Set.fromList [fn | (_, (fn, _)) <- Map.toList callSites]
    in [ makeHintDiag (spanToRange nameSp) ("`" <> unVarName vname <> "` is declared but never used")
         | (nameSp, (vname, _)) <- Map.toList declSites,
-          not (nameSp `Set.member` readDecls)
+          not (nameSp `Set.member` readDecls),
+          FuncName (unVarName vname) `Set.notMember` calledNames
       ]
 
 -- | Produce Hint diagnostics for imported names that are never called.

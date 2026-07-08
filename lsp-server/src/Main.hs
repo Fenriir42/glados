@@ -16,7 +16,9 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import LSPServer.Analyze (AnalyzeResult (..), analyzeText)
+import LSPServer.CallHierarchy (incomingCalls, outgoingCalls, prepareCallHierarchy)
 import LSPServer.CodeAction (makeCodeActions)
+import LSPServer.CodeLens (makeCodeLens)
 import LSPServer.Completion (makeCompletionItems)
 import LSPServer.Definition (findDefinition)
 import LSPServer.DocumentSymbol (makeDocumentSymbols)
@@ -50,6 +52,7 @@ data FileState = FileState
     fsErrorNames :: [ErrorName],
     fsVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
     fsImportDecls :: [(SourceSpan, ImportDecl)],
+    fsCallsByFunc :: Map FuncName [(FuncName, SourceSpan)],
     fsFilePath :: FilePath,
     fsFileText :: Text
   }
@@ -329,7 +332,69 @@ mkHandlers stateVar =
                     (fsFuncDefSites fs)
                     (fsVarUseSites fs)
                     (fsFilePath fs)
-        responder (Right result)
+        responder (Right result),
+      -- Code lens ("N references" above each fn)
+      requestHandler SMethod_TextDocumentCodeLens $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.CodeLensParams _ _ tdId) = req
+            LSP.TextDocumentIdentifier uri = tdId
+            nuri = LSP.toNormalizedUri uri
+        st <- liftIO $ readTVarIO stateVar
+        let lenses = case Map.lookup nuri st of
+              Nothing -> []
+              Just fs ->
+                makeCodeLens
+                  (fsFilePath fs)
+                  (fsFuncSymbols fs)
+                  (fsCallSites fs)
+        responder (Right (LSP.InL lenses)),
+      -- Call hierarchy: prepare
+      requestHandler SMethod_TextDocumentPrepareCallHierarchy $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.CallHierarchyPrepareParams tdId pos _) = req
+            LSP.TextDocumentIdentifier uri = tdId
+            LSP.Position lspLine lspChar = pos
+            nuri = LSP.toNormalizedUri uri
+        st <- liftIO $ readTVarIO stateVar
+        let items = case Map.lookup nuri st of
+              Nothing -> []
+              Just fs ->
+                prepareCallHierarchy
+                  (fsCallSites fs)
+                  (fsFuncDefSites fs)
+                  (fsFuncSymbols fs)
+                  (fsFilePath fs)
+                  (fromIntegral lspLine)
+                  (fromIntegral lspChar)
+        responder (Right (LSP.InL items)),
+      -- Call hierarchy: incoming calls (who calls this function)
+      requestHandler SMethod_CallHierarchyIncomingCalls $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.CallHierarchyIncomingCallsParams _ _ chItem) = req
+            LSP.CallHierarchyItem _ _ _ _ itemUri _ _ _ = chItem
+            nuri = LSP.toNormalizedUri itemUri
+        st <- liftIO $ readTVarIO stateVar
+        let calls = case Map.lookup nuri st of
+              Nothing -> []
+              Just fs ->
+                incomingCalls
+                  (fsCallsByFunc fs)
+                  (fsFuncSymbols fs)
+                  (fsFilePath fs)
+                  chItem
+        responder (Right (LSP.InL calls)),
+      -- Call hierarchy: outgoing calls (what this function calls)
+      requestHandler SMethod_CallHierarchyOutgoingCalls $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.CallHierarchyOutgoingCallsParams _ _ chItem) = req
+            LSP.CallHierarchyItem _ _ _ _ itemUri _ _ _ = chItem
+            nuri = LSP.toNormalizedUri itemUri
+        st <- liftIO $ readTVarIO stateVar
+        let calls = case Map.lookup nuri st of
+              Nothing -> []
+              Just fs ->
+                outgoingCalls
+                  (fsCallsByFunc fs)
+                  (fsFuncSymbols fs)
+                  (fsFilePath fs)
+                  chItem
+        responder (Right (LSP.InL calls))
     ]
 
 analyzeAndPublish ::
@@ -361,6 +426,7 @@ analyzeAndPublish stateVar nuri version = do
               (arErrorNames result)
               (arVarDeclSites result)
               (arImportDecls result)
+              (arCallsByFunc result)
               filePath
               text
       liftIO $ atomically $ modifyTVar' stateVar (Map.insert nuri fs)

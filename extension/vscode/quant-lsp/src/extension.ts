@@ -11,6 +11,50 @@ import {
 let client: LanguageClient | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
+  // Register unconditionally so clicking a code lens never gets "command not found",
+  // even if the server binary is missing or the client hasn't started yet.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "quant-lsp.showReferences",
+      (
+        uriStr: string,
+        position: { line: number; character: number },
+        locations: {
+          uri: string;
+          range: {
+            start: { line: number; character: number };
+            end: { line: number; character: number };
+          };
+        }[],
+      ) => {
+        const uri = vscode.Uri.parse(uriStr);
+        const pos = new vscode.Position(position.line, position.character);
+        const locs = locations.map(
+          (loc) =>
+            new vscode.Location(
+              vscode.Uri.parse(loc.uri),
+              new vscode.Range(
+                new vscode.Position(
+                  loc.range.start.line,
+                  loc.range.start.character,
+                ),
+                new vscode.Position(
+                  loc.range.end.line,
+                  loc.range.end.character,
+                ),
+              ),
+            ),
+        );
+        void vscode.commands.executeCommand(
+          "editor.action.showReferences",
+          uri,
+          pos,
+          locs,
+        );
+      },
+    ),
+  );
+
   const config = vscode.workspace.getConfiguration("quant-lsp");
 
   if (!config.get<boolean>("enable", true)) {

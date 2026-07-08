@@ -53,6 +53,13 @@
         "path": "./snippets/quant.json"
       }
     ],
+    "commands": [
+      {
+        "command": "quant-lsp.showReferences",
+        "title": "Show References",
+        "category": "Quant"
+      }
+    ],
     "configuration": {
       "title": "Quant Language Server",
       "properties": {
