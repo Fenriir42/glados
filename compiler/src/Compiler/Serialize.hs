@@ -86,6 +86,21 @@ instance Binary FunctionRef where
   put (FunctionRef f) = put f
   get = FunctionRef <$> get
 
+instance Binary CRetType where
+  put CRetVoid = put (0 :: Word8)
+  put CRetInt = put (1 :: Word8)
+  put CRetFloat = put (2 :: Word8)
+  put CRetStr = put (3 :: Word8)
+  put CRetBool = put (4 :: Word8)
+  get =
+    (get :: Get Word8) >>= \case
+      0 -> pure CRetVoid
+      1 -> pure CRetInt
+      2 -> pure CRetFloat
+      3 -> pure CRetStr
+      4 -> pure CRetBool
+      t -> fail $ "Unknown CRetType tag: " ++ show t
+
 instance Binary CastType where
   put CastToInt = put (0 :: Word8)
   put CastToFloat = put (1 :: Word8)
@@ -165,6 +180,7 @@ instance Binary Instruction where
     ILoadFunc fname -> tag 26 >> put fname
     ICallIndirect argc -> tag 27 >> put (argc :: Int)
     INewDict -> tag 28
+    ICallFFI lib sym retTy argc -> tag 29 >> put lib >> put sym >> put retTy >> put (argc :: Int)
     where
       tag n = put (n :: Word8)
 
@@ -199,6 +215,7 @@ instance Binary Instruction where
       26 -> ILoadFunc <$> get
       27 -> ICallIndirect <$> get
       28 -> pure INewDict
+      29 -> ICallFFI <$> get <*> get <*> get <*> get
       t -> fail $ "Unknown Instruction tag: " ++ show t
 
 instance Binary Bytecode where

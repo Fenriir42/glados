@@ -28,6 +28,7 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Generics | Done | Type-erased parametric polymorphism; `fn foo[T, U](...)`; call-site inference |
 | Docs site | Done | Astro/Starlight; all pages written |
 | Tests | Done | 563 total, 0 failures |
+| FFI | Done | `extern "lib.so" { fn … }` blocks; `dlopen`/`dlsym` + libffi; types: int/float/bool/str/void |
 
 ### LSP feature coverage
 
@@ -360,27 +361,49 @@ vsce publish
 
 ---
 
-### 9. FFI -call C functions
+### 9. FFI -call C functions *(done)*
 
-Bind to C libraries directly from Quant.
+Bind to C libraries directly from Quant using `extern` blocks.
 
 ```quant
-extern fn printf(fmt: str, ...int) -> int;
-extern fn malloc(size: int) -> int;
+extern "libm.so.6" {
+    fn sqrt(x: float) -> float
+    fn pow(base: float, exp: float) -> float
+}
 
 fn main() -> void {
-    printf("hello %d\n", 42);
+    println(sqrt(2.0));      // 1.4142135623730951
+    println(pow(2.0, 10.0)); // 1024.0
 }
 ```
 
-**Approach:** The VM runs in Haskell. The practical path is:
-1. A `DeclExtern` AST node parsed from `extern fn …`
-2. At codegen, emit a call to a special `ICallForeign` instruction
-3. The VM resolves `ICallForeign` via `dlopen` + `dlsym` at runtime (using
-   the `libffi` Haskell binding, or Haskell's `Foreign.Ptr` + `ccall`)
+**Shipped:**
+- `extern "lib.so" { fn … }` block declaration — groups bindings by library
+- `ICallFFI lib sym retType argc` bytecode instruction
+- VM resolves via `dlopen` + `dlsym` at runtime; library handles cached per-process
+- Types supported: `int` → `int64_t`, `float` → `double`, `bool` → `uint32_t`, `str` → `const char*`, `void`
+- Guide at `docs/guides/ffi.mdx`
 
-Alternatively, output native code (LLVM or C) and link normally -but that
-requires a separate backend.
+**Not yet supported — variadic FFI:**
+
+Variadic C functions (e.g. `printf`, `sprintf`) require a different libffi calling
+convention (`ffi_call` with `ffi_prep_cif_var`). Planned syntax:
+
+```quant
+extern "libc.so.6" {
+    fn printf(fmt: str, ...int) -> int
+    fn snprintf(buf: str, n: int, fmt: str, ...int) -> int
+}
+```
+
+The `...T` suffix marks the variadic portion. At the `ICallFFI` level this needs
+a `IsVariadic Int` flag so the VM knows how many fixed args precede the varargs
+and can call `ffi_prep_cif_var` instead of `ffi_prep_cif`.
+
+**Also not yet supported:**
+- Pointer types beyond `str` (raw `void*`, `int*`, out-params)
+- C struct pass-by-value
+- Callback pointers (`FunPtr` wrapping a Quant lambda)
 
 ---
 
@@ -413,7 +436,7 @@ dict (4)                     -independent
 optional (6)            ─── depends on match for clean usage
 stdlib additions        ─── fill in as language features land; net needs dict for headers
 install / distribution  ─── do before any public release; CLI path fallback is trivial
-FFI (9)                      -last, needs design decision on backend
+FFI (9)                      -done
 ```
 
 Realistic V1 sequence:
@@ -425,7 +448,7 @@ Realistic V1 sequence:
 6. Generics / parametric polymorphism *(done)*
 7. Stdlib additions (json, regex, string.format, generic array.map/filter, net/http, socket)
 8. Install / distribution (deb + PKGBUILD + flake, CLI stdlib path fallback)
-9. FFI
+9. FFI *(done)*
 
 ---
 
@@ -436,6 +459,8 @@ Realistic V1 sequence:
 - **Closures capturing environment** -lambdas that close over local variables
 - **Async / await** -cooperative concurrency
 - **Package manager** -resolve external Quant packages from a registry
+- **FFI variadics** -`extern fn printf(fmt: str, ...int) -> int`; needs `ffi_prep_cif_var` path in the VM
+- **FFI pointer types** -raw `void*` / `int*` args, out-params, callback `FunPtr` wrapping a Quant lambda
 - **Graphics / game library** -SDL2 or similar via FFI
 - **Multi-target codegen** -LLVM or C output instead of the bytecode VM
 - **Cycle detection in imports** -if not done in V1

@@ -5,7 +5,7 @@ module TypeChecker
   )
 where
 
-import AST.Types.AST (Decl (..), ErrorDecl (..), FunctionDecl (..), Program (..), StructDecl (..), programDecls)
+import AST.Types.AST (Decl (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), Program (..), StructDecl (..), programDecls)
 import AST.Types.Common (FuncName, Located (..), SourceSpan, TypeName, VarName, locSpan, unLocated)
 import AST.Types.Type (ErrorType (..), FunctionType (..), StructType (..), Type)
 import Control.Monad.State (execState)
@@ -34,7 +34,8 @@ typeCheck :: Program () -> TypeCheckResult
 typeCheck prog =
   let decls = programDecls prog
       funcEnv = foldr collectFunc emptyEnv decls
-      structEnv = foldr collectStruct funcEnv decls
+      ffiEnv = foldr collectFFI funcEnv decls
+      structEnv = foldr collectStruct ffiEnv decls
       fullEnv = foldr collectError structEnv decls
       finalState = execState (mapM_ (checkDecl fullEnv) decls) initialTCState
       defSites =
@@ -60,6 +61,14 @@ typeCheck prog =
           env' = insertFunc fname (mkFuncType fd) env
        in if null tvs then env' else insertGenericParams fname tvs env'
     collectFunc _ env = env
+
+    collectFFI :: Located (Decl ()) -> Env -> Env
+    collectFFI (Located _ (DeclFFI fd)) env =
+      foldr (\ffd e -> insertFunc (unLocated (ffiFuncName ffd)) (mkFFIFuncType ffd) e) env (ffiFuncs fd)
+    collectFFI _ env = env
+
+    mkFFIFuncType :: FFIFuncDecl -> FunctionType
+    mkFFIFuncType ffd = FunctionType (ffiFuncParams ffd) (ffiFuncReturnType ffd)
 
     collectStruct :: Located (Decl ()) -> Env -> Env
     collectStruct (Located _ (DeclStruct _ sd)) env =

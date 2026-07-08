@@ -348,6 +348,7 @@ quantKeywords =
     "some",
     "none",
     "struct",
+    "extern",
     "import",
     "from",
     "const",

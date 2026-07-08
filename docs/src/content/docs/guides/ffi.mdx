@@ -1,0 +1,122 @@
+---
+title: Foreign Function Interface
+description: Calling C shared libraries from Quant with the extern block
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Quant's `extern` block lets you call functions from any C shared library (`.so` / `.dylib`) without writing any Haskell glue code. Under the hood the VM uses `dlopen`/`dlsym` and [libffi](https://sourceware.org/libffi/) to dispatch the call at runtime.
+
+---
+
+## Syntax
+
+```quant
+extern "libname.so.N" {
+    fn symbol_name(param: type, ...) -> return_type
+}
+```
+
+- The string is a library path or bare SONAME (`libm.so.6`, `/usr/lib/libpng.so`).
+- Each `fn` line declares one C symbol. No body is written — the VM resolves it at runtime.
+- Multiple functions from the same library go in one block.
+
+---
+
+## Supported types
+
+| Quant type | C type |
+|---|---|
+| `int` | `int64_t` |
+| `float` | `double` |
+| `bool` | `uint32_t` (0 / 1) |
+| `str` | `const char*` |
+| `void` | `void` |
+
+<Aside type="caution">
+Pointer types beyond `str`, raw C structs, and variadic functions are not yet supported. For those, write a thin C wrapper and bind to it.
+</Aside>
+
+---
+
+## Example: libm
+
+```quant
+extern "libm.so.6" {
+    fn sqrt(x: float) -> float
+    fn fabs(x: float) -> float
+    fn pow(base: float, exp: float) -> float
+}
+
+fn main() -> void {
+    println(sqrt(2.0));     // 1.4142135623730951
+    println(fabs(-3.14));   // 3.14
+    println(pow(2.0, 10.0)); // 1024.0
+}
+```
+
+---
+
+## Example: libc string utilities
+
+```quant
+extern "libc.so.6" {
+    fn strlen(s: str) -> int
+    fn atoi(s: str) -> int
+}
+
+fn main() -> void {
+    n: int = strlen("hello");
+    println(n);           // 5
+
+    x: int = atoi("42");
+    println(x);           // 42
+}
+```
+
+---
+
+## Example: multiple libraries
+
+```quant
+extern "libm.so.6" {
+    fn sin(x: float) -> float
+    fn cos(x: float) -> float
+}
+
+extern "libc.so.6" {
+    fn rand() -> int
+    fn srand(seed: int) -> void
+}
+
+fn main() -> void {
+    srand(42);
+    println(rand());
+    println(sin(1.5708)); // ~1.0
+}
+```
+
+---
+
+## Runtime behaviour
+
+- Libraries are opened with `RTLD_LAZY` on the first call and cached for the lifetime of the program — `dlopen` is not called again on subsequent calls.
+- A missing symbol or library causes a runtime error with the library path and symbol name.
+- `str` arguments are converted to a temporary `CString` for the duration of the call and freed immediately after. Passing a `str` to a function that stores the pointer beyond the call is unsafe.
+- Functions returning `str` call `peekCString` on the returned pointer immediately. The pointer must remain valid for that instant (e.g. static strings, `strerror`). Use caution with functions that return `malloc`-ed strings — there is currently no way to call `free` on them from Quant.
+
+---
+
+## Finding the right SONAME
+
+On Linux, use `ldconfig` or `ldd` to find the versioned name:
+
+```bash
+ldconfig -p | grep libm
+#   libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6
+
+ldconfig -p | grep libpng
+#   libpng16.so.16 => /lib/x86_64-linux-gnu/libpng16.so.16
+```
+
+Use the versioned name (e.g. `libpng16.so.16`) in the `extern` string for portability.

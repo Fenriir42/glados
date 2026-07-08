@@ -75,6 +75,7 @@ showInstr = \case
   IIsErr (ErrorName n) -> "IS_ERR     " ++ T.unpack n
   ILoadFunc (FuncName n) -> "LOAD_FUNC  " ++ T.unpack n
   ICallIndirect argc -> "CALL_INDIR " ++ show argc
+  ICallFFI lib sym _ret argc -> "CALL_FFI   " ++ T.unpack lib ++ ":" ++ T.unpack sym ++ " /" ++ show argc
 
 showVal :: Value -> String
 showVal (VInt n) = show n

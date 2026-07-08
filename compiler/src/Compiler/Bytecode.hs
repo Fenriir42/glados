@@ -6,6 +6,7 @@ module Compiler.Bytecode
     UnaryOp (..),
     Value (..),
     CastType (..),
+    CRetType (..),
 
     -- * Bytecode
     Bytecode (..),
@@ -60,6 +61,17 @@ data CastType
   deriving stock (Show, Eq, Generic, Enum, Bounded)
 
 instance Hashable CastType
+
+-- | C return type for FFI calls.
+data CRetType
+  = CRetVoid
+  | CRetInt
+  | CRetFloat
+  | CRetStr
+  | CRetBool
+  deriving stock (Show, Eq, Generic)
+
+instance Hashable CRetType
 
 -- | Binary operations that can be performed by the VM.
 data BinaryOp
@@ -158,6 +170,16 @@ data Instruction
     ILoadFunc FuncName
   | -- | Call through a VFunction value: pop VFunction (below args), call it with argc args
     ICallIndirect Int
+  | -- | Call a C function from a shared library via libffi
+    ICallFFI
+      -- | shared library path (e.g. "libm.so.6")
+      Text
+      -- | C symbol name
+      Text
+      -- | return type tag for dispatch
+      CRetType
+      -- | argument count
+      Int
   deriving stock (Show, Eq, Generic)
 
 instance Hashable Instruction

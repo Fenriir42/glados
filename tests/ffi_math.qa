@@ -1,0 +1,19 @@
+// FFI smoke test: call libm functions directly via the C FFI.
+// Run: glados run tests/ffi_math.qa
+
+extern "libm.so.6" {
+    fn sqrt(x: float) -> float
+    fn fabs(x: float) -> float
+    fn pow(base: float, exp: float) -> float
+}
+
+fn main() -> void {
+    r: float = sqrt(2.0);
+    println(r);
+
+    a: float = fabs(-3.14);
+    println(a);
+
+    p: float = pow(2.0, 10.0);
+    println(p);
+}

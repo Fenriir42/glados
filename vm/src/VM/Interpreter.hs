@@ -9,6 +9,7 @@ import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), VarName)
 import Compiler.Bytecode
   ( BinaryOp (..),
     Bytecode (..),
+    CRetType (..),
     CastType (..),
     FunctionRef (..),
     Instruction (..),
@@ -34,10 +35,24 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
+import Foreign.LibFFI
+  ( argCDouble,
+    argInt64,
+    argString,
+    argWord32,
+    callFFI,
+    retCDouble,
+    retInt64,
+    retString,
+    retVoid,
+    retWord32,
+  )
+import Foreign.Ptr (FunPtr)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import System.Environment (getArgs)
 import System.Exit (ExitCode (..), exitWith)
+import System.Posix.DynamicLinker (DL, RTLDFlags (..), dlopen, dlsym)
 import System.Posix.IO (fdWrite)
 import System.Posix.Types (ByteCount, Fd (..))
 import VM.Builtins (callBuiltin, isBuiltin, isHeapBuiltin)
@@ -76,6 +91,7 @@ data VMState = VMState
     vmDictHeap :: Map Int (Map Value Value),
     vmStructHeap :: Map Int (Map Text Value),
     vmSocketHeap :: Map Int NS.Socket,
+    vmFFILibs :: Map Text DL,
     vmNextId :: Int,
     vmFunctions :: Map FuncName Bytecode,
     vmCurrentFunc :: FuncName
@@ -105,6 +121,7 @@ runProgram bytecodes = do
                 vmDictHeap = Map.empty,
                 vmStructHeap = Map.empty,
                 vmSocketHeap = Map.empty,
+                vmFFILibs = Map.empty,
                 vmNextId = 0,
                 vmFunctions = funcs,
                 vmCurrentFunc = FuncName "main"
@@ -450,6 +467,20 @@ execInstr = \case
             push result
             return Nothing
       _ -> throwError $ VMRuntimeError "ICallIndirect: no function value on stack"
+  ICallFFI lib sym retTy argc -> do
+    args <- popN argc
+    dl <- do
+      libs <- gets vmFFILibs
+      case Map.lookup lib libs of
+        Just d -> return d
+        Nothing -> do
+          d <- S.liftIO $ dlopen (T.unpack lib) [RTLD_LAZY]
+          modify $ \s -> s {vmFFILibs = Map.insert lib d (vmFFILibs s)}
+          return d
+    funPtr <- S.liftIO $ dlsym dl (T.unpack sym)
+    result <- S.liftIO $ callWithFFIArgs funPtr retTy args
+    push result
+    return Nothing
 
 -- ---------------------------------------------------------------------------
 -- Heap-aware builtins (array.len, array.push, array.pop, sys.exit)
@@ -919,6 +950,29 @@ resolveValue _ (VInt n) = T.pack (show n)
 resolveValue _ (VFloat f) = T.pack (show f)
 resolveValue _ (VBool b) = if b then "true" else "false"
 resolveValue _ _ = ""
+
+-- ---------------------------------------------------------------------------
+-- FFI dispatch
+
+-- | Call a C function through libffi.  String args use argString (allocs a
+-- CString internally; minor leak per call, acceptable for scripting use).
+-- String return values are peeked immediately and converted to Text.
+callWithFFIArgs :: FunPtr () -> CRetType -> [Value] -> IO Value
+callWithFFIArgs funPtr retTy vals = go vals []
+  where
+    go [] ffArgs = dispatch (reverse ffArgs)
+    go (VInt n : rest) ffArgs = go rest (argInt64 (fromIntegral n) : ffArgs)
+    go (VFloat f : rest) ffArgs = go rest (argCDouble (realToFrac f) : ffArgs)
+    go (VBool b : rest) ffArgs = go rest (argWord32 (if b then 1 else 0) : ffArgs)
+    go (VString s : rest) ffArgs = go rest (argString (T.unpack s) : ffArgs)
+    go (_ : rest) ffArgs = go rest ffArgs
+
+    dispatch ffArgs = case retTy of
+      CRetVoid -> callFFI funPtr retVoid ffArgs >> return VUnit
+      CRetInt -> VInt . fromIntegral <$> callFFI funPtr retInt64 ffArgs
+      CRetFloat -> VFloat . realToFrac <$> callFFI funPtr retCDouble ffArgs
+      CRetBool -> VBool . (/= 0) <$> callFFI funPtr retWord32 ffArgs
+      CRetStr -> VString . T.pack <$> callFFI funPtr retString ffArgs
 
 -- ---------------------------------------------------------------------------
 -- Stack helpers

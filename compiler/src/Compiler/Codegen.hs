@@ -13,6 +13,8 @@ import AST.Types.AST
   ( Block (..),
     Decl (..),
     Expr (..),
+    FFIDecl (..),
+    FFIFuncDecl (..),
     ForInit (..),
     FunctionDecl (..),
     LValue (..),
@@ -44,6 +46,7 @@ import AST.Types.Type (FunctionType (..), PrimitiveType (..), QualifiedType (..)
 import Compiler.Bytecode
   ( BinaryOp (..),
     Bytecode (..),
+    CRetType (..),
     CastType (..),
     FunctionRef (..),
     Instruction (..),
@@ -137,6 +140,16 @@ isKnownFunction fname known =
     || Set.member fname builtinFunctions
     || any (`T.isPrefixOf` unFuncName fname) ["math.", "string.", "sys.", "io.", "file.", "buf.", "dict.", "array.", "json.", "socket."]
 
+-- | Map a Quant return type to the C return type tag used in ICallFFI.
+-- Only primitive types are supported; anything else is a compile error.
+toCRetType :: QualifiedType -> CRetType
+toCRetType (QualifiedType _ (TypePrimitive PrimNone)) = CRetVoid
+toCRetType (QualifiedType _ (TypePrimitive (PrimInt _))) = CRetInt
+toCRetType (QualifiedType _ (TypePrimitive (PrimFloat _))) = CRetFloat
+toCRetType (QualifiedType _ (TypePrimitive PrimBool)) = CRetBool
+toCRetType (QualifiedType _ (TypePrimitive PrimString)) = CRetStr
+toCRetType _ = CRetVoid
+
 -- ---------------------------------------------------------------------------
 -- Compile state
 
@@ -160,6 +173,8 @@ data CompileState = CompileState
     -- Map from bare-alias name -> "modname." for bare aliases created by import.
     -- A bare alias inherits its origin module's visibility rights.
     csOriginModules :: Map FuncName Text,
+    -- FFI function table: name -> (lib path, C return type)
+    csFfiFuncs :: Map FuncName (Text, CRetType),
     -- Bytecodes for lambda functions compiled inline (collected, emitted at end)
     csLambdaBytecodes :: [Bytecode]
   }
@@ -183,6 +198,7 @@ initialState =
       csCurrentFunc = FuncName "",
       csPrivateFunctions = Set.empty,
       csOriginModules = Map.empty,
+      csFfiFuncs = Map.empty,
       csLambdaBytecodes = []
     }
 
@@ -271,12 +287,21 @@ compileProgram (Program decls) =
               [ (unLocated (funcDeclName fd), FunctionType (funcDeclParams fd) (funcDeclReturnType fd))
                 | fd <- funcs
               ]
+          -- Collect FFI declarations: name -> (lib, CRetType)
+          ffiFuncMap =
+            Map.fromList
+              [ (unLocated (ffiFuncName ffd), (ffiLib fd, toCRetType (unLocated (ffiFuncReturnType ffd))))
+                | Located _ (DeclFFI fd) <- decls,
+                  ffd <- ffiFuncs fd
+              ]
+          ffiNames = Map.keysSet ffiFuncMap
       modify $ \s ->
         s
-          { csKnownFunctions = userNames,
+          { csKnownFunctions = userNames <> ffiNames,
             csFuncTypes = funcTypes,
             csPrivateFunctions = privateFuncs,
-            csOriginModules = originMods
+            csOriginModules = originMods,
+            csFfiFuncs = ffiFuncMap
           }
       topLevelBcs <- mapM compileFunction funcs
       lambdaBcs <- gets csLambdaBytecodes
@@ -296,6 +321,7 @@ compileFunction funcDecl = do
         csCurrentFunc = funcName,
         csPrivateFunctions = csPrivateFunctions oldState,
         csOriginModules = csOriginModules oldState,
+        csFfiFuncs = csFfiFuncs oldState,
         -- Thread lambda bytecodes and the global lambda counter through
         csLambdaBytecodes = csLambdaBytecodes oldState,
         csTempCount = csTempCount oldState
@@ -554,6 +580,7 @@ compileExpr = \case
   ExprCall funcName args -> do
     knownFns <- gets csKnownFunctions
     funcTypes <- gets csFuncTypes
+    ffiMap <- gets csFfiFuncs
     scope <- gets csScope
     let fname = unLocated funcName
         vname = VarName (unFuncName fname)
@@ -563,41 +590,46 @@ compileExpr = \case
         void $ emitInstruction (ILoad vname)
         mapM_ (compileExpr . unLocated) (reverse args)
         void $ emitInstruction (ICallIndirect (length args))
-      else do
-        unless (isKnownFunction fname knownFns) $
-          throwError $
-            UndefinedFunction (locSpan funcName) fname
-        -- Reject cross-module calls to static (private) imported functions.
-        -- Bare-alias functions (e.g. `double` as alias of `mymod.double`) inherit
-        -- their origin module's visibility rights via csOriginModules.
-        privateFns <- gets csPrivateFunctions
-        when (Set.member fname privateFns) $ do
-          curFunc <- gets csCurrentFunc
-          originMods <- gets csOriginModules
-          let moduleOf n = fst (T.breakOnEnd "." (unFuncName n))
-              callerMod = Map.findWithDefault (moduleOf curFunc) curFunc originMods
-              calleeMod = moduleOf fname
-          when (callerMod /= calleeMod) $
+      else case Map.lookup fname ffiMap of
+        Just (lib, retTy) -> do
+          -- FFI call: push args then emit ICallFFI
+          mapM_ (compileExpr . unLocated) (reverse args)
+          void $ emitInstruction (ICallFFI lib (unFuncName fname) retTy (length args))
+        Nothing -> do
+          unless (isKnownFunction fname knownFns) $
             throwError $
-              PrivateFunction (locSpan funcName) fname
-        case Map.lookup fname funcTypes >>= find (paramVariadic . unLocated) . funcParams of
-          Nothing -> do
-            mapM_ (compileExpr . unLocated) (reverse args)
-            void $ emitInstruction (ICall (FunctionRef fname) (length args))
-          Just _ -> do
-            let ft = funcTypes Map.! fname
-                regularParams = filter (not . paramVariadic . unLocated) (funcParams ft)
-                nRegular = length regularParams
-                regularArgs = take nRegular args
-                varArgs = drop nRegular args
-            void $ emitInstruction INewArray
-            forM_ (zip [0 ..] varArgs) $ \(i, argExpr) -> do
-              void $ emitInstruction IDup
-              void $ emitInstruction (IPush (VInt i))
-              compileExpr (unLocated argExpr)
-              void $ emitInstruction IArraySet
-            mapM_ (compileExpr . unLocated) (reverse regularArgs)
-            void $ emitInstruction (ICall (FunctionRef fname) (nRegular + 1))
+              UndefinedFunction (locSpan funcName) fname
+          -- Reject cross-module calls to static (private) imported functions.
+          -- Bare-alias functions (e.g. `double` as alias of `mymod.double`) inherit
+          -- their origin module's visibility rights via csOriginModules.
+          privateFns <- gets csPrivateFunctions
+          when (Set.member fname privateFns) $ do
+            curFunc <- gets csCurrentFunc
+            originMods <- gets csOriginModules
+            let moduleOf n = fst (T.breakOnEnd "." (unFuncName n))
+                callerMod = Map.findWithDefault (moduleOf curFunc) curFunc originMods
+                calleeMod = moduleOf fname
+            when (callerMod /= calleeMod) $
+              throwError $
+                PrivateFunction (locSpan funcName) fname
+          case Map.lookup fname funcTypes >>= find (paramVariadic . unLocated) . funcParams of
+            Nothing -> do
+              mapM_ (compileExpr . unLocated) (reverse args)
+              void $ emitInstruction (ICall (FunctionRef fname) (length args))
+            Just _ -> do
+              let ft = funcTypes Map.! fname
+                  regularParams = filter (not . paramVariadic . unLocated) (funcParams ft)
+                  nRegular = length regularParams
+                  regularArgs = take nRegular args
+                  varArgs = drop nRegular args
+              void $ emitInstruction INewArray
+              forM_ (zip [0 ..] varArgs) $ \(i, argExpr) -> do
+                void $ emitInstruction IDup
+                void $ emitInstruction (IPush (VInt i))
+                compileExpr (unLocated argExpr)
+                void $ emitInstruction IArraySet
+              mapM_ (compileExpr . unLocated) (reverse regularArgs)
+              void $ emitInstruction (ICall (FunctionRef fname) (nRegular + 1))
   ExprIndex arrExpr indexExpr -> do
     compileExpr (unLocated arrExpr)
     compileExpr (unLocated indexExpr)

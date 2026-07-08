@@ -46,6 +46,7 @@ library
     , containers
     , directory
     , hostname
+    , libffi
     , mtl
     , network
     , process

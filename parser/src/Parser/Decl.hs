@@ -1,9 +1,11 @@
 module Parser.Decl where
 
 import AST.Types.AST
-  ( Decl (DeclError, DeclErrorSet, DeclFunction, DeclImport, DeclStruct),
+  ( Decl (DeclError, DeclErrorSet, DeclFFI, DeclFunction, DeclImport, DeclStruct),
     ErrorDecl (..),
     ErrorSetDecl (..),
+    FFIDecl (..),
+    FFIFuncDecl (..),
     FunctionDecl
       ( FunctionDecl,
         funcDeclBody,
@@ -176,6 +178,30 @@ parseDeclErrorSet = do
     isErrorsetKw (Located _ (TokIdentifier "errorset")) = True
     isErrorsetKw _ = False
 
+parseDeclFFI :: TokenParser (Located (Decl ann))
+parseDeclFFI = do
+  Located ffiSpan _ <- matchKeyword "extern"
+  Located _ (TokString lib) <- MP.satisfy isString
+  _ <- matchSymbol "{"
+  funcs <- MP.many parseFFIFuncDecl
+  Located endSpan _ <- matchSymbol "}"
+  return $ Located (ffiSpan <> endSpan) (DeclFFI (FFIDecl lib funcs))
+  where
+    isString (Located _ (TokString _)) = True
+    isString _ = False
+
+parseFFIFuncDecl :: TokenParser FFIFuncDecl
+parseFFIFuncDecl = do
+  _ <- matchKeyword "fn"
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  Located _ funcType <- parseFunctionType
+  return
+    FFIFuncDecl
+      { ffiFuncName = Located nameSpan (FuncName name),
+        ffiFuncParams = funcParams funcType,
+        ffiFuncReturnType = funcReturnType funcType
+      }
+
 -- | Peek to determine if the upcoming tokens start a function or struct, then
 -- dispatch to the committed (non-backtracking) parser.  This lets us detect
 -- the discriminating keyword without consuming it, so that body-parse errors
@@ -195,6 +221,9 @@ parseDecl =
       do
         _ <- MP.lookAhead (MP.try errorsetStart)
         parseDeclErrorSet,
+      do
+        _ <- MP.lookAhead (matchKeyword "extern")
+        parseDeclFFI,
       do
         Located span importDecl <- parseImportDecl
         return $ Located span (DeclImport importDecl)

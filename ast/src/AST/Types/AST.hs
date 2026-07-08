@@ -13,6 +13,8 @@ module AST.Types.AST
     ImportDecl (..),
     ErrorDecl (..),
     ErrorSetDecl (..),
+    FFIFuncDecl (..),
+    FFIDecl (..),
     Stmt (..),
     Block (..),
     ForInit (..),
@@ -57,6 +59,7 @@ import AST.Types.Type
     Type,
   )
 import Data.Hashable (Hashable)
+import Data.Text (Text)
 import GHC.Generics (Generic)
 
 newtype Program ann = Program
@@ -80,6 +83,22 @@ data Decl ann
   | DeclImport ImportDecl
   | DeclError Visibility ErrorDecl
   | DeclErrorSet Visibility ErrorSetDecl
+  | DeclFFI FFIDecl
+  deriving stock (Show, Eq, Generic)
+
+-- | A single function binding declared inside an @ffi@ block.
+data FFIFuncDecl = FFIFuncDecl
+  { ffiFuncName :: Located FuncName,
+    ffiFuncParams :: [Located Parameter],
+    ffiFuncReturnType :: Located QualifiedType
+  }
+  deriving stock (Show, Eq, Generic)
+
+-- | Top-level @ffi "libpath" { fn … }@ declaration.
+data FFIDecl = FFIDecl
+  { ffiLib :: Text,
+    ffiFuncs :: [FFIFuncDecl]
+  }
   deriving stock (Show, Eq, Generic)
 
 data FunctionDecl ann = FunctionDecl

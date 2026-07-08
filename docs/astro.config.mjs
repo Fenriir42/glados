@@ -38,6 +38,7 @@ export default defineConfig({
 						{ label: 'Dicts', slug: 'guides/dicts' },
 						{ label: 'JSON', slug: 'guides/json' },
 						{ label: 'Sockets', slug: 'guides/socket' },
+						{ label: 'FFI (extern)', slug: 'guides/ffi' },
 					],
 				},
 				{
