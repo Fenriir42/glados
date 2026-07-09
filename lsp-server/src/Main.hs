@@ -30,6 +30,7 @@ import LSPServer.References (findReferences)
 import LSPServer.Rename (findRename, prepareRename)
 import LSPServer.SemanticTokens (buildSemanticTokens)
 import LSPServer.SignatureHelp (findSignatureHelp)
+import LSPServer.TypeDefinition (findTypeDefinition)
 import Language.LSP.Diagnostics (partitionBySource)
 import Language.LSP.Protocol.Message
 import qualified Language.LSP.Protocol.Types as LSP
@@ -55,6 +56,7 @@ data FileState = FileState
     fsCallsByFunc :: Map FuncName [(FuncName, SourceSpan)],
     fsVarDeclTypes :: Map SourceSpan Type,
     fsStructDefs :: Map TypeName [StructField],
+    fsStructDefSites :: Map TypeName SourceSpan,
     fsFilePath :: FilePath,
     fsFileText :: Text
   }
@@ -167,6 +169,25 @@ mkHandlers stateVar =
                   (fsFuncDefSites fs)
                   (fsStdlibDefSites fs)
                   (fsVarUseSites fs)
+                  (fsFilePath fs)
+                  (fromIntegral lspLine)
+                  (fromIntegral lspChar) of
+                  Nothing -> LSP.InR (LSP.InR LSP.Null)
+                  Just loc -> LSP.InL (LSP.Definition (LSP.InL loc))
+        responder (Right result),
+      -- Go to type definition (Ctrl+click on value -> jump to its struct declaration)
+      requestHandler SMethod_TextDocumentTypeDefinition $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.TypeDefinitionParams tdId pos _ _) = req
+            LSP.TextDocumentIdentifier uri = tdId
+            LSP.Position lspLine lspChar = pos
+            nuri = LSP.toNormalizedUri uri
+        st <- liftIO $ readTVarIO stateVar
+        let result = case Map.lookup nuri st of
+              Nothing -> LSP.InR (LSP.InR LSP.Null)
+              Just fs ->
+                case findTypeDefinition
+                  (fsTypes fs)
+                  (fsStructDefSites fs)
                   (fsFilePath fs)
                   (fromIntegral lspLine)
                   (fromIntegral lspChar) of
@@ -434,6 +455,7 @@ analyzeAndPublish stateVar nuri version = do
               (arCallsByFunc result)
               (arVarDeclTypes result)
               (arStructDefs result)
+              (arStructDefSites result)
               filePath
               text
       liftIO $ atomically $ modifyTVar' stateVar (Map.insert nuri fs)

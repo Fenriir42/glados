@@ -93,12 +93,13 @@ data AnalyzeResult = AnalyzeResult
     arImportDecls :: [(SourceSpan, ImportDecl)],
     arCallsByFunc :: Map FuncName [(FuncName, SourceSpan)],
     arVarDeclTypes :: Map SourceSpan Type,
-    arStructDefs :: Map TypeName [StructField]
+    arStructDefs :: Map TypeName [StructField],
+    arStructDefSites :: Map TypeName SourceSpan
   }
 
 emptyResult :: [Diagnostic] -> AnalyzeResult
 emptyResult diags =
-  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty [] Map.empty Map.empty Map.empty
+  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty [] Map.empty Map.empty Map.empty Map.empty
 
 -- | Lex, resolve imports, type-check a source file.
 analyzeText :: FilePath -> Text -> IO AnalyzeResult
@@ -175,6 +176,11 @@ analyzeText fp text = do
                   [ (unLocated (structDeclName sd), map unLocated (structDeclFields sd))
                     | Located _ (DeclStruct _ sd) <- rawDecls
                   ]
+              structDefSites =
+                Map.fromList
+                  [ (unLocated (structDeclName sd), locSpan (structDeclName sd))
+                    | Located _ (DeclStruct _ sd) <- rawDecls
+                  ]
           return $
             AnalyzeResult
               allDiags
@@ -195,6 +201,7 @@ analyzeText fp text = do
               callsByFunc
               varDeclTypes
               structDefs
+              structDefSites
 
 -- ---------------------------------------------------------------------------
 -- Folding range collection
