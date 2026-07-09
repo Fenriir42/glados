@@ -445,18 +445,24 @@ checkMatchArm env mSubjType (MatchArm pat body) = do
             Just (TypeResult (ResultType t _)) -> QualifiedType Mutable t
             Just t -> QualifiedType Mutable t
             Nothing -> QualifiedType Mutable (TypePrimitive PrimNone)
+      recordVarDecl vsp v vsp
       recordVarUse vsp v vsp
+      recordType vsp (qualType innerQt)
       return (insertVarWithSpan v innerQt vsp env)
     MatchErr (Located _ ename) (Located vsp v) -> do
       let errQt = QualifiedType Mutable (TypeNamed (TypeName (unErrorName ename)))
+      recordVarDecl vsp v vsp
       recordVarUse vsp v vsp
+      recordType vsp (qualType errQt)
       return (insertVarWithSpan v errQt vsp env)
     MatchSome (Located vsp v) -> do
       let innerQt = case mSubjType of
             Just (TypeOption t) -> QualifiedType Mutable t
             Just t -> QualifiedType Mutable t
             Nothing -> QualifiedType Mutable (TypePrimitive PrimNone)
+      recordVarDecl vsp v vsp
       recordVarUse vsp v vsp
+      recordType vsp (qualType innerQt)
       return (insertVarWithSpan v innerQt vsp env)
     MatchNone -> return env
     MatchLit e -> void (inferExpr env e) >> return env

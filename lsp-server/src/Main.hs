@@ -53,6 +53,7 @@ data FileState = FileState
     fsVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
     fsImportDecls :: [(SourceSpan, ImportDecl)],
     fsCallsByFunc :: Map FuncName [(FuncName, SourceSpan)],
+    fsVarDeclTypes :: Map SourceSpan Type,
     fsFilePath :: FilePath,
     fsFileText :: Text
   }
@@ -297,7 +298,7 @@ mkHandlers stateVar =
         st <- liftIO $ readTVarIO stateVar
         let hints = case Map.lookup nuri st of
               Nothing -> []
-              Just fs -> makeInlayHints (fsCallWithArgs fs) range
+              Just fs -> makeInlayHints (fsCallWithArgs fs) (fsVarDeclTypes fs) range
         responder (Right (LSP.InL hints)),
       -- Code actions (quick fixes for unused symbols)
       requestHandler SMethod_TextDocumentCodeAction $ \req responder -> do
@@ -427,6 +428,7 @@ analyzeAndPublish stateVar nuri version = do
               (arVarDeclSites result)
               (arImportDecls result)
               (arCallsByFunc result)
+              (arVarDeclTypes result)
               filePath
               text
       liftIO $ atomically $ modifyTVar' stateVar (Map.insert nuri fs)

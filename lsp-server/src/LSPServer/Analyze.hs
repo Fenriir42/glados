@@ -89,12 +89,13 @@ data AnalyzeResult = AnalyzeResult
     arErrorNames :: [ErrorName],
     arVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
     arImportDecls :: [(SourceSpan, ImportDecl)],
-    arCallsByFunc :: Map FuncName [(FuncName, SourceSpan)]
+    arCallsByFunc :: Map FuncName [(FuncName, SourceSpan)],
+    arVarDeclTypes :: Map SourceSpan Type
   }
 
 emptyResult :: [Diagnostic] -> AnalyzeResult
 emptyResult diags =
-  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty [] Map.empty
+  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty [] Map.empty Map.empty
 
 -- | Lex, resolve imports, type-check a source file.
 analyzeText :: FilePath -> Text -> IO AnalyzeResult
@@ -156,6 +157,16 @@ analyzeText fp text = do
           stdDocs <- extractStdlibDocs stdlibDir
           stdDefSites <- extractStdlibDefSites stdlibDir
           let allDocs = Map.union userDocs stdDocs
+              -- Types for match-arm bindings (ok/err/some): nameSp == stmtSp because
+              -- recordVarDecl is called with vsp for both args.  Regular StmtVarDecl
+              -- uses different spans, so it's excluded here (type is already explicit).
+              varDeclTypes =
+                Map.fromList
+                  [ (nameSp, t)
+                    | (nameSp, (_, stmtSp)) <- Map.toList (tcVarDeclSites result),
+                      nameSp == stmtSp,
+                      Just t <- [Map.lookup nameSp (tcTypes result)]
+                  ]
           return $
             AnalyzeResult
               allDiags
@@ -174,6 +185,7 @@ analyzeText fp text = do
               (tcVarDeclSites result)
               importDecls
               callsByFunc
+              varDeclTypes
 
 -- ---------------------------------------------------------------------------
 -- Folding range collection
