@@ -9,6 +9,7 @@ import AST.Types.Common
     SourceSpan (..),
     VarName (..),
     displaySpan,
+    unFuncName,
   )
 import qualified Compiler (Bytecode, Options (..), options, prologue)
 import Compiler.Codegen (compileProgram)
@@ -16,19 +17,24 @@ import Compiler.Disasm (disassemble)
 import Compiler.Error (displayError)
 import Compiler.Import (resolveImports)
 import Compiler.Serialize (decodeBytecodes, encodeBytecodes)
+import Control.Exception (SomeException, catch)
+import Control.Monad (unless)
 import qualified Data.ByteString.Lazy as BSL
+import Data.Char (isAlphaNum)
+import Data.List (isPrefixOf, isSuffixOf, partition)
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Lib (lexFile)
 import Options.Applicative
 import Parser.Decl (parseDecl)
-import System.Directory (doesDirectoryExist)
+import System.Directory (doesDirectoryExist, listDirectory)
 import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
-import System.FilePath (takeDirectory)
+import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
 import System.IO (hIsTerminalDevice, stdout)
 import Text.Megaparsec (errorBundlePretty, runParser)
 import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
-import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
+import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
 import VM (runProgram)
 import VM.Interpreter (VMError (..))
 
@@ -104,10 +110,13 @@ compileSource stdlibDir filePath = do
       Right ds -> Right ds
   decls <- resolveImports [takeDirectory filePath, stdlibDir] rawDecls >>= orDie "Import error"
   let typeErrs = tcErrors (typeCheck (Program decls))
-  case typeErrs of
-    [] -> return ()
-    errs -> do
-      mapM_ (\e -> printErr (displayTypeError e (lines src))) errs
+  unless (null typeErrs) $ do
+    stdFuncs <- collectStdlibFuncNames stdlibDir
+    let (implicitWarns, realErrors) =
+          partition (isImplicitStdlib stdFuncs) typeErrs
+    mapM_ (\e -> printWarn (displayTypeWarning stdFuncs e (lines src))) implicitWarns
+    unless (null realErrors) $ do
+      mapM_ (\e -> printErr (displayTypeError e (lines src))) realErrors
       exitFailure
   case compileProgram (Program decls) of
     Left err -> do
@@ -186,10 +195,11 @@ stripAnsi (c : cs) = c : stripAnsi cs
 esc :: String -> String
 esc code = "\ESC[" ++ code ++ "m"
 
-reset, bold, red, cyan :: String
+reset, bold, red, yellow, cyan :: String
 reset = esc "0"
 bold = esc "1"
 red = esc "31"
+yellow = esc "33"
 cyan = esc "36"
 
 -- ---------------------------------------------------------------------------
@@ -224,6 +234,82 @@ displayTypeError err sourceLines =
           " " ++ bold ++ cyan ++ lineStr ++ "  |" ++ reset ++ " " ++ srcLine,
           " " ++ bold ++ cyan ++ pad ++ "  |" ++ reset ++ " " ++ caret
         ]
+
+-- ---------------------------------------------------------------------------
+-- Stdlib implicit-import detection
+
+-- | Scan stdlibDir for fn declarations; returns Map FuncName moduleName.
+collectStdlibFuncNames :: FilePath -> IO (Map.Map FuncName String)
+collectStdlibFuncNames dir = do
+  files <- listDirectory dir `catch` ignoreErr []
+  let qaFiles = [(dir </> f, dropExtension (takeBaseName f)) | f <- files, ".qa" `isSuffixOf` f]
+  entries <- mapM scanFile qaFiles
+  return (Map.fromList (concat entries))
+  where
+    ignoreErr :: a -> SomeException -> IO a
+    ignoreErr v _ = return v
+    scanFile (fp, modName) = do
+      content <- readFile fp `catch` ignoreErr ""
+      let funcs =
+            [ FuncName (T.pack name)
+              | l <- lines content,
+                let stripped = dropWhile (== ' ') l,
+                "fn " `isPrefixOf` stripped || "static fn " `isPrefixOf` stripped,
+                let after =
+                      if "static fn " `isPrefixOf` stripped
+                        then drop 10 stripped
+                        else drop 3 stripped,
+                let name = takeWhile (\c -> c == '_' || isAlphaNum c) after,
+                not (null name)
+            ]
+      return [(f, modName) | f <- funcs]
+
+isImplicitStdlib :: Map.Map FuncName String -> TypeCheckError -> Bool
+isImplicitStdlib stdFuncs (TCUndefinedFunc _ fname) = Map.member fname stdFuncs
+isImplicitStdlib _ _ = False
+
+-- | Warning variant of displayTypeError for implicit stdlib imports.
+displayTypeWarning :: Map.Map FuncName String -> TypeCheckError -> [String] -> String
+displayTypeWarning stdFuncs err@(TCUndefinedFunc sp fname) sourceLines =
+  case Map.lookup fname stdFuncs of
+    Just modName ->
+      let startPos = spanStart sp
+          lineNo = unLine (posLine startPos)
+          colStart = unColumn (posColumn startPos)
+          colEnd = unColumn (posColumn (spanEnd sp))
+          lineStr = show lineNo
+          pad = replicate (length lineStr) ' '
+          srcLine =
+            if lineNo >= 1 && lineNo <= length sourceLines
+              then sourceLines !! (lineNo - 1)
+              else ""
+          caretLen = max 1 (if colEnd > colStart then colEnd - colStart else 1)
+          caret = replicate (colStart - 1) ' ' ++ bold ++ yellow ++ replicate caretLen '^' ++ reset
+          loc = T.unpack (displaySpan sp)
+          msg =
+            "function `"
+              ++ T.unpack (unFuncName fname)
+              ++ "` is not explicitly imported from `"
+              ++ modName
+              ++ "`; add `from "
+              ++ modName
+              ++ " import "
+              ++ T.unpack (unFuncName fname)
+              ++ "`"
+       in unlines
+            [ bold ++ yellow ++ "warning[import]" ++ reset ++ ": " ++ bold ++ msg ++ reset,
+              " " ++ bold ++ cyan ++ pad ++ " --> " ++ reset ++ loc,
+              " " ++ bold ++ cyan ++ pad ++ "  |" ++ reset,
+              " " ++ bold ++ cyan ++ lineStr ++ "  |" ++ reset ++ " " ++ srcLine,
+              " " ++ bold ++ cyan ++ pad ++ "  |" ++ reset ++ " " ++ caret
+            ]
+    Nothing -> displayTypeError err sourceLines
+displayTypeWarning _ err sourceLines = displayTypeError err sourceLines
+
+printWarn :: String -> IO ()
+printWarn s = do
+  isTTY <- hIsTerminalDevice stdout
+  putStr (if isTTY then s else stripAnsi s)
 
 -- ---------------------------------------------------------------------------
 -- Helpers

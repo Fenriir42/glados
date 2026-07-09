@@ -3,7 +3,7 @@
 
 module LSPServer.Analyze (AnalyzeResult (..), analyzeText, emptyResult) where
 
-import AST.Types.AST (Block (..), Decl (..), ErrorDecl (..), FunctionDecl (..), ImportDecl (..), ImportTarget (..), ModulePath (..), Program (..), Stmt (..))
+import AST.Types.AST (Block (..), Decl (..), ErrorDecl (..), FunctionDecl (..), ImportDecl (..), ImportTarget (..), ModulePath (..), Program (..), Stmt (..), StructDecl (..))
 import AST.Types.Common
   ( Column (..),
     ErrorName (..),
@@ -15,13 +15,15 @@ import AST.Types.Common
     Offset (..),
     SourcePos (..),
     SourceSpan (..),
+    TypeName (..),
     VarName (..),
     locSpan,
+    unFuncName,
     unLocated,
     unModuleName,
     unVarName,
   )
-import AST.Types.Type (FunctionType (..), Type)
+import AST.Types.Type (FunctionType (..), StructField, Type)
 import Compiler.Import (resolveImports)
 import Control.Applicative (many)
 import Control.Exception (SomeException, catch)
@@ -44,7 +46,7 @@ import Language.LSP.Protocol.Types
 import Lexer (parseRawTokens)
 import Parser.Decl (parseDecl)
 import System.Directory (getCurrentDirectory, listDirectory)
-import System.FilePath (takeBaseName, takeDirectory, (</>))
+import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
 import System.IO (IOMode (..), hGetContents, hSetEncoding, openFile, utf8)
 import Text.Megaparsec
   ( ParseErrorBundle (..),
@@ -71,7 +73,7 @@ import TypeChecker
     tcVarUseSites,
     typeCheck,
   )
-import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
+import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
 
 data AnalyzeResult = AnalyzeResult
   { arDiagnostics :: [Diagnostic],
@@ -90,12 +92,13 @@ data AnalyzeResult = AnalyzeResult
     arVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
     arImportDecls :: [(SourceSpan, ImportDecl)],
     arCallsByFunc :: Map FuncName [(FuncName, SourceSpan)],
-    arVarDeclTypes :: Map SourceSpan Type
+    arVarDeclTypes :: Map SourceSpan Type,
+    arStructDefs :: Map TypeName [StructField]
   }
 
 emptyResult :: [Diagnostic] -> AnalyzeResult
 emptyResult diags =
-  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty [] Map.empty Map.empty
+  AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty [] Map.empty Map.empty Map.empty
 
 -- | Lex, resolve imports, type-check a source file.
 analyzeText :: FilePath -> Text -> IO AnalyzeResult
@@ -113,11 +116,13 @@ analyzeText fp text = do
           let importDecls =
                 [(sp, d) | Located sp (DeclImport d) <- rawDecls]
           resolvedOrErr <- resolveImports [takeDirectory fp, stdlibDir] rawDecls
+          stdDocs <- extractStdlibDocs stdlibDir
+          stdDefSites <- extractStdlibDefSites stdlibDir
           let decls = case resolvedOrErr of
                 Left _ -> rawDecls
                 Right ds -> ds
               result = typeCheck (Program decls)
-              diags = map tcErrToDiag (tcErrors result)
+              diags = map (tcErrToDiagWith stdDefSites) (tcErrors result)
               usedFuncNames =
                 Set.fromList $
                   map fst (Map.elems (tcCallSites result))
@@ -154,8 +159,6 @@ analyzeText fp text = do
                 [ unLocated (errorDeclName ed)
                   | Located _ (DeclError _ ed) <- rawDecls
                 ]
-          stdDocs <- extractStdlibDocs stdlibDir
-          stdDefSites <- extractStdlibDefSites stdlibDir
           let allDocs = Map.union userDocs stdDocs
               -- Types for match-arm bindings (ok/err/some): nameSp == stmtSp because
               -- recordVarDecl is called with vsp for both args.  Regular StmtVarDecl
@@ -166,6 +169,11 @@ analyzeText fp text = do
                     | (nameSp, (_, stmtSp)) <- Map.toList (tcVarDeclSites result),
                       nameSp == stmtSp,
                       Just t <- [Map.lookup nameSp (tcTypes result)]
+                  ]
+              structDefs =
+                Map.fromList
+                  [ (unLocated (structDeclName sd), map unLocated (structDeclFields sd))
+                    | Located _ (DeclStruct _ sd) <- rawDecls
                   ]
           return $
             AnalyzeResult
@@ -186,6 +194,7 @@ analyzeText fp text = do
               importDecls
               callsByFunc
               varDeclTypes
+              structDefs
 
 -- ---------------------------------------------------------------------------
 -- Folding range collection
@@ -440,6 +449,36 @@ mkPosDiag sp msg =
 
 tcErrToDiag :: TypeCheckError -> Diagnostic
 tcErrToDiag err = mkDiag (spanToRange (tcErrSpan err)) (T.pack (tcErrMessage err))
+
+tcErrToDiagWith :: Map FuncName (FilePath, SourceSpan) -> TypeCheckError -> Diagnostic
+tcErrToDiagWith stdlibDefs err@(TCUndefinedFunc sp fname) =
+  case Map.lookup fname stdlibDefs of
+    Just (libFp, _) ->
+      let modName = T.pack (dropExtension (takeBaseName libFp))
+       in makeWarnDiag
+            (spanToRange sp)
+            ( "function `"
+                <> unFuncName fname
+                <> "` is not explicitly imported from `"
+                <> modName
+                <> "`"
+            )
+    Nothing -> tcErrToDiag err
+tcErrToDiagWith _ err = tcErrToDiag err
+
+makeWarnDiag :: Range -> Text -> Diagnostic
+makeWarnDiag range msg =
+  Diagnostic
+    { _range = range,
+      _severity = Just DiagnosticSeverity_Warning,
+      _code = Nothing,
+      _codeDescription = Nothing,
+      _source = Just "quant",
+      _message = msg,
+      _tags = Nothing,
+      _relatedInformation = Nothing,
+      _data_ = Nothing
+    }
 
 spanToRange :: SourceSpan -> Range
 spanToRange ss =

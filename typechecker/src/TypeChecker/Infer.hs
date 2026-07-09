@@ -20,6 +20,7 @@ import AST.Types.AST
   )
 import AST.Types.Common
   ( ErrorName (..),
+    FieldName (..),
     FuncName (..),
     Located (..),
     SourceSpan,
@@ -200,8 +201,14 @@ inferExpr env (Located sp expr) = do
                in return (fmap errorFieldType mEf)
             Nothing -> return Nothing
         _ -> return Nothing
-    go (ExprStructInit (Located _ tname) fieldExprs) = do
+    go (ExprStructInit (Located initSp tname) fieldExprs) = do
       forM_ fieldExprs $ \(_, e) -> inferExpr env e
+      case lookupStruct tname env of
+        Just st -> do
+          let provided = [fname | (Located _ fname, _) <- fieldExprs]
+              missing = [fieldName f | f <- structFields st, fieldName f `notElem` provided]
+          unless (null missing) $ recordError (TCMissingStructFields initSp tname missing)
+        Nothing -> return ()
       return (Just (TypeStruct tname))
     go (ExprArrayInit (Located _ elemType) elems) = do
       mapM_ (inferExpr env) elems

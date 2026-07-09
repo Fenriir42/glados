@@ -13,7 +13,6 @@
 #   Inlay hints        - parameter names appear greyed-out before each arg
 #   Semantic tokens    - fn calls and variables get theme-aware colours
 
-import io
 from math import sqrt, pow, floor, abs, gcd, factorial, clamp
 from string import len, concat, to_upper, reverse, repeat, from_int, substring
 from array import sort, sum, min, max, slice, contains, index_of

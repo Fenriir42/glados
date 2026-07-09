@@ -5,9 +5,10 @@ module TypeChecker.Error
   )
 where
 
-import AST.Types.Common (ErrorName (..), FuncName (..), SourceSpan, VarName (..))
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), SourceSpan, TypeName (..), VarName (..), unFieldName, unTypeName)
 import AST.Types.Operator (BinaryOp, UnaryOp)
 import AST.Types.Type (Type)
+import Data.List (intercalate)
 import qualified Data.Text as T
 
 data TypeCheckError
@@ -25,6 +26,7 @@ data TypeCheckError
   | TCInvalidCast SourceSpan Type Type
   | TCConditionNotBool SourceSpan Type
   | TCUnknownError SourceSpan ErrorName
+  | TCMissingStructFields SourceSpan TypeName [FieldName]
   deriving stock (Show, Eq)
 
 tcErrSpan :: TypeCheckError -> SourceSpan
@@ -39,6 +41,7 @@ tcErrSpan (TCIndexNonArray s _) = s
 tcErrSpan (TCInvalidCast s _ _) = s
 tcErrSpan (TCConditionNotBool s _) = s
 tcErrSpan (TCUnknownError s _) = s
+tcErrSpan (TCMissingStructFields s _ _) = s
 
 tcErrMessage :: TypeCheckError -> String
 tcErrMessage (TCUndefinedVar _ v) =
@@ -68,3 +71,8 @@ tcErrMessage (TCConditionNotBool _ t) =
   "condition must be `bool`, got `" ++ show t ++ "`"
 tcErrMessage (TCUnknownError _ e) =
   "unknown error type `" ++ T.unpack (unErrorName e) ++ "`"
+tcErrMessage (TCMissingStructFields _ tname missing) =
+  "struct `"
+    ++ T.unpack (unTypeName tname)
+    ++ "` init missing fields: "
+    ++ intercalate ", " (map (T.unpack . unFieldName) missing)

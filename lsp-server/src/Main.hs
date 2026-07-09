@@ -1,8 +1,8 @@
 module Main (main) where
 
 import AST.Types.AST (ImportDecl)
-import AST.Types.Common (ErrorName, FuncName, SourceSpan, VarName)
-import AST.Types.Type (FunctionType, Type)
+import AST.Types.Common (ErrorName, FuncName, SourceSpan, TypeName, VarName)
+import AST.Types.Type (FunctionType, StructField, Type)
 import Control.Concurrent.STM
   ( TVar,
     atomically,
@@ -54,6 +54,7 @@ data FileState = FileState
     fsImportDecls :: [(SourceSpan, ImportDecl)],
     fsCallsByFunc :: Map FuncName [(FuncName, SourceSpan)],
     fsVarDeclTypes :: Map SourceSpan Type,
+    fsStructDefs :: Map TypeName [StructField],
     fsFilePath :: FilePath,
     fsFileText :: Text
   }
@@ -313,6 +314,9 @@ mkHandlers stateVar =
                 makeCodeActions
                   (fsVarDeclSites fs)
                   (fsImportDecls fs)
+                  (fsStdlibDefSites fs)
+                  (fsStructDefs fs)
+                  (fsFileText fs)
                   (fsFilePath fs)
                   range
                   diags
@@ -429,6 +433,7 @@ analyzeAndPublish stateVar nuri version = do
               (arImportDecls result)
               (arCallsByFunc result)
               (arVarDeclTypes result)
+              (arStructDefs result)
               filePath
               text
       liftIO $ atomically $ modifyTVar' stateVar (Map.insert nuri fs)
