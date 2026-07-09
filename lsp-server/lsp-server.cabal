@@ -36,6 +36,7 @@ executable glados-lsp
     LSPServer.InlayHints
     LSPServer.References
     LSPServer.Rename
+    LSPServer.SelectionRange
     LSPServer.SemanticTokens
     LSPServer.SignatureHelp
     LSPServer.Span

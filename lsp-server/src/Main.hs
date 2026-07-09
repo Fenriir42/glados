@@ -28,6 +28,7 @@ import qualified LSPServer.Hover as Hover
 import LSPServer.InlayHints (makeInlayHints)
 import LSPServer.References (findReferences)
 import LSPServer.Rename (findRename, prepareRename)
+import LSPServer.SelectionRange (findSelectionRange)
 import LSPServer.SemanticTokens (buildSemanticTokens)
 import LSPServer.SignatureHelp (findSignatureHelp)
 import LSPServer.TypeDefinition (findTypeDefinition)
@@ -328,6 +329,28 @@ mkHandlers stateVar =
               Nothing -> []
               Just fs -> makeFoldingRanges (fsFoldingRanges fs)
         responder (Right (LSP.InL ranges)),
+      -- Selection range (Shift+Alt+Right to expand selection by AST node)
+      requestHandler SMethod_TextDocumentSelectionRange $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.SelectionRangeParams _ _ tdId positions) = req
+            LSP.TextDocumentIdentifier uri = tdId
+            nuri = LSP.toNormalizedUri uri
+        st <- liftIO $ readTVarIO stateVar
+        let result = case Map.lookup nuri st of
+              Nothing -> LSP.InR LSP.Null
+              Just fs ->
+                let srs =
+                      [ case findSelectionRange
+                          (fsTypes fs)
+                          (fsFoldingRanges fs)
+                          (fsFuncSymbols fs)
+                          (fromIntegral lspLine)
+                          (fromIntegral lspCol) of
+                          Nothing -> LSP.SelectionRange (LSP.Range pos pos) Nothing
+                          Just sr -> sr
+                        | pos@(LSP.Position lspLine lspCol) <- positions
+                      ]
+                 in LSP.InL srs
+        responder (Right result),
       -- Inlay hints (parameter names)
       requestHandler SMethod_TextDocumentInlayHint $ \req responder -> do
         let TRequestMessage _ _ _ (LSP.InlayHintParams _ tdId range) = req
