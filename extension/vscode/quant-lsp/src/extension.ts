@@ -15,6 +15,19 @@ export function activate(context: vscode.ExtensionContext): void {
   // even if the server binary is missing or the client hasn't started yet.
   context.subscriptions.push(
     vscode.commands.registerCommand(
+      "quant-lsp.runFile",
+      (filePath: string) => {
+        const terminal =
+          vscode.window.terminals.find((t) => t.name === "Quant") ??
+          vscode.window.createTerminal("Quant");
+        terminal.show(true);
+        terminal.sendText(`glados compiler "${filePath}"`);
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
       "quant-lsp.showReferences",
       (
         uriStr: string,

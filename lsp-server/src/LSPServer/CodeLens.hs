@@ -21,11 +21,17 @@ makeCodeLens ::
   [(FuncName, FunctionType, SourceSpan, SourceSpan)] ->
   Map SourceSpan (FuncName, FunctionType) ->
   [LSP.CodeLens]
-makeCodeLens fp funcSymbols callSites = map toCodeLens funcSymbols
+makeCodeLens fp funcSymbols callSites = concatMap toLenses funcSymbols
   where
     fileUri = LSP.filePathToUri fp
 
-    toCodeLens (fname, _, nameSpan, _) =
+    toLenses (fname, _, nameSpan, _) =
+      let refLens = toRefLens fname nameSpan
+       in if fname == FuncName "main"
+            then [toRunLens nameSpan, refLens]
+            else [refLens]
+
+    toRefLens fname nameSpan =
       let refSpans = [sp | (sp, (fn, _)) <- Map.toList callSites, fn == fname]
           count = length refSpans
           label = refLabel count
@@ -36,6 +42,14 @@ makeCodeLens fp funcSymbols callSites = map toCodeLens funcSymbols
               label
               "quant-lsp.showReferences"
               (Just [toJSON fileUri, toJSON defPos, toJSON refLocs])
+       in LSP.CodeLens (spanToRange nameSpan) (Just cmd) Nothing
+
+    toRunLens nameSpan =
+      let cmd =
+            LSP.Command
+              "Run"
+              "quant-lsp.runFile"
+              (Just [toJSON (T.pack fp)])
        in LSP.CodeLens (spanToRange nameSpan) (Just cmd) Nothing
 
 refLabel :: Int -> Text

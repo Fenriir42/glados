@@ -58,6 +58,11 @@
         "command": "quant-lsp.showReferences",
         "title": "Show References",
         "category": "Quant"
+      },
+      {
+        "command": "quant-lsp.runFile",
+        "title": "Run File",
+        "category": "Quant"
       }
     ],
     "configuration": {
