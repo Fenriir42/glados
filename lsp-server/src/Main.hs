@@ -31,6 +31,7 @@ import LSPServer.Rename (findRename, prepareRename)
 import LSPServer.SemanticTokens (buildSemanticTokens)
 import LSPServer.SignatureHelp (findSignatureHelp)
 import LSPServer.TypeDefinition (findTypeDefinition)
+import LSPServer.WorkspaceSymbol (findWorkspaceSymbols)
 import Language.LSP.Diagnostics (partitionBySource)
 import Language.LSP.Protocol.Message
 import qualified Language.LSP.Protocol.Types as LSP
@@ -221,6 +222,21 @@ mkHandlers stateVar =
         let syms = case Map.lookup nuri st of
               Nothing -> []
               Just fs -> makeDocumentSymbols (fsFuncSymbols fs)
+        responder (Right (LSP.InR (LSP.InL syms))),
+      -- Workspace symbol search (Cmd+T / Quick Open)
+      requestHandler SMethod_WorkspaceSymbol $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.WorkspaceSymbolParams _ _ query) = req
+        st <- liftIO $ readTVarIO stateVar
+        let syms =
+              concatMap
+                ( \fs ->
+                    findWorkspaceSymbols
+                      (fsFuncSymbols fs)
+                      (fsStructDefSites fs)
+                      (fsFilePath fs)
+                      query
+                )
+                (Map.elems st)
         responder (Right (LSP.InR (LSP.InL syms))),
       -- Document highlight (occurrences glow)
       requestHandler SMethod_TextDocumentDocumentHighlight $ \req responder -> do

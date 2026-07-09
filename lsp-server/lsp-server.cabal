@@ -40,6 +40,7 @@ executable glados-lsp
     LSPServer.SignatureHelp
     LSPServer.Span
     LSPServer.TypeDefinition
+    LSPServer.WorkspaceSymbol
 
   default-extensions:
     DuplicateRecordFields
