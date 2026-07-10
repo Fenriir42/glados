@@ -8,5 +8,6 @@ packages:
   repl/
   vm/
   cli/
+  formatter/
 
 tests: True
