@@ -3,6 +3,7 @@ module Main (main) where
 import AST.Types.AST (Program (..))
 import Config (FormatOptions (..), defaultOptions, loadConfig)
 import Control.Exception (SomeException, catch)
+import Control.Monad (when)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -130,7 +131,7 @@ runFormat args opts label src emit =
       hPutStrLn stderr (label ++ ": " ++ err)
       return False
     Right prog -> do
-      let formatted = formatProgram opts prog
+      let formatted = formatProgram opts src prog
       if argCheck args
         then
           if formatted == src
@@ -145,7 +146,7 @@ runFormat args opts label src emit =
           return True
 
 whenVerbose :: Args -> IO () -> IO ()
-whenVerbose args = Control.Monad.when (argVerbose args)
+whenVerbose args = when (argVerbose args)
 
 -- ---------------------------------------------------------------------------
 -- Entry point

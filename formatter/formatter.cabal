@@ -31,7 +31,8 @@ library
 
   build-depends:
     , ast
-    , base  >=4.11 && <5
+    , base        >=4.11 && <5
+    , containers
     , text
 
 executable quant-fmt

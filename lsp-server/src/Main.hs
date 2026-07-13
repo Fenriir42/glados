@@ -1,8 +1,9 @@
 module Main (main) where
 
-import AST.Types.AST (ImportDecl)
+import AST.Types.AST (ImportDecl, Program (..))
 import AST.Types.Common (ErrorName, FuncName, SourceSpan, TypeName, VarName)
 import AST.Types.Type (FunctionType, StructField, Type)
+import Config (defaultOptions)
 import Control.Concurrent.STM
   ( TVar,
     atomically,
@@ -15,6 +16,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import qualified Data.Text as T
+import Formatter (formatProgram)
 import LSPServer.Analyze (AnalyzeResult (..), analyzeText)
 import LSPServer.CallHierarchy (incomingCalls, outgoingCalls, prepareCallHierarchy)
 import LSPServer.CodeAction (makeCodeActions)
@@ -38,7 +41,11 @@ import Language.LSP.Protocol.Message
 import qualified Language.LSP.Protocol.Types as LSP
 import Language.LSP.Server
 import Language.LSP.VFS (virtualFileText)
+import Lib (lexString)
+import Parser.Decl (parseDecl)
 import System.Exit (ExitCode (..), exitWith)
+import Text.Megaparsec (errorBundlePretty, runParser)
+import qualified Text.Megaparsec as MP
 
 data FileState = FileState
   { fsTypes :: Map SourceSpan Type,
@@ -84,7 +91,7 @@ main = do
 
 serverOptions :: Options
 serverOptions =
-  defaultOptions
+  Language.LSP.Server.defaultOptions
     { optTextDocumentSync =
         Just
           LSP.TextDocumentSyncOptions
@@ -445,6 +452,24 @@ mkHandlers stateVar =
                   (fsFilePath fs)
                   chItem
         responder (Right (LSP.InL calls)),
+      -- Document formatting (Shift+Alt+F)
+      requestHandler SMethod_TextDocumentFormatting $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.DocumentFormattingParams _ tdId _) = req
+            LSP.TextDocumentIdentifier uri = tdId
+            nuri = LSP.toNormalizedUri uri
+        st <- liftIO $ readTVarIO stateVar
+        let result = case Map.lookup nuri st of
+              Nothing -> LSP.InR LSP.Null
+              Just fs ->
+                let src = fsFileText fs
+                 in case parseForFormat (fsFilePath fs) src of
+                      Left _ -> LSP.InR LSP.Null
+                      Right prog ->
+                        let formatted = formatProgram Config.defaultOptions src prog
+                            end = LSP.Position (fromIntegral (length (T.lines src))) 0
+                            edit = LSP.TextEdit (LSP.Range (LSP.Position 0 0) end) formatted
+                         in LSP.InL [edit]
+        responder (Right result),
       -- Call hierarchy: outgoing calls (what this function calls)
       requestHandler SMethod_CallHierarchyOutgoingCalls $ \req responder -> do
         let TRequestMessage _ _ _ (LSP.CallHierarchyOutgoingCallsParams _ _ chItem) = req
@@ -461,6 +486,15 @@ mkHandlers stateVar =
                   chItem
         responder (Right (LSP.InL calls))
     ]
+
+parseForFormat :: FilePath -> Text -> Either String (Program ())
+parseForFormat label src =
+  case lexString (T.unpack src) of
+    Left err -> Left err
+    Right tokens ->
+      case runParser (MP.many parseDecl) label tokens of
+        Left err -> Left (errorBundlePretty err)
+        Right decls -> Right (Program decls)
 
 analyzeAndPublish ::
   TVar State ->

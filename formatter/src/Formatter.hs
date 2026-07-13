@@ -26,10 +26,14 @@ import AST.Types.Common
   ( ErrorName (..),
     FieldName (..),
     FuncName (..),
+    Line (..),
     Located (..),
     ModuleName (..),
+    SourcePos (..),
+    SourceSpan (..),
     TypeName (..),
     VarName (..),
+    locSpan,
     unErrorName,
     unFieldName,
     unFuncName,
@@ -65,6 +69,8 @@ import AST.Types.Type
     Type (..),
   )
 import Config (FormatOptions (..))
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IM
 import Data.List (intercalate, partition, sortBy)
 import Data.Ord (comparing)
 import Data.Text (Text)
@@ -88,11 +94,6 @@ appendSemi :: Lines -> Lines
 appendSemi [] = [";"]
 appendSemi ls = init ls ++ [last ls <> ";"]
 
--- | Format all statements in a block at indent level n+1 with terminators.
-blockBody :: FormatOptions -> Int -> Block () -> Lines
-blockBody opts n blk =
-  concatMap (appendSemi . fmtStmt opts (n + 1)) (blockStmts blk)
-
 -- | Remove trailing comma from the last line unless optTrailingComma.
 dropTrailingComma :: FormatOptions -> Lines -> Lines
 dropTrailingComma _ [] = []
@@ -101,20 +102,126 @@ dropTrailingComma opts ls
   | otherwise = init ls ++ [T.dropEnd 1 (last ls)]
 
 -- ---------------------------------------------------------------------------
+-- Comment extraction
+
+-- | Map from 0-based line numbers to standalone comment text.
+-- Standalone = the line contains only whitespace and then // or #.
+type CommentsMap = IntMap Text
+
+-- | Extract all standalone comment lines from source text.
+extractComments :: Text -> CommentsMap
+extractComments src =
+  IM.fromList
+    [ (i, T.stripStart ln)
+      | (i, ln) <- zip [0 ..] (T.lines src),
+        let s = T.stripStart ln,
+        T.isPrefixOf "//" s || (not (T.null s) && T.isPrefixOf "#" s)
+    ]
+
+-- | Collect all comments at 0-based lines in the inclusive range [lo, hi].
+commentsInRange :: CommentsMap -> Int -> Int -> [Text]
+commentsInRange cm lo hi
+  | lo > hi = []
+  | otherwise = [v | k <- [lo .. hi], Just v <- [IM.lookup k cm]]
+
+-- | Convert a 1-based SourcePos line to a 0-based Int.
+spanLine :: SourcePos -> Int
+spanLine sp = unLine (posLine sp) - 1
+
+-- | True end line (0-based) of a block (proxy for the closing }).
+blockEndLine :: Block () -> Int -> Int
+blockEndLine blk def = case blockStmts blk of
+  [] -> def
+  stmts -> stmtEndLine (last stmts)
+
+-- | True end line (0-based) of a statement.
+-- Compound stmts close with } whose spanEnd is corrupted; use last nested stmt instead.
+stmtEndLine :: Located (Stmt ()) -> Int
+stmtEndLine (Located _ (StmtIf _ thenBlk Nothing)) =
+  blockEndLine thenBlk (spanLine (spanStart (blockSpan thenBlk)))
+stmtEndLine (Located _ (StmtIf _ _ (Just elseBlk))) =
+  blockEndLine elseBlk (spanLine (spanStart (blockSpan elseBlk)))
+stmtEndLine (Located _ (StmtWhile _ body)) =
+  blockEndLine body (spanLine (spanStart (blockSpan body)))
+stmtEndLine (Located _ (StmtFor _ _ _ body)) =
+  blockEndLine body (spanLine (spanStart (blockSpan body)))
+stmtEndLine (Located _ (StmtBlock blk)) =
+  blockEndLine blk (spanLine (spanStart (blockSpan blk)))
+stmtEndLine (Located _ (StmtMatch _ arms)) = case reverse arms of
+  [] -> 0
+  (MatchArm _ lastBody : _) -> stmtEndLine lastBody
+stmtEndLine (Located sp _) = spanLine (spanEnd sp)
+
+-- | True end line (0-based) of a top-level decl.
+-- DeclFunction's spanEnd covers the } token with a corrupted endPos; use last stmt instead.
+declEndLine :: Located (Decl ()) -> Int
+declEndLine (Located _ (DeclFunction _ fd)) =
+  blockEndLine (funcDeclBody fd) (spanLine (spanStart (blockSpan (funcDeclBody fd))))
+declEndLine (Located sp _) = spanLine (spanEnd sp)
+
+-- | True start line (0-based) of a top-level decl.
+-- The Located span of a DeclFunction has a corrupted spanStart because
+-- parseFunctionType -> parseQualifiedType -> parseConstness returns
+-- voidSpann (posFile="/dev/null"), which wins the min comparison when
+-- merging spans. We bypass this by reading the function name span directly.
+declTrueStartLine :: Located (Decl ()) -> Int
+declTrueStartLine (Located _ (DeclFunction _ fd)) =
+  spanLine (spanStart (locSpan (funcDeclName fd)))
+declTrueStartLine (Located sp _) = spanLine (spanStart sp)
+
+-- | True start line (0-based) of a statement.
+-- StmtVarDecl spans are corrupted for the same reason (parseQualifiedType).
+-- Use the variable name token's span as the authoritative start line.
+stmtTrueStartLine :: Located (Stmt ()) -> Int
+stmtTrueStartLine (Located _ (StmtVarDecl (Located nameSpan _) _ _)) =
+  spanLine (spanStart nameSpan)
+stmtTrueStartLine (Located sp _) = spanLine (spanStart sp)
+
+-- ---------------------------------------------------------------------------
+-- Format all stmts in a block, inserting comments between them.
+--
+-- `openLine`: 0-based line of the opening `{`; used to capture comments
+-- that appear between `{` and the first statement.
+
+blockBody :: CommentsMap -> FormatOptions -> Int -> Int -> Block () -> Lines
+blockBody cm opts n openLine blk = go openLine (blockStmts blk)
+  where
+    go _ [] = []
+    go prevEnd (ls : rest) =
+      let startL = stmtTrueStartLine ls
+          endL = stmtEndLine ls
+          before = [ind opts (n + 1) <> c | c <- commentsInRange cm (prevEnd + 1) (startL - 1)]
+       in before ++ appendSemi (fmtStmt cm opts (n + 1) ls) ++ go endL rest
+
+-- ---------------------------------------------------------------------------
 -- Program
 
-formatProgram :: FormatOptions -> Program () -> Text
-formatProgram opts prog =
-  let decls = map locValue (programDecls prog)
-      (imps, others) = partition isImport decls
+-- | Format a program, preserving standalone comments from the original source.
+formatProgram :: FormatOptions -> Text -> Program () -> Text
+formatProgram opts src prog =
+  let cm = extractComments src
+      locDecls = programDecls prog
+      (lImps, lOthers) = partition (isImport . locValue) locDecls
       sorted =
         if optReorderImports opts
-          then sortBy (comparing importKey) imps
-          else imps
-      impLines = map (fmtImport . getImport) sorted
-      otherBlocks = map (fmtDecl opts 0) others
+          then sortBy (comparing (importKey . locValue)) lImps
+          else lImps
+      impLines = map (fmtImport . getImport . locValue) sorted
+      otherBlocks = fmtTopDecls cm opts lOthers
       sections = filter (not . null) $ impLines : otherBlocks
    in T.unlines (intercalate [""] sections)
+
+-- | Format top-level declarations, inserting comments that appear between them.
+fmtTopDecls :: CommentsMap -> FormatOptions -> [Located (Decl ())] -> [Lines]
+fmtTopDecls cm opts = go (-1)
+  where
+    go _ [] = []
+    go prevEnd (ld : rest) =
+      let startL = declTrueStartLine ld
+          endL = declEndLine ld
+          before = commentsInRange cm (prevEnd + 1) (startL - 1)
+          body = fmtDecl cm opts 0 ld
+       in (before ++ body) : go endL rest
 
 isImport :: Decl () -> Bool
 isImport (DeclImport _) = True
@@ -149,20 +256,21 @@ fmtImport (ImportDecl path ImportWildcard) =
 -- ---------------------------------------------------------------------------
 -- Declarations
 
-fmtDecl :: FormatOptions -> Int -> Decl () -> Lines
-fmtDecl opts n (DeclFunction vis fd) = fmtFuncDecl opts n vis fd
-fmtDecl opts n (DeclStruct vis sd) = fmtStructDecl opts n vis sd
-fmtDecl _ _ (DeclImport _) = []
-fmtDecl opts n (DeclError vis ed) = fmtErrorDecl opts n vis ed
-fmtDecl opts n (DeclErrorSet vis esd) = fmtErrorSetDecl opts n vis esd
-fmtDecl opts n (DeclFFI ffi) = fmtFFIDecl opts n ffi
+fmtDecl :: CommentsMap -> FormatOptions -> Int -> Located (Decl ()) -> Lines
+fmtDecl cm opts n (Located _ (DeclFunction vis fd)) =
+  fmtFuncDecl cm opts n (spanLine (spanStart (blockSpan (funcDeclBody fd)))) vis fd
+fmtDecl _ opts n (Located _ (DeclStruct vis sd)) = fmtStructDecl opts n vis sd
+fmtDecl _ _ _ (Located _ (DeclImport _)) = []
+fmtDecl _ opts n (Located _ (DeclError vis ed)) = fmtErrorDecl opts n vis ed
+fmtDecl _ opts n (Located _ (DeclErrorSet vis esd)) = fmtErrorSetDecl opts n vis esd
+fmtDecl _ opts n (Located _ (DeclFFI ffi)) = fmtFFIDecl opts n ffi
 
 fmtVis :: Visibility -> Text
 fmtVis Public = ""
 fmtVis Static = "static "
 
-fmtFuncDecl :: FormatOptions -> Int -> Visibility -> FunctionDecl () -> Lines
-fmtFuncDecl opts n vis fd =
+fmtFuncDecl :: CommentsMap -> FormatOptions -> Int -> Int -> Visibility -> FunctionDecl () -> Lines
+fmtFuncDecl cm opts n openLine vis fd =
   let tparams = case funcDeclTypeParams fd of
         [] -> ""
         ps -> "[" <> T.intercalate ", " [unTypeName (locValue p) | p <- ps] <> "]"
@@ -179,7 +287,7 @@ fmtFuncDecl opts n vis fd =
           <> ") -> "
           <> ret
           <> " {"
-   in [sig] ++ blockBody opts n (funcDeclBody fd) ++ [ind opts n <> "}"]
+   in [sig] ++ blockBody cm opts n openLine (funcDeclBody fd) ++ [ind opts n <> "}"]
 
 fmtParam :: Parameter -> Text
 fmtParam p =
@@ -279,8 +387,8 @@ fmtFuncTypeText (FunctionType params ret) =
 -- ---------------------------------------------------------------------------
 -- Statements
 
-fmtStmt :: FormatOptions -> Int -> Located (Stmt ()) -> Lines
-fmtStmt opts n (Located _ stmt) = case stmt of
+fmtStmt :: CommentsMap -> FormatOptions -> Int -> Located (Stmt ()) -> Lines
+fmtStmt cm opts n (Located sp stmt) = case stmt of
   StmtVarDecl (Located _ vname) (Located _ qt) mInit ->
     let base = ind opts n <> unVarName vname <> ": " <> fmtQType qt
      in [base <> maybe "" (\(Located _ e) -> " = " <> fmtExpr opts n e) mInit]
@@ -302,17 +410,21 @@ fmtStmt opts n (Located _ stmt) = case stmt of
   StmtContinue ->
     [ind opts n <> "continue"]
   StmtBlock blk ->
-    [ind opts n <> "{"] ++ blockBody opts n blk ++ [ind opts n <> "}"]
+    let openL = spanLine (spanStart sp)
+     in [ind opts n <> "{"] ++ blockBody cm opts n openL blk ++ [ind opts n <> "}"]
   StmtIf (Located _ cond) thenBlk mElse ->
-    [ind opts n <> "if (" <> fmtExpr opts n cond <> ") {"]
-      ++ blockBody opts n thenBlk
-      ++ fmtElse opts n mElse
+    let openL = spanLine (spanStart sp)
+     in [ind opts n <> "if (" <> fmtExpr opts n cond <> ") {"]
+          ++ blockBody cm opts n openL thenBlk
+          ++ fmtElse cm opts n (blockEndLine thenBlk openL) mElse
   StmtWhile (Located _ cond) body ->
-    [ind opts n <> "while (" <> fmtExpr opts n cond <> ") {"]
-      ++ blockBody opts n body
-      ++ [ind opts n <> "}"]
+    let openL = spanLine (spanStart sp)
+     in [ind opts n <> "while (" <> fmtExpr opts n cond <> ") {"]
+          ++ blockBody cm opts n openL body
+          ++ [ind opts n <> "}"]
   StmtFor mInit mCond mUpdate body ->
-    let initTxt = maybe "" (fmtForInit opts n) mInit
+    let openL = spanLine (spanStart sp)
+        initTxt = maybe "" (fmtForInit opts n) mInit
         condTxt = maybe "" (\(Located _ e) -> fmtExpr opts n e) mCond
         updTxt = maybe "" (fmtForUpdate opts n) mUpdate
         header =
@@ -324,23 +436,23 @@ fmtStmt opts n (Located _ stmt) = case stmt of
             <> "; "
             <> updTxt
             <> ") {"
-     in [header] ++ blockBody opts n body ++ [ind opts n <> "}"]
+     in [header] ++ blockBody cm opts n openL body ++ [ind opts n <> "}"]
   StmtMatch (Located _ expr) arms ->
     [ind opts n <> "match " <> fmtExpr opts n expr <> " {"]
-      ++ concatMap (fmtMatchArm opts n) arms
+      ++ concatMap (fmtMatchArm cm opts n) arms
       ++ [ind opts n <> "}"]
 
-fmtElse :: FormatOptions -> Int -> Maybe (Block ()) -> Lines
-fmtElse opts n Nothing = [ind opts n <> "}"]
-fmtElse opts n (Just elseBlk) =
+fmtElse :: CommentsMap -> FormatOptions -> Int -> Int -> Maybe (Block ()) -> Lines
+fmtElse _ opts n _ Nothing = [ind opts n <> "}"]
+fmtElse cm opts n elseOpenLine (Just elseBlk) =
   case blockStmts elseBlk of
     [Located _ (StmtIf (Located _ c2) then2 mElse2)] ->
       [ind opts n <> "} else if (" <> fmtExpr opts n c2 <> ") {"]
-        ++ blockBody opts n then2
-        ++ fmtElse opts n mElse2
+        ++ blockBody cm opts n elseOpenLine then2
+        ++ fmtElse cm opts n (blockEndLine then2 elseOpenLine) mElse2
     _ ->
       [ind opts n <> "} else {"]
-        ++ blockBody opts n elseBlk
+        ++ blockBody cm opts n elseOpenLine elseBlk
         ++ [ind opts n <> "}"]
 
 fmtForInit :: FormatOptions -> Int -> ForInit () -> Text
@@ -357,7 +469,7 @@ fmtForUpdate opts n (Located _ stmt) = case stmt of
     | otherwise -> fmtLValue opts n lv <> " " <> assignOpSymbol op <> " " <> fmtExpr opts n e
   StmtExpr (Located _ e) -> fmtExpr opts n e
   _ ->
-    let ls = fmtStmt opts 0 (Located (error "fmtForUpdate: dummy span") stmt)
+    let ls = fmtStmt IM.empty opts 0 (Located (error "fmtForUpdate: dummy span") stmt)
      in T.intercalate "; " ls
 
 -- | True when the expression is the integer literal 1 (base 10).
@@ -365,10 +477,10 @@ isLitOne :: Expr () -> Bool
 isLitOne (ExprLiteral (LitInt (IntLiteral BaseDec 1))) = True
 isLitOne _ = False
 
-fmtMatchArm :: FormatOptions -> Int -> MatchArm () -> Lines
-fmtMatchArm opts n (MatchArm pat body) =
+fmtMatchArm :: CommentsMap -> FormatOptions -> Int -> MatchArm () -> Lines
+fmtMatchArm cm opts n (MatchArm pat body) =
   let patTxt = fmtMatchPat opts n pat
-      bodyLines = appendSemi (fmtStmt opts n body)
+      bodyLines = appendSemi (fmtStmt cm opts n body)
       prefix = ind opts n <> patTxt <> " => "
       indLen = T.length (ind opts n)
    in case bodyLines of
@@ -458,7 +570,7 @@ fmtExpr opts _ (ExprLambda params ret body) =
       r = fmtQType (locValue ret)
       bodyTxt =
         T.intercalate " " $
-          concatMap (appendSemi . fmtStmt opts 0) (blockStmts body)
+          concatMap (appendSemi . fmtStmt IM.empty opts 0) (blockStmts body)
    in "fn(" <> ps <> ") -> " <> r <> " { " <> bodyTxt <> " }"
 fmtExpr opts n (ExprParen (Located _ e)) = "(" <> fmtExpr opts n e <> ")"
 fmtExpr opts n (ExprCast (Located _ e) (Located _ t)) =

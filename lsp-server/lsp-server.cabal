@@ -57,6 +57,7 @@ executable glados-lsp
     , containers
     , directory
     , filepath
+    , formatter
     , lsp          >=2.4
     , lsp-types    >=2.4
     , megaparsec
