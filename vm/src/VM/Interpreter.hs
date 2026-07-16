@@ -469,6 +469,8 @@ execInstr = \case
       _ -> throwError $ VMRuntimeError "ICallIndirect: no function value on stack"
   ICallFFI lib sym retTy argc -> do
     args <- popN argc
+    strings <- gets vmStrings
+    let resolvedArgs = map (resolveStringRef strings) args
     dl <- do
       libs <- gets vmFFILibs
       case Map.lookup lib libs of
@@ -478,7 +480,7 @@ execInstr = \case
           modify $ \s -> s {vmFFILibs = Map.insert lib d (vmFFILibs s)}
           return d
     funPtr <- S.liftIO $ dlsym dl (T.unpack sym)
-    result <- S.liftIO $ callWithFFIArgs funPtr retTy args
+    result <- S.liftIO $ callWithFFIArgs funPtr retTy resolvedArgs
     push result
     return Nothing
 
