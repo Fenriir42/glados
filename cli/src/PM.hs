@@ -10,11 +10,15 @@ module PM
   )
 where
 
-import Compile (compileSource, execute, resolveStdlib)
+import AST.Types.Common (FuncName (..))
+import Compile (compileSource, execute, executeFunction, resolveStdlib)
+import qualified Compiler (Bytecode)
 import Compiler.Serialize (encodeBytecodes)
 import Control.Exception (try)
 import qualified Data.ByteString.Lazy as BSL
-import Data.List (isSuffixOf)
+import Data.Char (isAlphaNum)
+import Data.List (isPrefixOf, isSuffixOf)
+import qualified Data.Text as T
 import Display (bold, dim, green, printColored, printOk, printStep, red, reset, yellow)
 import Manifest (Manifest (..), loadManifest)
 import System.Directory
@@ -104,13 +108,11 @@ runTest mFile = do
     Just f -> return [f]
     Nothing -> findTestFiles (mTestDir m)
   if null files
-    then do
-      putStrLn $ "no test files found in `" ++ mTestDir m ++ "`"
-      exitSuccess
+    then putStrLn ("no test files found in `" ++ mTestDir m ++ "`") >> exitSuccess
     else do
-      results <- mapM (runOneTest stdlib) files
-      let passed = length (filter id results)
-          failed = length (filter not results)
+      pairs <- mapM (runTestFile stdlib) files
+      let passed = sum (map fst pairs)
+          failed = sum (map snd pairs)
       putStrLn ""
       if failed == 0
         then printOk ("all " ++ show passed ++ " test(s) passed")
@@ -127,15 +129,61 @@ runTest mFile = do
               ++ " passed\n"
           exitFailure
 
-runOneTest :: FilePath -> FilePath -> IO Bool
-runOneTest stdlib fp = do
-  putStr $ dim ++ "  test" ++ reset ++ "  " ++ fp ++ " ... "
-  result <- try (compileSource stdlib fp >>= execute) :: IO (Either ExitCode ())
+-- | Compile a test file once, then run each @test_*@ function individually.
+-- Falls back to file-level execution when the file has its own @main@.
+runTestFile :: FilePath -> FilePath -> IO (Int, Int)
+runTestFile stdlib fp = do
+  src <- readFile fp
+  printColored $ dim ++ "testing " ++ reset ++ fp ++ "\n"
+  bc <- compileSource stdlib fp
+  let fns = scanTestFunctions src
+  if null fns || hasMain src
+    then do
+      result <- try (execute bc) :: IO (Either ExitCode ())
+      case result of
+        Right () -> printOk "  (file)" >> return (1, 0)
+        Left ExitSuccess -> printOk "  (file)" >> return (1, 0)
+        Left (ExitFailure _) ->
+          printColored (bold ++ red ++ "  FAIL" ++ reset ++ " (file)\n") >> return (0, 1)
+    else do
+      results <- mapM (runOneFn bc) fns
+      let p = length (filter id results)
+          f = length (filter not results)
+      return (p, f)
+
+runOneFn :: [Compiler.Bytecode] -> String -> IO Bool
+runOneFn bc fname = do
+  putStr (dotLine fname)
+  result <- executeFunction (FuncName (T.pack fname)) bc
   case result of
-    Right () -> putStrLn (bold ++ green ++ "ok" ++ reset) >> return True
-    Left ExitSuccess -> putStrLn (bold ++ green ++ "ok" ++ reset) >> return True
-    Left (ExitFailure _) ->
-      putStrLn (bold ++ red ++ "FAIL" ++ reset) >> return False
+    Right () ->
+      printColored (bold ++ green ++ "ok" ++ reset ++ "\n") >> return True
+    Left errMsg -> do
+      printColored (bold ++ red ++ "FAIL" ++ reset ++ "\n")
+      mapM_ (\l -> putStrLn ("    " ++ l)) (filter (not . null) (lines errMsg))
+      return False
+
+dotLine :: String -> String
+dotLine name =
+  let col = 38
+      padded = "  " ++ name ++ " "
+      dots = replicate (max 3 (col - length padded)) '.'
+   in padded ++ dots ++ " "
+
+-- | Scan source text for @fn test_*@ declarations; return their names.
+scanTestFunctions :: String -> [String]
+scanTestFunctions src =
+  [ name
+    | l <- lines src,
+      let s = dropWhile (== ' ') l,
+      "fn test_" `isPrefixOf` s,
+      let name = takeWhile (\c -> isAlphaNum c || c == '_') (drop 3 s),
+      "test_" `isPrefixOf` name
+  ]
+
+hasMain :: String -> Bool
+hasMain src =
+  any (\l -> "fn main(" `isPrefixOf` dropWhile (== ' ') l) (lines src)
 
 findTestFiles :: FilePath -> IO [FilePath]
 findTestFiles dir = do

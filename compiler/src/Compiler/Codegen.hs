@@ -138,6 +138,7 @@ isKnownFunction :: FuncName -> Set FuncName -> Bool
 isKnownFunction fname known =
   Set.member fname known
     || Set.member fname builtinFunctions
+    || unFuncName fname `elem` ["assert", "assert_eq", "fail"]
     || any (`T.isPrefixOf` unFuncName fname) ["math.", "string.", "sys.", "io.", "file.", "buf.", "dict.", "array.", "json.", "socket.", "regex.", "ptr."]
 
 -- | Map a Quant return type to the C return type tag used in ICallFFI.

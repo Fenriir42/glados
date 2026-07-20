@@ -2,6 +2,7 @@
 module VM.Interpreter
   ( VMError (..),
     runProgram,
+    runFunction,
   )
 where
 
@@ -128,6 +129,33 @@ runProgram bytecodes = do
                 vmNextId = 0,
                 vmFunctions = funcs,
                 vmCurrentFunc = FuncName "main"
+              }
+      (result, _) <- runStateT (runExceptT execLoop) initState
+      return result
+
+-- | Load all bytecodes and execute a named function directly (no @main@ required).
+runFunction :: FuncName -> [Bytecode] -> IO (Either VMError Value)
+runFunction fname bytecodes = do
+  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  case Map.lookup fname funcs of
+    Nothing -> return $ Left $ VMUndefinedFunction fname
+    Just bc -> do
+      let initState =
+            VMState
+              { vmStack = [],
+                vmLocals = Map.empty,
+                vmIP = 0,
+                vmInstrs = bytecodeInstructions bc,
+                vmStrings = bytecodeStrings bc,
+                vmCallStack = [],
+                vmHeap = Map.empty,
+                vmDictHeap = Map.empty,
+                vmStructHeap = Map.empty,
+                vmSocketHeap = Map.empty,
+                vmFFILibs = Map.empty,
+                vmNextId = 0,
+                vmFunctions = funcs,
+                vmCurrentFunc = fname
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -890,10 +918,54 @@ callHeapBuiltin name args = case (name, args) of
   ("ptr.to_int", [VPointer addr]) -> return $ VInt (fromIntegral addr)
   -- ptr.from_int : int -> ptr
   ("ptr.from_int", [VInt n]) -> return $ VPointer (fromIntegral n)
+  -- assert : bool -> str -> void
+  ("assert", rawArgs@[_, _]) -> do
+    strings <- gets vmStrings
+    case map (resolveStringRef strings) rawArgs of
+      [VBool True, _] -> return VUnit
+      [VBool False, VString msg] ->
+        throwError $ VMRuntimeError $ "assertion failed: " ++ T.unpack msg
+      _ -> throwError $ VMRuntimeError "assert: expected (bool, str)"
+  -- assert_eq : any -> any -> void
+  ("assert_eq", rawArgs@[_, _]) -> do
+    strings <- gets vmStrings
+    case map (resolveStringRef strings) rawArgs of
+      [a, b] ->
+        if a == b
+          then return VUnit
+          else
+            throwError $
+              VMRuntimeError $
+                "assertion failed: expected " ++ showVal a ++ ", got " ++ showVal b
+      _ -> throwError $ VMRuntimeError "assert_eq: expected (any, any)"
+  -- fail : str -> void
+  ("fail", rawArgs@[_]) -> do
+    strings <- gets vmStrings
+    case map (resolveStringRef strings) rawArgs of
+      [VString msg] -> throwError $ VMRuntimeError $ T.unpack msg
+      _ -> throwError $ VMRuntimeError "fail: expected (str)"
   _ ->
     throwError $
       VMRuntimeError $
         "Heap builtin '" ++ show name ++ "' called with bad args: " ++ show args
+
+-- ---------------------------------------------------------------------------
+-- Value display (used by assert_eq)
+
+showVal :: Value -> String
+showVal (VInt n) = show n
+showVal (VFloat f) = show f
+showVal (VBool True) = "true"
+showVal (VBool False) = "false"
+showVal (VString s) = T.unpack s
+showVal (VStringRef _) = "<str>"
+showVal VUnit = "void"
+showVal (VPointer p) = "0x" ++ show p
+showVal (VArrayRef _) = "[...]"
+showVal (VDictRef _) = "{...}"
+showVal (VStructRef _) = "struct(...)"
+showVal (VFunction f) = T.unpack (unFuncName f)
+showVal (VErrorVal e _) = T.unpack (unErrorName e)
 
 -- ---------------------------------------------------------------------------
 -- Regex helpers

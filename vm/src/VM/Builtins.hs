@@ -77,7 +77,10 @@ heapBuiltins =
     "buf.to_str",
     "buf.len",
     "buf.clear",
-    "buf.flush"
+    "buf.flush",
+    "assert",
+    "assert_eq",
+    "fail"
   ]
 
 -- | Execute a pure built-in. @strings@ is the caller's string pool.

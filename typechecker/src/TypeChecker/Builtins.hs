@@ -90,7 +90,10 @@ builtinReturnType (FuncName n)
         "array.push",
         "sys.exit",
         "sys.sleep",
-        "sys.flush"
+        "sys.flush",
+        "assert",
+        "assert_eq",
+        "fail"
       ]
     intFuncs =
       [ "len",
@@ -151,5 +154,5 @@ isKnownBuiltin (FuncName n) =
   n `elem` standaloneBuiltins
     || any (`T.isPrefixOf` n) modulePrefixes
   where
-    standaloneBuiltins = ["print", "println", "len", "push", "pop"]
+    standaloneBuiltins = ["print", "println", "len", "push", "pop", "assert", "assert_eq", "fail"]
     modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict.", "json.", "socket.", "regex.", "ptr."]

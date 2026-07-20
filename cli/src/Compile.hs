@@ -2,6 +2,7 @@ module Compile
   ( resolveStdlib,
     compileSource,
     execute,
+    executeFunction,
     collectStdlibFuncNames,
     displayTypeError,
     displayTypeWarning,
@@ -42,7 +43,7 @@ import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
 import Text.Megaparsec (errorBundlePretty, many, runParser)
 import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
-import VM (runProgram)
+import VM (runFunction, runProgram)
 import VM.Interpreter (VMError (..))
 
 -- ---------------------------------------------------------------------------
@@ -91,6 +92,15 @@ execute bytecodes = do
   case result of
     Left err -> printErr (prettyVMError err) >> exitFailure
     Right _ -> return ()
+
+-- | Run a named function from compiled bytecode, returning the error message
+-- as a string rather than printing and exiting.  Used by the test runner.
+executeFunction :: FuncName -> [Compiler.Bytecode] -> IO (Either String ())
+executeFunction fname bytecodes = do
+  result <- runFunction fname bytecodes
+  return $ case result of
+    Right _ -> Right ()
+    Left err -> Left (prettyVMError err)
 
 -- ---------------------------------------------------------------------------
 -- VM error display
