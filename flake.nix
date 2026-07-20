@@ -28,6 +28,7 @@
       {
         pkgs,
         haskell,
+        ...
       }: {
         pre-commit-check = git-hooks.lib.${pkgs.system}.run {
           src = ./.;
@@ -60,6 +61,7 @@
     devShells = eachSystem' ({
       pkgs,
       haskell,
+      ...
     }: {
       default = pkgs.mkShell {
         inherit (self.checks.${pkgs.system}.pre-commit-check) shellHook;
@@ -109,10 +111,68 @@
       };
     });
 
-    shared = eachSystem (pkgs: {
+    packages = eachSystem' ({
+      pkgs,
+      hpkgs,
+      ...
+    }: let
+      stdlib = pkgs.runCommand "glados-stdlib" {} ''
+        mkdir -p $out
+        cp ${./std}/*.qa $out/
+      '';
+    in {
+      default = pkgs.symlinkJoin {
+        name = "glados";
+        paths = [hpkgs.cli];
+        buildInputs = [pkgs.makeWrapper];
+        postBuild = ''
+          wrapProgram $out/bin/cli \
+            --set QUANT_STDLIB ${stdlib}
+        '';
+      };
+
+      lsp = pkgs.symlinkJoin {
+        name = "glados-lsp";
+        paths = [hpkgs.lsp-server];
+        buildInputs = [pkgs.makeWrapper];
+        postBuild = ''
+          wrapProgram $out/bin/glados-lsp \
+            --set QUANT_STDLIB ${stdlib}
+        '';
+      };
+
+      repl = pkgs.symlinkJoin {
+        name = "glados-repl";
+        paths = [hpkgs.repl];
+        buildInputs = [pkgs.makeWrapper];
+        postBuild = ''
+          wrapProgram $out/bin/glados-repl \
+            --set QUANT_STDLIB ${stdlib}
+        '';
+      };
+    });
+
+    shared = eachSystem (pkgs: let
+      ghc = pkgs.haskell.packages.ghc984;
+    in {
       inherit pkgs;
 
-      haskell = pkgs.haskell.packages.ghc984;
+      haskell = ghc;
+
+      hpkgs = ghc.override {
+        overrides = final: _prev: {
+          ast = final.callCabal2nix "ast" ./ast {};
+          cabal-extract = final.callCabal2nix "cabal-extract" ./cabal-extract {};
+          parser = final.callCabal2nix "parser" ./parser {};
+          typechecker = final.callCabal2nix "typechecker" ./typechecker {};
+          compiler = final.callCabal2nix "compiler" ./compiler {};
+          vm = final.callCabal2nix "vm" ./vm {};
+          formatter = final.callCabal2nix "formatter" ./formatter {};
+          lsp-server = final.callCabal2nix "lsp-server" ./lsp-server {};
+          repl = final.callCabal2nix "repl" ./repl {};
+          cli = final.callCabal2nix "cli" ./cli {};
+        };
+      };
     });
   };
 }
