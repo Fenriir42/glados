@@ -27,6 +27,7 @@ import AST.Types.Common
   )
 import Data.Hashable (Hashable)
 import Data.Text (Text)
+import Data.Word (Word64)
 import GHC.Generics (Generic)
 
 -- | Runtime value that can be stored on the stack or in memory.
@@ -47,6 +48,8 @@ data Value
     VErrorVal ErrorName [(FieldName, Value)]
   | -- | reference to a named function (first-class function value)
     VFunction FuncName
+  | -- | opaque C pointer stored as its raw address (runtime only)
+    VPointer Word64
   | VUnit
   deriving stock (Show, Eq, Ord, Generic)
 
@@ -69,6 +72,7 @@ data CRetType
   | CRetFloat
   | CRetStr
   | CRetBool
+  | CRetPtr
   deriving stock (Show, Eq, Generic)
 
 instance Hashable CRetType

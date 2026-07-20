@@ -38,16 +38,18 @@ import qualified Data.Vector as V
 import Foreign.LibFFI
   ( argCDouble,
     argInt64,
+    argPtr,
     argString,
     argWord32,
     callFFI,
     retCDouble,
     retInt64,
+    retPtr,
     retString,
     retVoid,
     retWord32,
   )
-import Foreign.Ptr (FunPtr)
+import Foreign.Ptr (FunPtr, Ptr, ptrToWordPtr, wordPtrToPtr)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import System.Environment (getArgs)
@@ -880,6 +882,14 @@ callHeapBuiltin name args = case (name, args) of
     aid <- allocArray
     mapM_ (heapPush aid . VString . T.pack) (regexSplit p t)
     return $ VArrayRef aid
+  -- ptr.null : () -> ptr
+  ("ptr.null", []) -> return $ VPointer 0
+  -- ptr.is_null : ptr -> bool
+  ("ptr.is_null", [VPointer addr]) -> return $ VBool (addr == 0)
+  -- ptr.to_int : ptr -> int
+  ("ptr.to_int", [VPointer addr]) -> return $ VInt (fromIntegral addr)
+  -- ptr.from_int : int -> ptr
+  ("ptr.from_int", [VInt n]) -> return $ VPointer (fromIntegral n)
   _ ->
     throwError $
       VMRuntimeError $
@@ -1037,6 +1047,8 @@ callWithFFIArgs funPtr retTy vals = go vals []
     go (VFloat f : rest) ffArgs = go rest (argCDouble (realToFrac f) : ffArgs)
     go (VBool b : rest) ffArgs = go rest (argWord32 (if b then 1 else 0) : ffArgs)
     go (VString s : rest) ffArgs = go rest (argString (T.unpack s) : ffArgs)
+    go (VPointer addr : rest) ffArgs =
+      go rest (argPtr (wordPtrToPtr (fromIntegral addr) :: Ptr ()) : ffArgs)
     go (_ : rest) ffArgs = go rest ffArgs
 
     dispatch ffArgs = case retTy of
@@ -1045,6 +1057,9 @@ callWithFFIArgs funPtr retTy vals = go vals []
       CRetFloat -> VFloat . realToFrac <$> callFFI funPtr retCDouble ffArgs
       CRetBool -> VBool . (/= 0) <$> callFFI funPtr retWord32 ffArgs
       CRetStr -> VString . T.pack <$> callFFI funPtr retString ffArgs
+      CRetPtr -> do
+        p <- callFFI funPtr (retPtr retVoid) ffArgs
+        return $ VPointer (fromIntegral (ptrToWordPtr p))
 
 -- ---------------------------------------------------------------------------
 -- Stack helpers

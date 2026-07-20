@@ -53,6 +53,7 @@ isHeapBuiltin name =
     || "json." `T.isPrefixOf` name
     || "socket." `T.isPrefixOf` name
     || "regex." `T.isPrefixOf` name
+    || "ptr." `T.isPrefixOf` name
 
 pureBuiltins :: [Text]
 pureBuiltins = ["print", "println"]

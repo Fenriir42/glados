@@ -138,7 +138,7 @@ isKnownFunction :: FuncName -> Set FuncName -> Bool
 isKnownFunction fname known =
   Set.member fname known
     || Set.member fname builtinFunctions
-    || any (`T.isPrefixOf` unFuncName fname) ["math.", "string.", "sys.", "io.", "file.", "buf.", "dict.", "array.", "json.", "socket.", "regex."]
+    || any (`T.isPrefixOf` unFuncName fname) ["math.", "string.", "sys.", "io.", "file.", "buf.", "dict.", "array.", "json.", "socket.", "regex.", "ptr."]
 
 -- | Map a Quant return type to the C return type tag used in ICallFFI.
 -- Only primitive types are supported; anything else is a compile error.
@@ -148,6 +148,7 @@ toCRetType (QualifiedType _ (TypePrimitive (PrimInt _))) = CRetInt
 toCRetType (QualifiedType _ (TypePrimitive (PrimFloat _))) = CRetFloat
 toCRetType (QualifiedType _ (TypePrimitive PrimBool)) = CRetBool
 toCRetType (QualifiedType _ (TypePrimitive PrimString)) = CRetStr
+toCRetType (QualifiedType _ (TypePrimitive PrimPtr)) = CRetPtr
 toCRetType _ = CRetVoid
 
 -- ---------------------------------------------------------------------------

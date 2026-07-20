@@ -88,7 +88,10 @@ parsePrimitiveType =
         return $ Located span PrimString,
       do
         Located span _ <- matchKeyword "void"
-        return $ Located span PrimNone
+        return $ Located span PrimNone,
+      do
+        Located span _ <- matchKeyword "ptr"
+        return $ Located span PrimPtr
     ]
 
 parseArrayType :: TokenParser (Located ArrayType)

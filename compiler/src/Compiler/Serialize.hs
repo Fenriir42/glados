@@ -92,6 +92,7 @@ instance Binary CRetType where
   put CRetFloat = put (2 :: Word8)
   put CRetStr = put (3 :: Word8)
   put CRetBool = put (4 :: Word8)
+  put CRetPtr = put (5 :: Word8)
   get =
     (get :: Get Word8) >>= \case
       0 -> pure CRetVoid
@@ -99,6 +100,7 @@ instance Binary CRetType where
       2 -> pure CRetFloat
       3 -> pure CRetStr
       4 -> pure CRetBool
+      5 -> pure CRetPtr
       t -> fail $ "Unknown CRetType tag: " ++ show t
 
 instance Binary CastType where

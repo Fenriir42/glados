@@ -138,6 +138,7 @@ data PrimitiveType
   | PrimBool
   | PrimString
   | PrimNone
+  | PrimPtr
   deriving stock (Eq, Ord, Generic)
 
 instance Hashable PrimitiveType
@@ -148,6 +149,7 @@ instance Show PrimitiveType where
   show PrimBool = "bool"
   show PrimString = "string"
   show PrimNone = "none"
+  show PrimPtr = "ptr"
 
 newtype ArrayType = ArrayType
   { arrayTypeElement :: QualifiedType

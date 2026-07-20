@@ -74,6 +74,11 @@ builtinReturnType (FuncName n)
   | n == "regex.match" = boolT
   | n `elem` ["regex.find", "regex.replace"] = stringT
   | n `elem` ["regex.find_all", "regex.split"] = Nothing -- returns [str]
+  -- ptr.*
+  | n == "ptr.null" = ptrT
+  | n == "ptr.is_null" = boolT
+  | n == "ptr.to_int" = intT
+  | n == "ptr.from_int" = ptrT
   | otherwise = Nothing
   where
     voidFuncs =
@@ -137,6 +142,7 @@ builtinReturnType (FuncName n)
     floatT = Just (TypePrimitive (PrimFloat defaultFloatType))
     stringT = Just (TypePrimitive PrimString)
     boolT = Just (TypePrimitive PrimBool)
+    ptrT = Just (TypePrimitive PrimPtr)
 
 -- | True for any function name that the VM/runtime knows about, including
 -- the std-module prefix convention (math.*, string.*, io.*, sys.*, array.*).
@@ -146,4 +152,4 @@ isKnownBuiltin (FuncName n) =
     || any (`T.isPrefixOf` n) modulePrefixes
   where
     standaloneBuiltins = ["print", "println", "len", "push", "pop"]
-    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict.", "json.", "socket.", "regex."]
+    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict.", "json.", "socket.", "regex.", "ptr."]
