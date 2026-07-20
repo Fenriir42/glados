@@ -30,7 +30,7 @@ Current state of the `feat/revival` branch as of 2026-07-20.
 | FFI variadics | Done | `...T` param syntax in `extern` blocks; uses `ffi_prep_cif_var`; args passed flat past fixed params |
 | FFI pointer type | Done | `ptr` keyword type; `VPointer Word64` runtime value; `ptr.null`, `ptr.is_null`, `ptr.to_int`, `ptr.from_int` builtins |
 | Formatter | Done | Comment-preserving; idempotent; wired as LSP `textDocument/formatting` |
-| LSP server | Done | 14 protocol features — see table below |
+| LSP server | Done | 19 protocol features — see table below |
 | VS Code extension (highlighting) | Done | Syntax highlighting, snippets, language config; `.vsix` in `extension/vscode/quant-highlighter/` |
 | VS Code extension (LSP client) | Done | TypeScript client with `vscode-languageclient`; auto-starts `quant-lsp`; `.vsix` in `extension/vscode/quant-lsp/` |
 | Docs site | Done | Astro/Starlight; all pages written |
@@ -76,27 +76,27 @@ Current state of the `feat/revival` branch as of 2026-07-20.
 | Call hierarchy | `textDocument/prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls` | Done |
 | Formatting | `textDocument/formatting` | Done — comment-preserving formatter |
 | Selection range | `textDocument/selectionRange` | Done |
-| Workspace symbols | `workspace/symbol` | Done |
+| Go to type definition | `textDocument/typeDefinition` | Done — jumps to struct / error declaration |
+| Workspace symbols | `workspace/symbol` | Done — searches all currently open files |
+| Code action: add import | `textDocument/codeAction` | Done — inserts `from M import name` for undefined stdlib functions |
+| Code action: fill struct | `textDocument/codeAction` | Done — inserts missing fields with default values |
+| Variable type inlay hints | `textDocument/inlayHint` | Done — shows inferred type after `var: type` declarations |
 
-### LSP: Rust Analyzer parity targets (remaining)
+### LSP: remaining gap to Rust Analyzer parity
 
 | Feature | LSP method | Priority | Notes |
 |---------|-----------|----------|-------|
-| Go to type definition | `textDocument/typeDefinition` | High | Jump to struct / error declaration. Needs `structDefSites :: Map TypeName SourceSpan` in `Analyze.hs`. |
-| Workspace-wide analysis | cross-file refs/highlight/rename | High | Index ALL `.qa` files in the workspace, not just the open one. Requires a background watcher + per-file `FileState` for every file on disk. |
-| Run code lens | `textDocument/codeLens` (extend) | High | `▶ Run` above `fn main()` triggers `glados run <file>` in the integrated terminal. |
-| Variable type inlay hints | `textDocument/inlayHint` (extend) | Medium | Show inferred type after variable declarations: `x: int`. Currently only parameter name hints are emitted. |
-| Code action: fill struct | `textDocument/codeAction` | Medium | When struct init is missing fields, offer "Fill missing fields" quick fix. |
-| Code action: add import | `textDocument/codeAction` | Medium | When an unknown name matches a stdlib function, offer "Import `math`". |
+| Workspace-wide indexing | `DidChangeWatchedFiles` + background scan | High | Currently only open files are analysed; `DidChangeWatchedFiles` is a no-op. Need to scan all `.qa` files in the workspace root on startup and re-index on save, so cross-file references, highlight, and rename work without opening every file first. |
+| Run code lens | `textDocument/codeLens` (extend) | Medium | `▶ Run` above `fn main()` triggers `glados run <file>` in the integrated terminal via `workbench.action.terminal.sendSequence`. |
 | On-type formatting | `textDocument/onTypeFormatting` | Low | Auto-indent after `{` / `}` / `;`. |
-| Diagnostic: dead code | `publishDiagnostics` (extend) | Low | Warn on functions never called from `main` or exported. |
-| Status bar indexing indicator | custom notification | Low | Show "Quant: indexing…" while the LSP is analyzing; RA-style. |
+| Diagnostic: dead code | `publishDiagnostics` (extend) | Low | Warn on functions never called from `main` or re-exported. |
+| Status bar indexing indicator | custom notification | Low | Show "Quant: indexing…" while the LSP analyses; RA-style. |
 
 ---
 
-## V2 Tooling
+## V1 Tooling
 
-The language itself is feature-complete for V1. The next layer is the
+The language and LSP are feature-complete. The remaining V1 work is the
 surrounding toolchain — the things that make the language *pleasant to use at
 scale* rather than just *correct*.
 
@@ -233,7 +233,7 @@ fn fib(n: int) -> int { ... }
 
 ---
 
-## Post-V2 / future
+## Post-V1 / future
 
 - **Package manager** — resolve external Quant packages from a registry (`quant.toml` `[dependencies]` section)
 - **FFI callbacks** — create a C function pointer from a Quant lambda using libffi's closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`)
