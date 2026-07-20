@@ -92,31 +92,29 @@ install:
 	@ cabal build cli glados-lsp glados-repl
 	@ install -d $(BIN_DEST) $(SHARE_DEST) $(MAN_DEST)
 	@ install -m 755 $(shell cabal -v0 list-bin exe:cli) $(BIN_DEST)/glados
-	@ install -m 755 $(shell cabal -v0 list-bin exe:glados-lsp) $(BIN_DEST)/glados-lsp
+	@ install -m 755 $(shell cabal -v0 list-bin exe:glados-lsp) $(BIN_DEST)/quant-lsp
 	@ install -m 755 $(shell cabal -v0 list-bin exe:glados-repl) $(BIN_DEST)/glados-repl
 	@ cp -r std/. $(SHARE_DEST)/
 	@ install -m 644 man/glados.1 $(MAN_DEST)/glados.1
-	@ install -m 644 man/glados-lsp.1 $(MAN_DEST)/glados-lsp.1
+	@ install -m 644 man/quant-lsp.1 $(MAN_DEST)/quant-lsp.1
 	@ install -m 644 man/glados-repl.1 $(MAN_DEST)/glados-repl.1
 	@ install -m 644 man/quant-fmt.1 $(MAN_DEST)/quant-fmt.1
 	@ install -m 644 man/wheatley.1 $(MAN_DEST)/wheatley.1
-	@ install -m 644 man/quant.1 $(MAN_DEST)/quant.1
 	@ $(LOG_TIME) "Install $(C_GREEN)glados$(C_RESET) -> $(BIN_DEST)/glados"
-	@ $(LOG_TIME) "Install $(C_GREEN)glados-lsp$(C_RESET) -> $(BIN_DEST)/glados-lsp"
+	@ $(LOG_TIME) "Install $(C_GREEN)quant-lsp$(C_RESET) -> $(BIN_DEST)/quant-lsp"
 	@ $(LOG_TIME) "Install $(C_GREEN)glados-repl$(C_RESET) -> $(BIN_DEST)/glados-repl"
 	@ $(LOG_TIME) "Install $(C_GREEN)stdlib$(C_RESET) -> $(SHARE_DEST)"
 	@ $(LOG_TIME) "Install $(C_GREEN)man pages$(C_RESET) -> $(MAN_DEST)"
 
 .PHONY: uninstall
 uninstall:
-	@ rm -f $(PREFIX)/bin/glados $(PREFIX)/bin/glados-lsp $(PREFIX)/bin/glados-repl
+	@ rm -f $(PREFIX)/bin/glados $(PREFIX)/bin/quant-lsp $(PREFIX)/bin/glados-repl
 	@ rm -rf $(PREFIX)/share/quant
 	@ rm -f $(PREFIX)/share/man/man1/glados.1
-	@ rm -f $(PREFIX)/share/man/man1/glados-lsp.1
+	@ rm -f $(PREFIX)/share/man/man1/quant-lsp.1
 	@ rm -f $(PREFIX)/share/man/man1/glados-repl.1
 	@ rm -f $(PREFIX)/share/man/man1/quant-fmt.1
 	@ rm -f $(PREFIX)/share/man/man1/wheatley.1
-	@ rm -f $(PREFIX)/share/man/man1/quant.1
 	@ $(LOG_TIME) "Uninstall $(C_RED)glados$(C_RESET)"
 
 .PHONY: deb

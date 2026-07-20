@@ -1,10 +1,10 @@
-.TH GLADOS-LSP 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
+.TH QUANT-LSP 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
 .SH NAME
-glados\-lsp \- Language Server Protocol server for Quant
+quant\-lsp \- Language Server Protocol server for Quant
 .SH SYNOPSIS
-.B glados\-lsp
+.B quant\-lsp
 .SH DESCRIPTION
-.B glados\-lsp
+.B quant\-lsp
 implements the Language Server Protocol for the Quant language.
 It communicates over stdin/stdout using JSON-RPC and is intended to be
 launched automatically by an LSP-capable editor such as VS Code, Neovim,
@@ -70,18 +70,17 @@ Whole-document format via \fBquant\-fmt\fR, comment-preserving and idempotent.
 Path to the Quant standard library. The LSP uses this to resolve imports
 when analysing open files.
 .SH NOTES
-.B glados\-lsp
+.B quant\-lsp
 is ordinarily started by the editor, not the user. For VS Code, install
 the Quant LSP extension; it will launch and restart
-.B glados\-lsp
+.B quant\-lsp
 automatically.
 .PP
-For other editors, configure the LSP client to run \fBglados\-lsp\fR with
+For other editors, configure the LSP client to run \fBquant\-lsp\fR with
 no arguments; communication is over stdin/stdout.
 .SH SEE ALSO
 .BR glados (1),
 .BR quant\-fmt (1),
-.BR glados\-repl (1),
-.BR quant (1)
+.BR glados\-repl (1)
 .SH AUTHORS
-Sigmapitech <https://github.com/Sigmapitech/glados>
+The Quant team <https://github.com/Sigmapitech/glados>

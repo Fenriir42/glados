@@ -1,26 +1,83 @@
 .TH GLADOS 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
 .SH NAME
-glados \- Quant language compiler and runner
+glados \- Quant language compiler, runner, and project manager
 .SH SYNOPSIS
 .B glados compiler
 [\fIOPTIONS\fR] \fIFILE\fR
+.br
+.B glados
+\fICOMMAND\fR [\fIOPTIONS\fR] [\fIARGS\fR]
 .SH DESCRIPTION
 .B glados
-compiles and optionally runs Quant source files (\fI.qa\fR).
+is the main entry point for the Quant language toolchain. It acts as
+both a direct compiler/runner for single files and a project manager
+(like \fBcargo\fR or \fBcabal\fR) for projects organised around a
+\fBquant.toml\fR manifest.
+.PP
 Quant is a statically-typed, C-like scripting language with a stack-based
 bytecode VM, generics, structs, error handling, and a full FFI for calling
 C libraries via \fIlibffi\fR.
-.PP
-The
-.B compiler
-subcommand is the primary entry point: it lexes, parses, type-checks,
-and compiles the given source file, then executes the resulting bytecode
-unless \fB\-\-output\fR or \fB\-\-dump\fR is specified.
 .SH SUBCOMMANDS
+.SS Direct compilation
 .TP
 .B compiler \fIFILE\fR
-Compile and run \fIFILE\fR. Accepts all options listed below.
+Lex, parse, type-check, compile, and execute \fIFILE\fR. Accepts
+\fB\-\-stdlib\fR, \fB\-\-output\fR, \fB\-\-load\fR, and \fB\-\-dump\fR
+(see OPTIONS below).
+.SS Project management
+The following subcommands operate on a project in the current directory.
+A project requires a \fBquant.toml\fR manifest. Example manifest:
+.PP
+.RS
+.nf
+[project]
+name    = "my-project"
+version = "0.1.0"
+entry   = "src/main.qa"
+.fi
+.RE
+.TP
+.B init \fINAME\fR
+Scaffold a new project in a directory named \fINAME\fR. Creates
+\fBquant.toml\fR, \fBsrc/main.qa\fR (hello-world template), and
+\fBtests/\fR.
+.TP
+.B build [\-\-release]
+Compile the project entry point. With \fB\-\-release\fR, enable
+optimisations. Bytecode is written to \fI.build/\fR.
+.TP
+.B run [\fIARGS\fR]
+Compile and immediately execute the project, forwarding any extra
+arguments to the program.
+.TP
+.B test [\fIFILE\fR]
+Discover and run all test functions. Test files must match
+\fI*_test.qa\fR inside the \fBtests/\fR directory (configurable in
+\fBquant.toml\fR). Any function whose name begins with \fBtest_\fR and
+takes no parameters is treated as a test case.
+.br
+Exits with status 1 if any test fails.
+.TP
+.B lint
+Run
+.BR wheatley (1)
+over all source files in the project.
+.TP
+.B fmt [\-\-check]
+Run
+.BR quant\-fmt (1)
+over all source files. With \fB\-\-check\fR, exit 1 if any file
+would be changed (useful in CI).
+.TP
+.B doc [\-\-format \fIFMT\fR] [\-\-out \fIDIR\fR]
+Generate API documentation from doc comments (\fI//\fR above public
+functions). \fIFMT\fR is \fBhtml\fR (default) or \fBmd\fR. Output
+goes to \fIdocs/api/\fR by default.
+.TP
+.B clean
+Remove build artefacts (\fI.build/\fR).
 .SH OPTIONS
+The following options apply to the \fBcompiler\fR subcommand:
 .TP
 .B \-\-stdlib \fIDIR\fR
 Override the standard library search path. By default glados looks for
@@ -37,6 +94,25 @@ Execute a previously compiled bytecode file, skipping compilation entirely.
 .B \-\-dump
 Print disassembled bytecode to stdout instead of executing. Useful for
 debugging the compiler or understanding codegen output.
+.SH QUANT.TOML FIELDS
+.TP
+.B [project] name
+Project name (string, required).
+.TP
+.B [project] version
+Semantic version string (required).
+.TP
+.B [project] entry
+Relative path to the main source file (default: \fBsrc/main.qa\fR).
+.TP
+.B [project] stdlib
+Override stdlib path for this project (optional).
+.TP
+.B [test] dir
+Directory to search for test files (default: \fBtests/\fR).
+.TP
+.B [doc] out
+Output directory for generated documentation (default: \fBdocs/api/\fR).
 .SH ENVIRONMENT
 .TP
 .B QUANT_STDLIB
@@ -45,35 +121,49 @@ default and is itself overridden by \fB\-\-stdlib\fR.
 .SH EXIT STATUS
 .TP
 .B 0
-Successful compilation and execution.
+Successful compilation, execution, or command.
 .TP
 .B 1
-Compilation error (lex, parse, type, or codegen) or runtime error.
+Compilation error (lex, parse, type, or codegen), runtime error, test
+failure, or missing manifest.
 .SH EXAMPLES
-Run a Quant program:
+Run a Quant program directly:
 .PP
 .RS
 .B glados compiler hello.qa
 .RE
 .PP
+Create and run a new project:
+.PP
+.RS
+.nf
+glados init hello-world
+cd hello-world
+glados run
+.fi
+.RE
+.PP
 Compile to bytecode and run later:
 .PP
 .RS
-.B glados compiler \-\-output hello.qbc hello.qa
-.br
-.B glados compiler \-\-load hello.qbc
+.nf
+glados compiler \-\-output hello.qbc hello.qa
+glados compiler \-\-load hello.qbc
+.fi
 .RE
 .PP
-Dump disassembly:
+Check formatting and lint in CI:
 .PP
 .RS
-.B glados compiler \-\-dump hello.qa
+.nf
+glados fmt \-\-check
+glados lint
+.fi
 .RE
 .SH SEE ALSO
 .BR glados\-repl (1),
-.BR glados\-lsp (1),
+.BR quant\-lsp (1),
 .BR quant\-fmt (1),
-.BR wheatley (1),
-.BR quant (1)
+.BR wheatley (1)
 .SH AUTHORS
-Sigmapitech <https://github.com/Sigmapitech/glados>
+The Quant team <https://github.com/Sigmapitech/glados>

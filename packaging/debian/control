@@ -11,10 +11,9 @@ Description: The Quant programming language toolchain
  and a Language Server Protocol server for IDE integration.
  .
  Installed components:
-  - glados       -- compiler and runtime CLI (man glados)
-  - glados-lsp   -- LSP server for editors (man glados-lsp)
-  - glados-repl  -- interactive REPL (man glados-repl)
-  - quant-fmt    -- code formatter (man quant-fmt)
-  - wheatley     -- static linter (man wheatley)
-  - quant        -- project manager: init/build/run/test/doc (man quant)
-  - stdlib        -- standard library .qa files (13 modules, ~120 functions)
+  - glados      -- compiler, runner, and project manager (man glados)
+  - quant-lsp   -- LSP server for editors (man quant-lsp)
+  - glados-repl -- interactive REPL (man glados-repl)
+  - quant-fmt   -- code formatter (man quant-fmt)
+  - wheatley    -- static linter (man wheatley)
+  - stdlib       -- standard library .qa files (13 modules, ~120 functions)
