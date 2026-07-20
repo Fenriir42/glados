@@ -46,10 +46,11 @@ runInit name = do
       createDirectoryIfMissing True (name </> "tests")
       writeFile (name </> "quant.toml") (tomlTemplate name)
       writeFile (name </> "src" </> "main.qa") (mainTemplate name)
-      writeFile (name </> "tests" </> ".gitkeep") ""
+      writeFile (name </> "tests" </> "main_test.qa") (mainTestTemplate name)
       printStep "created" (name </> "quant.toml")
       printStep "created" (name </> "src" </> "main.qa")
-      printOk ("project `" ++ name ++ "` ready -- `cd " ++ name ++ " && glados run`")
+      printStep "created" (name </> "tests" </> "main_test.qa")
+      printOk ("project `" ++ name ++ "` ready -- `cd " ++ name ++ " && glados test`")
 
 tomlTemplate :: String -> String
 tomlTemplate name =
@@ -67,6 +68,16 @@ mainTemplate name =
       "",
       "fn main() -> void {",
       "    io.print(\"Hello, " ++ name ++ "!\\n\");",
+      "}"
+    ]
+
+mainTestTemplate :: String -> String
+mainTestTemplate name =
+  unlines
+    [ "// Tests for " ++ name,
+      "",
+      "fn test_example() -> void {",
+      "    assert(1 + 1 == 2, \"basic arithmetic\");",
       "}"
     ]
 
