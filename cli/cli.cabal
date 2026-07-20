@@ -25,6 +25,12 @@ executable cli
   import:         warnings
   import:         release
   main-is:        Main.hs
+  other-modules:
+    Compile
+    Display
+    Manifest
+    PM
+
   hs-source-dirs: src
   build-depends:
     , ast
@@ -37,6 +43,7 @@ executable cli
     , megaparsec
     , optparse-applicative
     , parser
+    , process
     , text
     , typechecker
     , vm
