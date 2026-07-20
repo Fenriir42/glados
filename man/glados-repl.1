@@ -1,0 +1,57 @@
+.TH GLADOS-REPL 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
+.SH NAME
+glados\-repl \- interactive Read-Eval-Print Loop for Quant
+.SH SYNOPSIS
+.B glados\-repl
+.SH DESCRIPTION
+.B glados\-repl
+is an interactive shell for the Quant language. Each expression or
+statement typed at the prompt is compiled and executed immediately, with
+the result printed to stdout. Multiline input is supported: an open brace
+or unclosed expression causes the prompt to switch to a continuation
+indicator until the block is closed.
+.PP
+The REPL shares the full compiler and VM pipeline with
+.BR glados (1),
+so all language features, imports, and standard library modules are
+available.
+.SH REPL COMMANDS
+The following dot-prefixed commands are available at the prompt:
+.TP
+.B :load \fIFILE\fR
+Compile and load \fIFILE\fR into the current session. All top-level
+declarations become available at the prompt.
+.TP
+.B :run
+Re-execute the \fBmain\fR function if one is defined in the loaded file.
+.TP
+.B :env
+Print all names currently in scope together with their types.
+.TP
+.B :reset
+Clear the session state: all loaded declarations and definitions are
+removed and the session starts fresh.
+.TP
+.B :quit
+Exit the REPL. Ctrl-D also works.
+.SH FEATURES
+.TP
+Tab completion
+Function names, variable names, and keywords are completed on Tab.
+.TP
+History
+Command history is preserved across sessions.
+.TP
+Multiline input
+Opening a block with \fB{\fR suspends evaluation until the block is closed.
+.SH ENVIRONMENT
+.TP
+.B QUANT_STDLIB
+Path to the Quant standard library used when resolving \fBimport\fR
+statements typed at the prompt.
+.SH SEE ALSO
+.BR glados (1),
+.BR glados\-lsp (1),
+.BR quant (1)
+.SH AUTHORS
+Sigmapitech <https://github.com/Sigmapitech/glados>

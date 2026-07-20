@@ -1,0 +1,133 @@
+.TH QUANT 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
+.SH NAME
+quant \- project manager for the Quant language
+.SH SYNOPSIS
+.B quant
+\fICOMMAND\fR [\fIOPTIONS\fR] [\fIARGS\fR]
+.SH DESCRIPTION
+.B quant
+is the project manager for Quant. It reads a \fBquant.toml\fR manifest in
+the current directory and provides a unified interface for creating,
+building, running, testing, linting, and documenting Quant projects
+without having to invoke the individual tools directly.
+.PP
+Example manifest:
+.PP
+.RS
+.nf
+[project]
+name    = "my-project"
+version = "0.1.0"
+entry   = "src/main.qa"
+.fi
+.RE
+.SH COMMANDS
+.TP
+.B init \fINAME\fR
+Scaffold a new project in a directory named \fINAME\fR. Creates
+\fBquant.toml\fR, \fBsrc/main.qa\fR (hello-world template), and
+\fBtests/\fR.
+.TP
+.B build [\-\-release]
+Compile the project. With \fB\-\-release\fR, enable optimisations.
+Output is written to \fI.build/\fR.
+.TP
+.B run [\fIARGS\fR]
+Compile and immediately execute the project, forwarding any extra
+arguments to the program.
+.TP
+.B test [\fIFILE\fR]
+Discover and run all test functions. Test files must match
+\fI*_test.qa\fR inside the \fBtests/\fR directory (configurable in
+\fBquant.toml\fR). Any function whose name begins with \fBtest_\fR and
+takes no parameters is treated as a test case.
+.br
+Exits with status 1 if any test fails.
+.TP
+.B lint
+Run
+.BR wheatley (1)
+over all source files in the project.
+.TP
+.B fmt [\-\-check]
+Run
+.BR quant\-fmt (1)
+over all source files. With \fB\-\-check\fR, exit 1 if any file
+would be changed (useful in CI).
+.TP
+.B doc [\-\-format \fIFMT\fR] [\-\-out \fIDIR\fR]
+Generate API documentation from doc comments (\fI//\fR above public
+functions). \fIFMT\fR is \fBhtml\fR (default) or \fBmd\fR. Output
+goes to \fIdocs/api/\fR by default.
+.TP
+.B clean
+Remove build artefacts (\fI.build/\fR).
+.SH OPTIONS (all commands)
+.TP
+.B \-\-stdlib \fIDIR\fR
+Override the standard library path, equivalent to
+\fBQUANT_STDLIB\fR.
+.SH QUANT.TOML FIELDS
+.TP
+.B [project] name
+Project name (string, required).
+.TP
+.B [project] version
+Semantic version string (required).
+.TP
+.B [project] entry
+Relative path to the main source file (default: \fBsrc/main.qa\fR).
+.TP
+.B [project] stdlib
+Override stdlib path for this project (optional).
+.TP
+.B [test] dir
+Directory to search for test files (default: \fBtests/\fR).
+.TP
+.B [doc] out
+Output directory for generated documentation (default: \fBdocs/api/\fR).
+.SH EXIT STATUS
+.TP
+.B 0
+Command succeeded.
+.TP
+.B 1
+Compilation error, test failure, lint error, or missing manifest.
+.SH ENVIRONMENT
+.TP
+.B QUANT_STDLIB
+Standard library path, used when \fBstdlib\fR is not set in
+\fBquant.toml\fR and \fB\-\-stdlib\fR is not passed.
+.SH EXAMPLES
+Create and run a new project:
+.PP
+.RS
+.nf
+quant init hello-world
+cd hello-world
+quant run
+.fi
+.RE
+.PP
+Run tests:
+.PP
+.RS
+.B quant test
+.RE
+.PP
+Check formatting and lint in CI:
+.PP
+.RS
+.nf
+quant fmt \-\-check
+quant lint
+.fi
+.RE
+.SH SEE ALSO
+.BR glados (1),
+.BR glados\-repl (1),
+.BR quant\-fmt (1),
+.BR wheatley (1),
+.BR glados\-lsp (1)
+.SH AUTHORS
+Sigmapitech <https://github.com/Sigmapitech/glados>

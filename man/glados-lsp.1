@@ -1,0 +1,87 @@
+.TH GLADOS-LSP 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
+.SH NAME
+glados\-lsp \- Language Server Protocol server for Quant
+.SH SYNOPSIS
+.B glados\-lsp
+.SH DESCRIPTION
+.B glados\-lsp
+implements the Language Server Protocol for the Quant language.
+It communicates over stdin/stdout using JSON-RPC and is intended to be
+launched automatically by an LSP-capable editor such as VS Code, Neovim,
+or Emacs.
+.PP
+The server performs full incremental analysis on every file save, providing
+diagnostics, completions, hover information, and more without requiring a
+separate build step.
+.SH PROTOCOL FEATURES
+.TP
+.B Diagnostics
+Type errors and undefined references reported on every save.
+.TP
+.B Hover
+Type signature and doc comment of the symbol under the cursor.
+.TP
+.B Completion
+Context-aware completion for local variables, functions, struct fields,
+and standard library names.
+.TP
+.B Go to definition
+Jump to the declaration of any function or variable.
+.TP
+.B Go to type definition
+Jump to the struct or error-set declaration for a typed expression.
+.TP
+.B Find references / Rename
+Locate and rename all uses of a function or variable across open files.
+.TP
+.B Document symbols / Workspace symbols
+Outline of all functions and structs; fuzzy search across the workspace.
+.TP
+.B Signature help
+Parameter list and current-argument highlight while typing a call.
+.TP
+.B Semantic tokens
+Full-file syntax highlighting driven by the type-checked AST.
+.TP
+.B Inlay hints
+Inferred types shown after variable declarations; parameter names at call
+sites.
+.TP
+.B Code actions
+Quick fixes: add missing import, fill missing struct fields.
+.TP
+.B Code lens
+Reference count displayed above every function declaration.
+.TP
+.B Call hierarchy
+Incoming and outgoing call trees for any function.
+.TP
+.B Folding ranges
+Collapse blocks, functions, and import groups.
+.TP
+.B Selection range
+Smart expand-selection from identifier to expression to block to function.
+.TP
+.B Formatting
+Whole-document format via \fBquant\-fmt\fR, comment-preserving and idempotent.
+.SH ENVIRONMENT
+.TP
+.B QUANT_STDLIB
+Path to the Quant standard library. The LSP uses this to resolve imports
+when analysing open files.
+.SH NOTES
+.B glados\-lsp
+is ordinarily started by the editor, not the user. For VS Code, install
+the Quant LSP extension; it will launch and restart
+.B glados\-lsp
+automatically.
+.PP
+For other editors, configure the LSP client to run \fBglados\-lsp\fR with
+no arguments; communication is over stdin/stdout.
+.SH SEE ALSO
+.BR glados (1),
+.BR quant\-fmt (1),
+.BR glados\-repl (1),
+.BR quant (1)
+.SH AUTHORS
+Sigmapitech <https://github.com/Sigmapitech/glados>

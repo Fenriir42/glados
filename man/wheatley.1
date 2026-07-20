@@ -1,0 +1,106 @@
+.TH WHEATLEY 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
+.SH NAME
+wheatley \- static linter for the Quant language
+.SH SYNOPSIS
+.B wheatley
+[\fIOPTIONS\fR] [\fIFILE\fR ...]
+.SH DESCRIPTION
+.B wheatley
+analyses Quant source files (\fI.qa\fR) for style violations, suspicious
+patterns, and correctness issues that the type checker does not report.
+It operates purely on the parsed and type-checked AST without executing
+code.
+.PP
+Diagnostics are printed to stdout in the format:
+.PP
+.RS
+\fIfile\fR:\fIline\fR:\fIcol\fR: [\fIW\fR|\fIE\fR] \fImessage\fR
+.RE
+.PP
+where \fBW\fR is a warning and \fBE\fR is an error. Errors cause
+.B wheatley
+to exit with status 1.
+.PP
+.B wheatley
+is also integrated into the Language Server Protocol via
+.BR glados\-lsp (1):
+its diagnostics appear alongside type errors in supporting editors without
+a separate invocation.
+.SH OPTIONS
+.TP
+.B \-\-fix
+Automatically fix violations that have a safe, mechanical correction
+(e.g. removing an unused variable declaration). Unfixable warnings are
+still reported.
+.TP
+.B \-\-deny \fIRULE\fR
+Treat the named rule as an error instead of a warning. May be given
+multiple times.
+.TP
+.B \-\-allow \fIRULE\fR
+Suppress the named rule entirely. May be given multiple times.
+.TP
+.B \-\-rules
+Print a list of all available rule names and exit.
+.SH RULES
+.TP
+.B unused\-var
+A variable is declared but never read. (Warning)
+.TP
+.B unused\-param
+A function parameter is never used in the body. (Warning)
+.TP
+.B unreachable\-code
+Statements appear after a \fBreturn\fR in the same block. (Warning)
+.TP
+.B missing\-return
+A non-void function can reach the end of its body without a
+\fBreturn\fR statement on all paths. (Error)
+.TP
+.B fn\-naming
+Function names must be \fIsnake_case\fR. (Warning)
+.TP
+.B type\-naming
+Struct and error-set names must be \fIPascalCase\fR. (Warning)
+.TP
+.B empty\-block
+An \fBif\fR or \fBwhile\fR body contains no statements. (Warning)
+.TP
+.B shadow
+A local variable hides a variable of the same name in an outer scope. (Warning)
+.SH EXIT STATUS
+.TP
+.B 0
+No errors found (warnings may still be present).
+.TP
+.B 1
+At least one error-level diagnostic was emitted, or a file could not be parsed.
+.SH EXAMPLES
+Lint a whole project:
+.PP
+.RS
+.B wheatley src/*.qa
+.RE
+.PP
+Treat naming violations as errors in CI:
+.PP
+.RS
+.B wheatley \-\-deny fn\-naming \-\-deny type\-naming src/*.qa
+.RE
+.PP
+Auto-fix what can be fixed:
+.PP
+.RS
+.B wheatley \-\-fix src/main.qa
+.RE
+.SH NOTES
+The name
+.B wheatley
+is a reference to the Aperture Science personality core of the same name
+from the Portal series.
+.SH SEE ALSO
+.BR glados (1),
+.BR quant\-fmt (1),
+.BR quant (1)
+.SH AUTHORS
+Sigmapitech <https://github.com/Sigmapitech/glados>

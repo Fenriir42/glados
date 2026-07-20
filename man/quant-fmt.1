@@ -1,0 +1,59 @@
+.TH QUANT-FMT 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
+.SH NAME
+quant\-fmt \- code formatter for the Quant language
+.SH SYNOPSIS
+.B quant\-fmt
+[\fB\-\-check\fR] [\fIFILE\fR ...]
+.SH DESCRIPTION
+.B quant\-fmt
+formats Quant source files (\fI.qa\fR) according to the canonical Quant
+style. It preserves all comments, including comments between top-level
+declarations and between statements inside function bodies. Formatting
+is idempotent: running it twice produces the same output as running it
+once.
+.PP
+When invoked with no file arguments, \fBquant\-fmt\fR reads from stdin
+and writes to stdout, making it composable with editors and shell pipelines.
+When given one or more file arguments it formats each file in place.
+.PP
+.B quant\-fmt
+is also wired into the Language Server Protocol as
+\fBtextDocument/formatting\fR, so editors with the Quant LSP extension
+can invoke it via their built-in format-document command.
+.SH OPTIONS
+.TP
+.B \-\-check
+Do not modify files. Exit with status 1 if any file would be changed by
+formatting, 0 otherwise. Useful in CI to enforce formatting.
+.SH EXIT STATUS
+.TP
+.B 0
+All files are already formatted (or formatting succeeded).
+.TP
+.B 1
+At least one file would be changed (\fB\-\-check\fR mode), or a parse
+error prevented formatting.
+.SH EXAMPLES
+Format a single file in place:
+.PP
+.RS
+.B quant\-fmt src/main.qa
+.RE
+.PP
+Check formatting in CI:
+.PP
+.RS
+.B quant\-fmt \-\-check src/*.qa
+.RE
+.PP
+Format from stdin:
+.PP
+.RS
+.B cat src/main.qa | quant\-fmt
+.RE
+.SH SEE ALSO
+.BR glados (1),
+.BR wheatley (1),
+.BR quant (1)
+.SH AUTHORS
+Sigmapitech <https://github.com/Sigmapitech/glados>

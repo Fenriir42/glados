@@ -1,0 +1,79 @@
+.TH GLADOS 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
+.SH NAME
+glados \- Quant language compiler and runner
+.SH SYNOPSIS
+.B glados compiler
+[\fIOPTIONS\fR] \fIFILE\fR
+.SH DESCRIPTION
+.B glados
+compiles and optionally runs Quant source files (\fI.qa\fR).
+Quant is a statically-typed, C-like scripting language with a stack-based
+bytecode VM, generics, structs, error handling, and a full FFI for calling
+C libraries via \fIlibffi\fR.
+.PP
+The
+.B compiler
+subcommand is the primary entry point: it lexes, parses, type-checks,
+and compiles the given source file, then executes the resulting bytecode
+unless \fB\-\-output\fR or \fB\-\-dump\fR is specified.
+.SH SUBCOMMANDS
+.TP
+.B compiler \fIFILE\fR
+Compile and run \fIFILE\fR. Accepts all options listed below.
+.SH OPTIONS
+.TP
+.B \-\-stdlib \fIDIR\fR
+Override the standard library search path. By default glados looks for
+stdlib modules in (in order): the \fBQUANT_STDLIB\fR environment variable,
+\fI/usr/local/share/quant/lib\fR, then \fI./std\fR as a development fallback.
+.TP
+.B \-\-output \fIFILE\fR
+Write compiled bytecode to \fIFILE\fR instead of executing it. The bytecode
+can later be loaded with \fB\-\-load\fR.
+.TP
+.B \-\-load \fIFILE\fR
+Execute a previously compiled bytecode file, skipping compilation entirely.
+.TP
+.B \-\-dump
+Print disassembled bytecode to stdout instead of executing. Useful for
+debugging the compiler or understanding codegen output.
+.SH ENVIRONMENT
+.TP
+.B QUANT_STDLIB
+Absolute path to the standard library directory. Overrides the compiled-in
+default and is itself overridden by \fB\-\-stdlib\fR.
+.SH EXIT STATUS
+.TP
+.B 0
+Successful compilation and execution.
+.TP
+.B 1
+Compilation error (lex, parse, type, or codegen) or runtime error.
+.SH EXAMPLES
+Run a Quant program:
+.PP
+.RS
+.B glados compiler hello.qa
+.RE
+.PP
+Compile to bytecode and run later:
+.PP
+.RS
+.B glados compiler \-\-output hello.qbc hello.qa
+.br
+.B glados compiler \-\-load hello.qbc
+.RE
+.PP
+Dump disassembly:
+.PP
+.RS
+.B glados compiler \-\-dump hello.qa
+.RE
+.SH SEE ALSO
+.BR glados\-repl (1),
+.BR glados\-lsp (1),
+.BR quant\-fmt (1),
+.BR wheatley (1),
+.BR quant (1)
+.SH AUTHORS
+Sigmapitech <https://github.com/Sigmapitech/glados>
