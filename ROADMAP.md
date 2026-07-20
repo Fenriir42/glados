@@ -1,6 +1,6 @@
 # Quant Language - Roadmap
 
-Current state of the `feat/revival` branch as of 2026-06-29.
+Current state of the `feat/revival` branch as of 2026-07-20.
 
 ---
 
@@ -12,8 +12,8 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Type checker | Done | 14 tests; wired into CLI + REPL |
 | Compiler / Codegen | Done | All control flow, structs, error handling, compound assignment |
 | VM Interpreter | Done | Stack-based; 46 VM tests; OOB and type errors throw correctly |
-| Import system | Done | `import M`, `from M import f`, `from M import *`; user `.qa` files resolved relative to the source file; transitive imports; visibility enforced |
-| Standard library | Done | 12 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket` (~110 functions) |
+| Import system | Done | `import M`, `from M import f`, `from M import *`; user `.qa` files resolved relative to the source file; transitive imports; visibility enforced; cycle detection |
+| Standard library | Done | 13 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket`, `regex` (~120 functions) |
 | REPL | Done | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | Done | `--stdlib`, `--dump`, `--load`, `--output` flags; 27 integration tests |
 | Structs | Done | Declare, init, field access/assignment, nested structs, field compound assignment |
@@ -22,13 +22,39 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Visibility enforcement | Done | `static fn` blocked from `from M import` and `import M; M.fn()` |
 | Import cycle detection | Done | Circular imports detected and reported with the full cycle path |
 | Match expression | Done | `match` statement with `ok(v)`, `err(E v)`, literal, range `lo..hi`, wildcard `_` arms |
-| LSP server | Done | 14 protocol features — see table below |
-| VS Code extension (highlighting) | Done | Syntax highlighting, snippets, language config; published separately as a standalone extension |
-| VS Code extension (LSP client) | Done | TypeScript client with `vscode-languageclient`; auto-starts `quant-lsp`; `.vsix` packaged |
+| Optional type | Done | `option(T)`, `some(v)`, `none` |
 | Generics | Done | Type-erased parametric polymorphism; `fn foo[T, U](...)`; call-site inference |
+| First-class functions | Done | `(T) -> R` type syntax; `ILoadFunc` + `ICallIndirect` instructions; lambdas |
+| Dict type | Done | `dict(K, V)`, `{}` literal, subscript get/set; `dict.*` builtins |
+| FFI | Done | `extern "lib.so" { fn … }` blocks; `dlopen`/`dlsym` + libffi; types: `int`, `float`, `bool`, `str`, `void` |
+| FFI variadics | Done | `...T` param syntax in `extern` blocks; uses `ffi_prep_cif_var`; args passed flat past fixed params |
+| FFI pointer type | Done | `ptr` keyword type; `VPointer Word64` runtime value; `ptr.null`, `ptr.is_null`, `ptr.to_int`, `ptr.from_int` builtins |
+| Formatter | Done | Comment-preserving; idempotent; wired as LSP `textDocument/formatting` |
+| LSP server | Done | 14 protocol features — see table below |
+| VS Code extension (highlighting) | Done | Syntax highlighting, snippets, language config; `.vsix` in `extension/vscode/quant-highlighter/` |
+| VS Code extension (LSP client) | Done | TypeScript client with `vscode-languageclient`; auto-starts `quant-lsp`; `.vsix` in `extension/vscode/quant-lsp/` |
 | Docs site | Done | Astro/Starlight; all pages written |
-| Tests | Done | 563 total, 0 failures |
-| FFI | Done | `extern "lib.so" { fn … }` blocks; `dlopen`/`dlsym` + libffi; types: int/float/bool/str/void |
+| Packaging: Debian | Done | `make deb` produces installable `.deb`; stdlib in `/usr/local/share/quant/lib/` |
+| Packaging: Arch | Done | `packaging/arch/PKGBUILD` for AUR |
+| Packaging: Nix | Done | `nix build .` (cli), `.#lsp`, `.#repl`; stdlib bundled via `QUANT_STDLIB` wrapper |
+
+### Stdlib detail
+
+| Module | Status | Notable functions |
+|--------|--------|-------------------|
+| `math` | Done | `sin/cos/tan/sqrt/abs/floor/ceil/round/min/max/log/exp/pi/tau/log2/log10` |
+| `string` | Done | `len/concat/substring/split/join/trim/replace/format/%s%d%f` |
+| `array` | Done | `len/push/pop/sort/reverse/slice/map/filter/reduce` (map/filter/reduce via `from array import *`) |
+| `sys` | Done | `args/argc/env/exit/sleep/time/platform/hostname/getcwd/system` |
+| `io` | Done | `print/println/read` |
+| `file` | Done | `read/write/append/lines/exists/delete/rename/size` |
+| `buf` | Done | `new/write/writeln/to_str/len/clear/flush` |
+| `dict` | Done | `has/keys/values/len/delete` |
+| `json` | Done | `parse/encode/decode_str/decode_int/decode_float/decode_bool/has/is_null/keys` |
+| `socket` | Done | `connect/listen/accept/send/recv/close/peer_addr` |
+| `varargs` | Done | variadic helper utilities |
+| `regex` | Done | `match/find/find_all/replace/split` (POSIX ERE via `regex-tdfa`) |
+| `net/http` | **In progress** | `get/post/put/delete`; response struct with `status`, `body`, `headers` — colleague's work |
 
 ### LSP feature coverage
 
@@ -37,444 +63,184 @@ Current state of the `feat/revival` branch as of 2026-06-29.
 | Diagnostics | `publishDiagnostics` | Done |
 | Hover | `textDocument/hover` | Done |
 | Completion | `textDocument/completion` | Done |
-| Go to definition | `textDocument/definition` | Done -functions and variables |
+| Go to definition | `textDocument/definition` | Done — functions and variables |
 | Signature help | `textDocument/signatureHelp` | Done |
 | Document symbols | `textDocument/documentSymbol` | Done |
-| Document highlight | `textDocument/documentHighlight` | Done -functions and variables |
-| Find references | `textDocument/references` | Done -functions and variables |
-| Rename | `textDocument/rename` + `prepareRename` | Done -functions and variables |
+| Document highlight | `textDocument/documentHighlight` | Done — functions and variables |
+| Find references | `textDocument/references` | Done — functions and variables |
+| Rename | `textDocument/rename` + `prepareRename` | Done — functions and variables |
 | Folding ranges | `textDocument/foldingRange` | Done |
 | Inlay hints | `textDocument/inlayHint` | Done |
 | Semantic tokens | `textDocument/semanticTokensFull` | Done |
 | Code lens | `textDocument/codeLens` | Done — "N references" above each `fn` |
 | Call hierarchy | `textDocument/prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls` | Done |
+| Formatting | `textDocument/formatting` | Done — comment-preserving formatter |
+| Selection range | `textDocument/selectionRange` | Done |
+| Workspace symbols | `workspace/symbol` | Done |
 
-### LSP: Rust Analyzer parity targets
-
-The explicit design goal for the LSP is **Rust Analyzer feature and UX parity**.
-The table above shows what is done; the table below shows the remaining gap,
-ordered by implementation impact.
+### LSP: Rust Analyzer parity targets (remaining)
 
 | Feature | LSP method | Priority | Notes |
 |---------|-----------|----------|-------|
-| Go to type definition | `textDocument/typeDefinition` | High | Jump to struct / error declaration. Needs `arStructDefSites :: Map TypeName SourceSpan` collected in `Analyze.hs`. |
-| Workspace-wide analysis | `workspace/symbol`, cross-file refs/highlight/rename | High | Index ALL `.qa` files in the workspace, not just the currently open one. Requires a background watcher + per-file `FileState` for every file on disk. |
-| Run code lens | `textDocument/codeLens` (extend) | High | `▶ Run` above `fn main()` triggers `glados run <file>` in the integrated terminal. Command: `workbench.action.terminal.sendSequence`. |
-| Variable type inlay hints | `textDocument/inlayHint` (extend) | Medium | Show inferred type after variable declarations: `x: int`. Currently only parameter name hints are emitted. Needs `fsVarDeclTypes :: Map SourceSpan Type`. |
-| Selection range | `textDocument/selectionRange` | Medium | Smart expand selection: identifier → expression → statement → block → function. Walk AST spans outward from cursor. |
-| Code action: fill struct | `textDocument/codeAction` (extend) | Medium | When struct init is missing fields, offer "Fill missing fields" quick fix. |
-| Code action: add import | `textDocument/codeAction` (extend) | Medium | When an unknown name matches a stdlib function, offer "Import `math`". |
+| Go to type definition | `textDocument/typeDefinition` | High | Jump to struct / error declaration. Needs `structDefSites :: Map TypeName SourceSpan` in `Analyze.hs`. |
+| Workspace-wide analysis | cross-file refs/highlight/rename | High | Index ALL `.qa` files in the workspace, not just the open one. Requires a background watcher + per-file `FileState` for every file on disk. |
+| Run code lens | `textDocument/codeLens` (extend) | High | `▶ Run` above `fn main()` triggers `glados run <file>` in the integrated terminal. |
+| Variable type inlay hints | `textDocument/inlayHint` (extend) | Medium | Show inferred type after variable declarations: `x: int`. Currently only parameter name hints are emitted. |
+| Code action: fill struct | `textDocument/codeAction` | Medium | When struct init is missing fields, offer "Fill missing fields" quick fix. |
+| Code action: add import | `textDocument/codeAction` | Medium | When an unknown name matches a stdlib function, offer "Import `math`". |
 | On-type formatting | `textDocument/onTypeFormatting` | Low | Auto-indent after `{` / `}` / `;`. |
 | Diagnostic: dead code | `publishDiagnostics` (extend) | Low | Warn on functions never called from `main` or exported. |
 | Status bar indexing indicator | custom notification | Low | Show "Quant: indexing…" while the LSP is analyzing; RA-style. |
 
 ---
 
-## True V1 -what's left
+## V2 Tooling
 
-The deadline V1 shipped a working language. True V1 needs a handful of
-language-level features that any programmer expects, plus a clean
-standard library and reliable tooling.
-
-Out of scope for V1 (later): package manager, graphics/SDL2 library.
+The language itself is feature-complete for V1. The next layer is the
+surrounding toolchain — the things that make the language *pleasant to use at
+scale* rather than just *correct*.
 
 ---
 
-### 1. First-class functions *(done)*
+### 1. Project manager
 
-Pass functions as arguments, store them in variables, return them from
-functions. This unlocks callbacks, higher-order utilities, and most
-functional patterns.
+A `quant` top-level command with `init`, `build`, `run`, `clean` subcommands
+backed by a `quant.toml` manifest. No package registry yet — just project
+structure and a better UX than knowing the raw CLI flags.
 
-```quant
-fn apply(f: (int) -> int, x: int) -> int {
-    return f(x);
-}
-
-fn double(n: int) -> int { return n * 2; }
-
-fn main() -> void {
-    result: int = apply(double, 5);   // 10
-    println(result);
-}
+```toml
+# quant.toml
+name    = "my-project"
+version = "0.1.0"
+entry   = "src/main.qa"
+stdlib  = "/usr/local/share/quant/lib"  # optional override
 ```
-
-**Layers that need work:**
-
-| Layer | Change |
-|-------|--------|
-| Parser/Type | `(int) -> int` type syntax -positional-typed function types (currently requires named params `(x: int) -> int`) |
-| AST/Type | Already has `TypeFunction`; `VFunction FuncName` value is missing from `Bytecode.hs` |
-| Codegen | `ExprVar` of a function name → push `VFunction fname`; `ExprCall` on a non-literal callee → `ICallIndirect` |
-| VM | New `ICallIndirect` instruction: pop `VFunction`, dispatch like `ICall` |
-| Type checker | `TypeFunction` already in the type system; wire it to variable type annotations |
-
----
-
-### 2. Error payload field access *(done)*
-
-Error types already support payload fields at the declaration and creation
-sites. Accessing those fields on a caught error value is the missing half.
-
-```quant
-error ParseError { line: int, msg: str };
-
-fn parse(src: str) -> orerror(int, ParseError) {
-    return error ParseError { line: 3, msg: "unexpected token" };
-}
-
-fn main() -> void {
-    result: orerror(int, ParseError) = parse("???");
-    // must returns the success value or panics -- field access on the error
-    // side is the gap:
-    // err: ParseError = ...  (need a way to bind the error branch)
-    // println(err.msg);
-}
-```
-
-Currently `VErrorVal (ErrorName, [(FieldName, Value)])` is stored in the VM
-but there is no instruction to project a field out of it.
-
-**Layers that need work:**
-
-| Layer | Change |
-|-------|--------|
-| AST | Add `ExprErrorField` or reuse `ExprField` for `VErrorVal` |
-| VM | `IFieldGet` already exists for structs; extend to handle `VErrorVal` lookup |
-| Type checker | Infer field access on `orerror` / error-typed expressions |
-| Language design | Decide how to bind the error branch -`match`, or a dedicated `catch err { }` block, or a destructuring `let` |
-
-This is best implemented together with **match** (feature 3) so you have a
-natural way to bind the error branch before projecting fields.
-
----
-
-### 3. Match expression *(done)*
-
-A `match` / `switch` construct for control flow on values, struct fields,
-and error variants.
-
-```quant
-error IoError { msg: str };
-error ParseError { line: int };
-
-fn run(src: str) -> orerror(int, IoError) {
-    result: orerror(int, ParseError) = parse(src);
-    match result {
-        ok(n) => return n * 2;
-        err(ParseError e) => return error IoError { msg: e.msg };
-    };
-}
-
-fn classify(n: int) -> str {
-    match n {
-        0 => return "zero";
-        1..9 => return "single digit";
-        _ => return "large";
-    };
-}
-```
-
-**Layers that need work:**
-
-| Layer | Change |
-|-------|--------|
-| Lexer | `match`, `ok`, `err` keywords (or contextual) |
-| AST | `StmtMatch` / `ExprMatch` with arm list; arm patterns: literal, range, wildcard, `ok(v)`, `err(E e)`, struct destructure |
-| Parser | `parseMatch` |
-| Type checker | Exhaustiveness check (at minimum warn on non-exhaustive); arm body type unification |
-| Codegen | Compile arms to conditional jumps; bind pattern variables in arm scope |
-| VM | No new instructions needed beyond scope-local stores |
-
----
-
-### 4. Dict / map type *(done)*
-
-An associative container keyed by `str` or `int`.
-
-```quant
-fn main() -> void {
-    counts: dict(str, int) = {};
-    counts["hello"] = 1;
-    counts["world"] = 2;
-    if (dict.has(counts, "hello")) {
-        println(counts["hello"]);   // 1
-    };
-    keys: [str] = dict.keys(counts);
-}
-```
-
-**Layers that need work:**
-
-| Layer | Change |
-|-------|--------|
-| AST/Type | `TypeDict KeyType ValueType`; `LitDict []` |
-| Parser | `dict(K, V)` type syntax; `{}` literal; subscript assignment (`d[k] = v`) already handled by `LArrayIndex` -reuse or extend |
-| VM | `VDictRef Int` (heap-backed like `VArrayRef`); `vmDictHeap :: Map Int (Map Value Value)` in `VMState` |
-| Builtins | `dict.has`, `dict.keys`, `dict.values`, `dict.len`, `dict.delete` |
-| Type checker | Dict subscript types; builtin return types |
-| Codegen | `INewDict`, `IDictGet`, `IDictSet` instructions; or dispatch to builtins |
-
-Stdlib module `dict.qa` for higher-level operations.
-
----
-
-### 5. Import cycle detection *(done)*
-
-Circular imports currently cause a stack overflow.
-
-```
-// a.qa imports b.qa, b.qa imports a.qa -> infinite recursion
-```
-
-**Fix:** Thread a `Set FilePath` of in-progress modules through
-`resolveImports` / `resolveOne`. If a module is already in the set, return
-`Left "import cycle detected: a -> b -> a"`.
-
-**Layers:** `compiler/src/Compiler/Import.hs` only.
-
----
-
-### 6. Optional / nullable type *(done)*
-
-A built-in `option(T)` (or `?T`) that makes null-safety explicit.
-
-```quant
-fn find(arr: [int], val: int) -> option(int) {
-    i: int = 0;
-    while (i < len(arr)) {
-        if (arr[i] == val) { return some(i); };
-        i = i + 1;
-    };
-    return none;
-}
-
-fn main() -> void {
-    result: option(int) = find([1, 2, 3], 2);
-    match result {
-        some(i) => println(i);
-        none    => println("not found");
-    };
-}
-```
-
-`option(T)` is a specialisation of the error system (`orerror(T, None)`)
-but with dedicated syntax and a `none` literal that reads more naturally.
-
-**Layers:** similar to `orerror` -AST type node, parser, type checker,
-VM `VOption`, codegen. Depends on **match** (feature 3) for clean usage.
-
----
-
-### 7. Generics / parametric polymorphism *(done)*
-
-Write functions parameterised over types.
-
-```quant
-fn identity[T](x: T) -> T { return x; }
-
-fn map_arr[T, U](arr: [T], f: (T) -> U, n: int) -> [U] {
-    result: [U] = [];
-    i: int = 0;
-    while (i < n) {
-        push(result, f(arr[i]));
-        i++;
-    };
-    return result;
-}
-
-fn main() -> void {
-    n: int = identity(42);
-    s: str = identity("hello");
-    doubled: [int] = map_arr([1, 2, 3], fn(x: int) -> int { return x * 2; }, 3);
-}
-```
-
-**Approach:** type erasure -a single bytecode body is emitted per generic function.
-The type checker resolves each type variable to a concrete type at every call site,
-verifying safety statically with no runtime overhead.
-
-**Layers completed:**
-
-| Layer | Change |
-|-------|--------|
-| Parser | `[T, U, ...]` type-param list on `fn`; post-parse substitution replaces `TypeStruct "T"` with `TypeVar "T"` |
-| AST | `funcDeclTypeParams :: [Located TypeName]` on `FunctionDecl`; `TypeVar TypeName` constructor in `Type` |
-| Type checker | `envTypeVars`, `envGenericParams` in `Env`; `inferTypeVarBindings` + `applyBindings` for call-site return-type inference |
-| Codegen | No changes needed -type-erased bytecode is already type-agnostic |
-
-Generic structs (`struct Pair[A, B]`) remain post-V1.
-
----
-
-### 8. Install / distribution
-
-A way to install and uninstall the full toolchain system-wide so `glados` and
-the LSP are available without knowing anything about Cabal or this repo.
 
 ```bash
-# Debian/Ubuntu
-sudo dpkg -i glados_1.0.0_amd64.deb
-glados compiler run hello.qa   # stdlib auto-resolved from /usr/local/share/quant/lib/
+quant init my-project   # scaffold quant.toml + src/main.qa
+quant run               # compile + execute
+quant build             # compile to binary without running
+quant build --release   # optimised build
+quant clean             # remove build artefacts
 ```
 
-**Target platforms (V1):**
-
-| Platform | Format | Status |
-|----------|--------|--------|
-| Debian / Ubuntu | `.deb` via `make deb` | Done |
-| Arch Linux | `PKGBUILD` for AUR | Pending |
-| Nix / NixOS | `flake.nix` packages + apps; see `packaging/nix/NOTES.md` | Pending |
-| Windows | deferred | / |
-| Red Hat / Fedora | RPM | deferred |
-| macOS / Homebrew | `Formula` | deferred |
-
-**Installed artifacts:**
-
-| Artifact | Install path (Linux) | Status |
-|----------|---------------------|--------|
-| CLI binary | `/usr/local/bin/glados` | Done |
-| LSP binary | `/usr/local/bin/quant-lsp` | Done |
-| Stdlib `.qa` files | `/usr/local/share/quant/lib/` | Done |
-| Uninstall | `make uninstall` / `dpkg -r glados` | Done |
-| Installation docs | `docs/guides/installation.mdx` | Done |
-
-**Stdlib path resolution** (CLI, in order):
-1. `--stdlib DIR` flag
-2. `$QUANT_STDLIB` env var
-3. `/usr/local/share/quant/lib/` (system install)
-4. `./std` (dev fallback)
-
-**Remaining:**
+**Implementation:**
 
 | Layer | Change |
 |-------|--------|
-| `packaging/arch/PKGBUILD` | Downloads release tarball, runs `make install` |
-| `flake.nix` | Expose `glados` and `quant-lsp` as Nix packages/apps; wrap with `QUANT_STDLIB`; see `packaging/nix/NOTES.md` |
+| CLI (`cli/`) | Add `init`, `run`, `build`, `clean` subcommands to the existing `optparse-applicative` parser |
+| Manifest | Parse `quant.toml` with `tomland` or `toml-parser`; resolve `entry` and `stdlib` paths from it |
+| Scaffold | `quant init` writes `quant.toml` + `src/main.qa` (hello-world template) |
+| Build cache | Optional: track source mtime vs. bytecode mtime, skip recompile if unchanged |
 
-No new language features needed -purely build and packaging work.
+No new language features required — purely CLI and packaging work.
 
 ---
 
-### 8b. VS Code extension publishing *(done)*
+### 2. Test runner
 
-Two extensions published to the VS Code Marketplace:
-
-| Extension | Publisher ID | Contents | Status |
-|-----------|-------------|----------|--------|
-| Quant Language (highlighting) | `quant-team.quant` | Grammar, snippets, language config | Done — `.vsix` in `extension/vscode/quant-highlighter/` |
-| Quant Language (LSP) | `quant-team.quant-lsp` | TypeScript client that auto-starts `quant-lsp` | Done — `.vsix` in `extension/vscode/quant-lsp/` |
-
-Both extensions are packaged and ready. Publish with:
+Built into the project manager as `quant test`. Discovers test files, runs
+every `fn test_*()`, and reports pass/fail with a count.
 
 ```bash
-cd extension/vscode/quant-highlighter && vsce publish
-cd extension/vscode/quant-lsp && vsce publish
+quant test              # run all tests/
+quant test tests/math_test.qa   # run one file
 ```
-
----
-
-### 9. FFI -call C functions *(done)*
-
-Bind to C libraries directly from Quant using `extern` blocks.
 
 ```quant
-extern "libm.so.6" {
-    fn sqrt(x: float) -> float
-    fn pow(base: float, exp: float) -> float
+// tests/math_test.qa
+import math
+
+fn test_pi() -> void {
+    assert_eq(math.pi(), 3.141592653589793);
 }
 
-fn main() -> void {
-    println(sqrt(2.0));      // 1.4142135623730951
-    println(pow(2.0, 10.0)); // 1024.0
+fn test_log2() -> void {
+    assert_eq(math.log2(8.0), 3.0);
 }
 ```
 
-**Shipped:**
-- `extern "lib.so" { fn … }` block declaration — groups bindings by library
-- `ICallFFI lib sym retType argc` bytecode instruction
-- VM resolves via `dlopen` + `dlsym` at runtime; library handles cached per-process
-- Types supported: `int` → `int64_t`, `float` → `double`, `bool` → `uint32_t`, `str` → `const char*`, `void`
-- Guide at `docs/guides/ffi.mdx`
+**Implementation:**
 
-**Not yet supported — variadic FFI:**
+| Layer | Change |
+|-------|--------|
+| Discovery | Scan `tests/` (or configurable `test_dir` in `quant.toml`) for `*_test.qa` files |
+| Convention | Any `fn test_*(...)` with no parameters is a test case |
+| Assert builtins | Add `assert_eq`, `assert_ne`, `assert_true`, `assert_false`, `assert_panic` as VM builtins that throw a `TestFailure` error on mismatch |
+| Runner | Compile each test file; call each `test_*` function; catch `TestFailure`; print TAP-compatible output |
+| Exit code | Exit 1 if any test fails — plays nicely with CI |
 
-Variadic C functions (e.g. `printf`, `sprintf`) require a different libffi calling
-convention (`ffi_call` with `ffi_prep_cif_var`). Planned syntax:
+---
+
+### 3. Linter
+
+A `quant lint` command that reports style and correctness warnings beyond the
+type checker. Runs over the parsed AST without executing anything.
+
+```bash
+quant lint              # lint all .qa files in the project
+quant lint src/main.qa  # lint one file
+```
+
+**Checks (initial set):**
+
+| Rule | Example violation | Severity |
+|------|------------------|----------|
+| Unused variables | `x: int = 5;` never read | Warning |
+| Unreachable code | statements after `return` | Warning |
+| Unused function parameters | `fn foo(x: int, y: int)` where `y` is never used | Warning |
+| Naming: functions snake_case | `fn MyFunc()` | Warning |
+| Naming: types PascalCase | `struct myStruct` | Warning |
+| Naming: error types PascalCase | `error ioError` | Warning |
+| Empty blocks | `if (cond) {};` | Info |
+| Shadowed variable | inner `x` hides outer `x` | Warning |
+| Missing return on all paths | non-void function can fall off end | Error |
+
+**Implementation:**
+
+| Layer | Change |
+|-------|--------|
+| New package `linter/` | AST visitor that accumulates `LintDiagnostic` values |
+| CLI | `quant lint` subcommand; `--fix` flag for auto-fixable rules |
+| LSP integration | Feed lint diagnostics into `publishDiagnostics` alongside type errors |
+
+---
+
+### 4. Doc generator
+
+A `quant doc` command that extracts leading `//` comments from public
+functions and emits an HTML or Markdown API reference.
+
+```bash
+quant doc               # generate docs/api/ from src/
+quant doc --format md   # emit Markdown instead of HTML
+```
 
 ```quant
-extern "libc.so.6" {
-    fn printf(fmt: str, ...int) -> int
-    fn snprintf(buf: str, n: int, fmt: str, ...int) -> int
-}
+// Returns the nth Fibonacci number.
+//
+// Uses iterative computation — O(n) time, O(1) space.
+fn fib(n: int) -> int { ... }
 ```
 
-The `...T` suffix marks the variadic portion. At the `ICallFFI` level this needs
-a `IsVariadic Int` flag so the VM knows how many fixed args precede the varargs
-and can call `ffi_prep_cif_var` instead of `ffi_prep_cif`.
+**Implementation:**
 
-**Also not yet supported:**
-- Pointer types beyond `str` (raw `void*`, `int*`, out-params)
-- C struct pass-by-value
-- Callback pointers (`FunPtr` wrapping a Quant lambda)
+| Layer | Change |
+|-------|--------|
+| Comment attachment | The formatter already preserves comments in the AST; attach them to the nearest `DeclFunction` |
+| Renderer | Walk public declarations; emit a Markdown/HTML template per module |
+| CLI | `quant doc` subcommand; `--out DIR`, `--format html\|md` |
 
 ---
 
-## Stdlib gaps for V1
+## Post-V2 / future
 
-The current stdlib is comprehensive. Remaining gaps:
-
-| Module | Status | Missing |
-|--------|--------|---------|
-| `string` | Done | `to_chars`, `from_chars`, `count`, `format` (named `{}` holes) |
-| `array` | Done | `map(arr, f)`, `filter(arr, f)` — blocked until first-class functions fully stabilize |
-| `math` | Done | `pi`, `tau` constants; `log2`, `log10`, `hypot`, `is_nan`, `is_inf` |
-| `json` | Done | — |
-| `dict` | Done | — |
-| `socket` | Done | — |
-| `regex` | Missing | `match`, `find`, `replace` — wraps Haskell `regex-compat` |
-| `net` | Missing | `http.get`, `http.post`, `http.put`, `http.delete`; response struct with `status`, `body`, `headers` — wraps `http-conduit` |
-
----
-
-## Implementation order
-
-Dependencies shape the order:
-
-```
-cycle detection (5)          -standalone, do first
-error field access (2)  ─┐
-match (3)               ─┴─ do together, match enables field binding
-first-class functions (1)    -independent, can parallelize
-dict (4)                     -independent
-optional (6)            ─── depends on match for clean usage
-stdlib additions        ─── fill in as language features land; net needs dict for headers
-install / distribution  ─── do before any public release; CLI path fallback is trivial
-FFI (9)                      -done
-```
-
-Realistic V1 sequence:
-1. Cycle detection *(done)*
-2. Error field access + match expression *(done)*
-3. First-class functions *(done)*
-4. Dict type *(done)*
-5. Optional type *(done)*
-6. Generics / parametric polymorphism *(done)*
-7. Stdlib additions (json, regex, string.format, generic array.map/filter, net/http, socket)
-8. Install / distribution (deb + PKGBUILD + flake, CLI stdlib path fallback)
-9. FFI *(done)*
-
----
-
-## Post-V1 / future
-
-- **Tuples** -`(int, str)` for lightweight multiple returns
-- **Enum types** -named variants without payload, beyond the error system
-- **Closures capturing environment** -lambdas that close over local variables
-- **Async / await** -cooperative concurrency
-- **Package manager** -resolve external Quant packages from a registry
-- **FFI variadics** -`extern fn printf(fmt: str, ...int) -> int`; needs `ffi_prep_cif_var` path in the VM
-- **FFI pointer types** -raw `void*` / `int*` args, out-params, callback `FunPtr` wrapping a Quant lambda
-- **Graphics / game library** -SDL2 or similar via FFI
-- **Multi-target codegen** -LLVM or C output instead of the bytecode VM
-- **Cycle detection in imports** -if not done in V1
+- **Package manager** — resolve external Quant packages from a registry (`quant.toml` `[dependencies]` section)
+- **FFI callbacks** — create a C function pointer from a Quant lambda using libffi's closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`)
+- **Tuples** — `(int, str)` for lightweight multiple returns
+- **Enum types** — named variants without payload, beyond the error system
+- **Closures capturing environment** — lambdas that close over local variables from the enclosing scope
+- **Async / await** — cooperative concurrency
+- **Generic structs** — `struct Pair[A, B] { first: A, second: B }`
+- **Multi-target codegen** — LLVM or C emission instead of the bytecode VM
+- **Graphics / game library** — SDL2 or similar via FFI
