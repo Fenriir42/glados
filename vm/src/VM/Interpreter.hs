@@ -55,7 +55,8 @@ import System.Exit (ExitCode (..), exitWith)
 import System.Posix.DynamicLinker (DL, RTLDFlags (..), dlopen, dlsym)
 import System.Posix.IO (fdWrite)
 import System.Posix.Types (ByteCount, Fd (..))
-import VM.Builtins (callBuiltin, isBuiltin, isHeapBuiltin)
+import Text.Regex.TDFA (getAllTextMatches, (=~))
+import VM.Builtins (applyFormat, callBuiltin, isBuiltin, isHeapBuiltin)
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -829,10 +830,79 @@ callHeapBuiltin name args = case (name, args) of
         case (r :: Either SomeException NS.SockAddr) of
           Left _ -> return (VString "")
           Right addr -> return (VString (T.pack (show addr)))
+  -- string.format : str -> [any] -> str  (variadic args packed into array)
+  ("string.format", [fmt, VArrayRef aid]) -> do
+    strings <- gets vmStrings
+    let fmtStr = resolveValue strings fmt
+    heap <- gets vmHeap
+    let vals = case Map.lookup aid heap of
+          Nothing -> []
+          Just arr -> map snd (Map.toAscList arr)
+    return $ VString (applyFormat fmtStr strings vals)
+
+  -- regex.match : str -> str -> bool
+  ("regex.match", [pat, txt]) -> do
+    strings <- gets vmStrings
+    let p = T.unpack (resolveValue strings pat)
+        t = T.unpack (resolveValue strings txt)
+    return $ VBool (t =~ p :: Bool)
+
+  -- regex.find : str -> str -> str  (first match, or "" if none)
+  ("regex.find", [pat, txt]) -> do
+    strings <- gets vmStrings
+    let p = T.unpack (resolveValue strings pat)
+        t = T.unpack (resolveValue strings txt)
+    return $ VString (T.pack (t =~ p :: String))
+
+  -- regex.find_all : str -> str -> [str]
+  ("regex.find_all", [pat, txt]) -> do
+    strings <- gets vmStrings
+    let p = T.unpack (resolveValue strings pat)
+        t = T.unpack (resolveValue strings txt)
+        matches = getAllTextMatches (t =~ p) :: [String]
+    aid <- allocArray
+    mapM_ (heapPush aid . VString . T.pack) matches
+    return $ VArrayRef aid
+
+  -- regex.replace : str -> str -> str -> str  (replace all non-overlapping matches)
+  ("regex.replace", [pat, txt, repl]) -> do
+    strings <- gets vmStrings
+    let p = T.unpack (resolveValue strings pat)
+        t = T.unpack (resolveValue strings txt)
+        r = T.unpack (resolveValue strings repl)
+    return $ VString (T.pack (regexReplaceAll p r t))
+
+  -- regex.split : str -> str -> [str]
+  ("regex.split", [pat, txt]) -> do
+    strings <- gets vmStrings
+    let p = T.unpack (resolveValue strings pat)
+        t = T.unpack (resolveValue strings txt)
+    aid <- allocArray
+    mapM_ (heapPush aid . VString . T.pack) (regexSplit p t)
+    return $ VArrayRef aid
   _ ->
     throwError $
       VMRuntimeError $
         "Heap builtin '" ++ show name ++ "' called with bad args: " ++ show args
+
+-- ---------------------------------------------------------------------------
+-- Regex helpers
+
+regexReplaceAll :: String -> String -> String -> String
+regexReplaceAll pat repl = go
+  where
+    go "" = ""
+    go s = case s =~ pat :: (String, String, String) of
+      (_, "", _) -> s
+      (pre, _, post) -> pre ++ repl ++ go post
+
+regexSplit :: String -> String -> [String]
+regexSplit pat = go
+  where
+    go "" = [""]
+    go s = case s =~ pat :: (String, String, String) of
+      (_, "", _) -> [s]
+      (pre, _, post) -> pre : go post
 
 -- ---------------------------------------------------------------------------
 -- JSON helpers

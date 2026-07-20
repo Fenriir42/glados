@@ -1,0 +1,40 @@
+# Quant Standard Library - Regex Module
+
+// Returns true if `pattern` matches anywhere in `text`.
+//
+// Uses POSIX extended regular expressions (ERE).
+fn test(pattern: str, text: str) -> bool {
+    return regex.match(pattern, text);
+}
+
+// Returns the first substring of `text` matched by `pattern`.
+//
+// Returns an empty string if there is no match.
+fn find(pattern: str, text: str) -> str {
+    return regex.find(pattern, text);
+}
+
+// Returns all non-overlapping substrings of `text` matched by `pattern`
+// as an array of strings.
+//
+// Returns an empty array if there are no matches.
+fn find_all(pattern: str, text: str) -> [str] {
+    return regex.find_all(pattern, text);
+}
+
+// Returns `text` with every non-overlapping occurrence of `pattern`
+// replaced by `replacement`.
+//
+// Replacements proceed left-to-right.
+fn replace(pattern: str, text: str, replacement: str) -> str {
+    return regex.replace(pattern, text, replacement);
+}
+
+// Splits `text` on every occurrence of `pattern` and returns the pieces
+// as an array of strings.
+//
+// If `pattern` does not match, returns a single-element array containing
+// `text` unchanged.
+fn split(pattern: str, text: str) -> [str] {
+    return regex.split(pattern, text);
+}

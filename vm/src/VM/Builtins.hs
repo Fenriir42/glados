@@ -3,6 +3,7 @@ module VM.Builtins
   ( isBuiltin,
     isHeapBuiltin,
     callBuiltin,
+    applyFormat,
   )
 where
 
@@ -51,6 +52,7 @@ isHeapBuiltin name =
     || "dict." `T.isPrefixOf` name
     || "json." `T.isPrefixOf` name
     || "socket." `T.isPrefixOf` name
+    || "regex." `T.isPrefixOf` name
 
 pureBuiltins :: [Text]
 pureBuiltins = ["print", "println"]
@@ -65,6 +67,7 @@ heapBuiltins =
     "pop",
     "string.split",
     "string.join",
+    "string.format",
     "sys.args",
     "file.lines",
     "buf.new",
@@ -186,6 +189,10 @@ callMath "min" _ [VInt a, VInt b] = return $ VInt (min a b)
 callMath "max" _ [VInt a, VInt b] = return $ VInt (max a b)
 callMath "fmin" _ [VFloat a, VFloat b] = return $ VFloat (min a b)
 callMath "fmax" _ [VFloat a, VFloat b] = return $ VFloat (max a b)
+callMath "pi" _ [] = return $ VFloat pi
+callMath "tau" _ [] = return $ VFloat (2 * pi)
+callMath "log2" _ [VFloat f] = return $ VFloat (logBase 2 f)
+callMath "log10" _ [VFloat f] = return $ VFloat (logBase 10 f)
 callMath name _ _ = ioError $ userError $ "Unknown math function: math." ++ T.unpack name
 
 -- ---------------------------------------------------------------------------

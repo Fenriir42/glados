@@ -195,3 +195,43 @@ fn any_positive(arr: [int]) -> bool {
     };
     return False;
 }
+
+// Returns a new array where each element is `f(arr[i])`.
+fn map(arr: [int], f: (int) -> int) -> [int] {
+    result: [int];
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        array.push(result, f(arr[i]));
+        i++;
+    };
+    return result;
+}
+
+// Returns a new array containing only elements for which `pred` returns true.
+fn filter(arr: [int], pred: (int) -> bool) -> [int] {
+    result: [int];
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        if (pred(arr[i])) {
+            array.push(result, arr[i]);
+        };
+        i++;
+    };
+    return result;
+}
+
+// Reduces `arr` to a single value by repeatedly applying `f(accumulator, element)`.
+//
+// Returns `init` for an empty array.
+fn reduce(arr: [int], init: int, f: (int, int) -> int) -> int {
+    acc: int = init;
+    i: int = 0;
+    length: int = array.len(arr);
+    while (i < length) {
+        acc = f(acc, arr[i]);
+        i++;
+    };
+    return acc;
+}

@@ -279,3 +279,27 @@ fn lcm(a: int, b: int) -> int {
     };
     return abs(a * b) / gcd(a, b);
 }
+
+// Returns the mathematical constant PI (3.14159265358979...).
+fn pi() -> float {
+    return math.pi();
+}
+
+// Returns TAU = 2 * PI (6.28318530717958...).
+fn tau() -> float {
+    return math.tau();
+}
+
+// Returns the base-2 logarithm of `x`.
+//
+// **Panics** - exits with code 136 if `x` <= 0.
+fn log2(x: float) -> float {
+    return math.log2(x);
+}
+
+// Returns the base-10 logarithm of `x`.
+//
+// **Panics** - exits with code 136 if `x` <= 0.
+fn log10(x: float) -> float {
+    return math.log10(x);
+}

@@ -70,6 +70,10 @@ builtinReturnType (FuncName n)
   | n == "socket.recv" = stringT
   | n == "socket.close" = boolT
   | n == "socket.peer_addr" = stringT
+  -- regex.*
+  | n == "regex.match" = boolT
+  | n `elem` ["regex.find", "regex.replace"] = stringT
+  | n `elem` ["regex.find_all", "regex.split"] = Nothing -- returns [str]
   | otherwise = Nothing
   where
     voidFuncs =
@@ -117,7 +121,8 @@ builtinReturnType (FuncName n)
         "string.replace_first",
         "string.repeat",
         "string.from_int",
-        "string.from_float"
+        "string.from_float",
+        "string.format"
       ]
     mathIntFuncs =
       [ "math.abs",
@@ -141,4 +146,4 @@ isKnownBuiltin (FuncName n) =
     || any (`T.isPrefixOf` n) modulePrefixes
   where
     standaloneBuiltins = ["print", "println", "len", "push", "pop"]
-    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict.", "json.", "socket."]
+    modulePrefixes = ["math.", "string.", "io.", "sys.", "array.", "file.", "buf.", "dict.", "json.", "socket.", "regex."]
