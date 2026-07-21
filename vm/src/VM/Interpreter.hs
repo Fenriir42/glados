@@ -3,6 +3,7 @@ module VM.Interpreter
   ( VMError (..),
     runProgram,
     runFunction,
+    runFunctionCov,
   )
 where
 
@@ -28,9 +29,11 @@ import qualified Data.Aeson.KeyMap as AesonKM
 import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
+import Data.IORef (IORef, modifyIORef)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Scientific as Scientific
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -98,7 +101,8 @@ data VMState = VMState
     vmFFILibs :: Map Text DL,
     vmNextId :: Int,
     vmFunctions :: Map FuncName Bytecode,
-    vmCurrentFunc :: FuncName
+    vmCurrentFunc :: FuncName,
+    vmCoverage :: Maybe (IORef (Set.Set FuncName))
   }
 
 type VM a = ExceptT VMError (StateT VMState IO) a
@@ -128,7 +132,8 @@ runProgram bytecodes = do
                 vmFFILibs = Map.empty,
                 vmNextId = 0,
                 vmFunctions = funcs,
-                vmCurrentFunc = FuncName "main"
+                vmCurrentFunc = FuncName "main",
+                vmCoverage = Nothing
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -155,7 +160,36 @@ runFunction fname bytecodes = do
                 vmFFILibs = Map.empty,
                 vmNextId = 0,
                 vmFunctions = funcs,
-                vmCurrentFunc = fname
+                vmCurrentFunc = fname,
+                vmCoverage = Nothing
+              }
+      (result, _) <- runStateT (runExceptT execLoop) initState
+      return result
+
+-- | Like 'runFunction' but records every user-function call into @covRef@.
+runFunctionCov :: IORef (Set.Set FuncName) -> FuncName -> [Bytecode] -> IO (Either VMError Value)
+runFunctionCov covRef fname bytecodes = do
+  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  case Map.lookup fname funcs of
+    Nothing -> return $ Left $ VMUndefinedFunction fname
+    Just bc -> do
+      let initState =
+            VMState
+              { vmStack = [],
+                vmLocals = Map.empty,
+                vmIP = 0,
+                vmInstrs = bytecodeInstructions bc,
+                vmStrings = bytecodeStrings bc,
+                vmCallStack = [],
+                vmHeap = Map.empty,
+                vmDictHeap = Map.empty,
+                vmStructHeap = Map.empty,
+                vmSocketHeap = Map.empty,
+                vmFFILibs = Map.empty,
+                vmNextId = 0,
+                vmFunctions = funcs,
+                vmCurrentFunc = fname,
+                vmCoverage = Just covRef
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -239,6 +273,10 @@ execInstr = \case
     -- `from string import len` can shadow the array heap-builtin `len`.
     case Map.lookup fname funcs of
       Just bc -> do
+        covM <- gets vmCoverage
+        S.liftIO $ case covM of
+          Just ref -> modifyIORef ref (Set.insert fname)
+          Nothing -> return ()
         saveFrame
         -- Resolve VStringRef values in the arguments before switching to the
         -- callee's string pool; indices are only valid in the caller's pool
@@ -472,6 +510,10 @@ execInstr = \case
       (VFunction fname : remaining) ->
         case Map.lookup fname funcs of
           Just bc -> do
+            covM <- gets vmCoverage
+            S.liftIO $ case covM of
+              Just ref -> modifyIORef ref (Set.insert fname)
+              Nothing -> return ()
             saveFrame
             mapM_ (\case VArrayRef aid -> resolveArrayStrings strings aid; _ -> return ()) callArgs
             -- Remove VFunction from stack; callee sees [arg_0..arg_n-1, remaining...]
@@ -1200,8 +1242,12 @@ evalBinary BOpDiv (VFloat a) (VInt b) = return $ VFloat (a / fromIntegral b)
 evalBinary BOpMod (VInt a) (VInt b)
   | b == 0 = throwError $ VMRuntimeError "Modulo by zero"
   | otherwise = return $ VInt (a `mod` b)
-evalBinary BOpEq a b = return $ VBool (valEq a b)
-evalBinary BOpNeq a b = return $ VBool (not (valEq a b))
+evalBinary BOpEq a b = do
+  strings <- gets vmStrings
+  return $ VBool (valEq (resolveStringRef strings a) (resolveStringRef strings b))
+evalBinary BOpNeq a b = do
+  strings <- gets vmStrings
+  return $ VBool (not (valEq (resolveStringRef strings a) (resolveStringRef strings b)))
 evalBinary BOpLt a b = cmpOp (<) a b
 evalBinary BOpLte a b = cmpOp (<=) a b
 evalBinary BOpGt a b = cmpOp (>) a b
@@ -1220,6 +1266,7 @@ valEq :: Value -> Value -> Bool
 valEq (VInt a) (VInt b) = a == b
 valEq (VFloat a) (VFloat b) = a == b
 valEq (VBool a) (VBool b) = a == b
+valEq (VString a) (VString b) = a == b
 valEq (VErrorVal n1 _) (VErrorVal n2 _) = n1 == n2
 valEq VUnit VUnit = True
 valEq _ _ = False

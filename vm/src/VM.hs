@@ -3,7 +3,8 @@ module VM
   ( VMError (..),
     runProgram,
     runFunction,
+    runFunctionCov,
   )
 where
 
-import VM.Interpreter (VMError (..), runFunction, runProgram)
+import VM.Interpreter (VMError (..), runFunction, runFunctionCov, runProgram)

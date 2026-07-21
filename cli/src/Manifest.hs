@@ -15,7 +15,8 @@ data Manifest = Manifest
     mEntry :: FilePath,
     mStdlib :: Maybe FilePath,
     mTestDir :: FilePath,
-    mDocOut :: FilePath
+    mDocOut :: FilePath,
+    mCovIgnore :: [FilePath]
   }
 
 manifestFileName :: FilePath
@@ -48,6 +49,7 @@ parseManifest content = do
       stdlib' = look pairs "project" "stdlib"
       testDir = fromMaybe "tests/" (look pairs "test" "dir")
       docOut = fromMaybe "docs/api/" (look pairs "doc" "out")
+      covIgnore = lookList pairs "test" "cov_ignore"
   return
     Manifest
       { mName = name,
@@ -55,11 +57,21 @@ parseManifest content = do
         mEntry = entry,
         mStdlib = stdlib',
         mTestDir = testDir,
-        mDocOut = docOut
+        mDocOut = docOut,
+        mCovIgnore = covIgnore
       }
 
+-- | Look up a single string value; strips surrounding quotes.
 look :: Pairs -> Section -> String -> Maybe String
-look pairs sec key = lookup (sec, key) pairs
+look pairs sec key = case lookup (sec, key) pairs of
+  Nothing -> Nothing
+  Just rawVal ->
+    let v = parseValue rawVal
+     in if null v then Nothing else Just v
+
+-- | Look up a TOML inline array (@["a", "b"]@) or a single quoted string.
+lookList :: Pairs -> Section -> String -> [String]
+lookList pairs sec key = maybe [] parseListValue (lookup (sec, key) pairs)
 
 require :: Pairs -> Section -> String -> Either String String
 require pairs sec key =
@@ -67,6 +79,7 @@ require pairs sec key =
     Nothing -> Left ("[" ++ sec ++ "] " ++ key ++ " is required")
     Just v -> Right v
 
+-- | Stores raw (unprocessed) value text so both string and list fields work.
 parsePairs :: String -> Pairs
 parsePairs content = go "" (lines content) []
   where
@@ -84,18 +97,34 @@ parsePairs content = go "" (lines content) []
                 Nothing -> go sec ls acc
                 Just (k, v) -> go sec ls (((sec, k), v) : acc)
 
+-- | Returns (key, raw-value-text) without interpreting the value.
 parseKV :: String -> Maybe (String, String)
 parseKV s =
   case break (== '=') s of
     (_, []) -> Nothing
     (k, _ : vs) ->
       let key = strip k
-          val = parseValue (dropWhile (== ' ') vs)
-       in if null key then Nothing else Just (key, val)
+          rawVal = dropWhile (== ' ') vs
+       in if null key then Nothing else Just (key, rawVal)
 
 parseValue :: String -> String
 parseValue ('"' : rest) = takeWhile (/= '"') rest
 parseValue s = strip (takeWhile (\c -> c /= '#' && c /= '\n') s)
+
+-- | Parse a TOML inline array or fall back to a single-string value.
+parseListValue :: String -> [String]
+parseListValue ('[' : rest) = extractQuoted (takeWhile (/= ']') rest)
+parseListValue s =
+  let v = parseValue s in [v | not (null v)]
+
+-- | Pull every double-quoted string out of a comma-separated fragment.
+extractQuoted :: String -> [String]
+extractQuoted [] = []
+extractQuoted ('"' : rest) =
+  let val = takeWhile (/= '"') rest
+      after = drop (length val + 1) rest
+   in val : extractQuoted (dropWhile (\c -> c == ',' || c == ' ') after)
+extractQuoted (_ : rest) = extractQuoted rest
 
 strip :: String -> String
 strip = reverse . dropWhile (== ' ') . reverse . dropWhile (== ' ')

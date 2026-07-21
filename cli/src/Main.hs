@@ -26,7 +26,7 @@ data Command
   | CmdInit String
   | CmdBuild Bool
   | CmdRun
-  | CmdTest (Maybe FilePath)
+  | CmdTest (Maybe FilePath) Bool
   | CmdLint
   | CmdFmt Bool
   | CmdDoc String FilePath
@@ -91,6 +91,7 @@ testParser :: Parser Command
 testParser =
   CmdTest
     <$> optional (argument str (metavar "FILE" <> help "run only this test file"))
+    <*> switch (long "cov" <> help "print function coverage report after tests")
 
 fmtParser :: Parser Command
 fmtParser =
@@ -135,7 +136,7 @@ dispatch (CmdCompiler o) = runCompiler o
 dispatch (CmdInit name) = runInit name
 dispatch (CmdBuild rel) = runBuild rel
 dispatch CmdRun = runRun
-dispatch (CmdTest mf) = runTest mf
+dispatch (CmdTest mf cov) = runTest mf cov
 dispatch CmdLint = runLint
 dispatch (CmdFmt check) = runFmt check
 dispatch (CmdDoc fmt out) = runDoc fmt out

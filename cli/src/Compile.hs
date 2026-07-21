@@ -1,8 +1,10 @@
 module Compile
   ( resolveStdlib,
     compileSource,
+    compileSourceWith,
     execute,
     executeFunction,
+    executeFunctionCov,
     collectStdlibFuncNames,
     displayTypeError,
     displayTypeWarning,
@@ -30,8 +32,10 @@ import Compiler.Import (resolveImports)
 import Control.Exception (SomeException, catch)
 import Control.Monad (unless)
 import Data.Char (isAlphaNum)
+import Data.IORef (IORef)
 import Data.List (isPrefixOf, isSuffixOf, partition)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Display
 import Lib (lexFile)
@@ -43,7 +47,7 @@ import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
 import Text.Megaparsec (errorBundlePretty, many, runParser)
 import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
-import VM (runFunction, runProgram)
+import VM (runFunction, runFunctionCov, runProgram)
 import VM.Interpreter (VMError (..))
 
 -- ---------------------------------------------------------------------------
@@ -93,11 +97,46 @@ execute bytecodes = do
     Left err -> printErr (prettyVMError err) >> exitFailure
     Right _ -> return ()
 
+-- | Like 'compileSource' but accepts extra import-search directories in
+-- addition to the file's own directory.  The file's directory is always first.
+compileSourceWith :: [FilePath] -> FilePath -> IO [Compiler.Bytecode]
+compileSourceWith extraDirs filePath = do
+  tokens <- lexFile filePath >>= orDie "lex error"
+  src <- readFile filePath
+  rawDecls <- orDie "parse error" $
+    case runParser (many parseDecl) filePath tokens of
+      Left err -> Left (errorBundlePretty err)
+      Right ds -> Right ds
+  decls <-
+    resolveImports (takeDirectory filePath : extraDirs) rawDecls
+      >>= orDie "import error"
+  let typeErrs = tcErrors (typeCheck (Program decls))
+  unless (null typeErrs) $ do
+    stdFuncs <- case extraDirs of
+      (stdlib : _) -> collectStdlibFuncNames stdlib
+      [] -> return Map.empty
+    let (implicitWarns, realErrors) = partition (isImplicitStdlib stdFuncs) typeErrs
+    mapM_ (\e -> printWarn (displayTypeWarning stdFuncs e (lines src))) implicitWarns
+    unless (null realErrors) $ do
+      mapM_ (\e -> printErr (displayTypeError e (lines src))) realErrors
+      exitFailure
+  case compileProgram (Program decls) of
+    Left err -> printErr (displayError err (lines src)) >> exitFailure
+    Right bc -> return bc
+
 -- | Run a named function from compiled bytecode, returning the error message
 -- as a string rather than printing and exiting.  Used by the test runner.
 executeFunction :: FuncName -> [Compiler.Bytecode] -> IO (Either String ())
 executeFunction fname bytecodes = do
   result <- runFunction fname bytecodes
+  return $ case result of
+    Right _ -> Right ()
+    Left err -> Left (prettyVMError err)
+
+-- | Like 'executeFunction' but records called user-functions into @covRef@.
+executeFunctionCov :: IORef (Set.Set FuncName) -> FuncName -> [Compiler.Bytecode] -> IO (Either String ())
+executeFunctionCov covRef fname bytecodes = do
+  result <- runFunctionCov covRef fname bytecodes
   return $ case result of
     Right _ -> Right ()
     Left err -> Left (prettyVMError err)

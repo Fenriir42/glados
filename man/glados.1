@@ -50,11 +50,14 @@ optimisations. Bytecode is written to \fI.build/\fR.
 Compile and immediately execute the project, forwarding any extra
 arguments to the program.
 .TP
-.B test [\fIFILE\fR]
+.B test [\-\-cov] [\fIFILE\fR]
 Discover and run all test functions. Test files must match
 \fI*_test.qa\fR inside the \fBtests/\fR directory (configurable in
 \fBquant.toml\fR). Any function whose name begins with \fBtest_\fR and
 takes no parameters is treated as a test case.
+.br
+With \fB\-\-cov\fR, print a function-level coverage report after tests
+showing which functions in \fIsrc/\fR were called during the test run.
 .br
 Exits with status 1 if any test fails.
 .TP
@@ -110,6 +113,14 @@ Override stdlib path for this project (optional).
 .TP
 .B [test] dir
 Directory to search for test files (default: \fBtests/\fR).
+.TP
+.B [test] cov_ignore
+Inline TOML array of file paths (relative to the project root) to exclude
+from the \fBglados test \-\-cov\fR coverage report.
+Patterns are matched as path suffixes, so \fB"main.qa"\fR matches any file
+ending in \fBmain.qa\fR.
+.br
+Example: \fBcov_ignore = ["src/main.qa", "src/generated.qa"]\fR
 .TP
 .B [doc] out
 Output directory for generated documentation (default: \fBdocs/api/\fR).

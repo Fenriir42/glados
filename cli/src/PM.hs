@@ -11,13 +11,16 @@ module PM
 where
 
 import AST.Types.Common (FuncName (..))
-import Compile (compileSource, execute, executeFunction, resolveStdlib)
+import Compile (compileSource, compileSourceWith, execute, executeFunctionCov, resolveStdlib)
 import qualified Compiler (Bytecode)
 import Compiler.Serialize (encodeBytecodes)
 import Control.Exception (try)
+import Control.Monad (when)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Char (isAlphaNum)
+import Data.IORef (IORef, newIORef, readIORef)
 import Data.List (isPrefixOf, isSuffixOf)
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import Display (bold, dim, green, printColored, printOk, printStep, red, reset, yellow)
 import Manifest (Manifest (..), loadManifest)
@@ -29,7 +32,7 @@ import System.Directory
     removeDirectoryRecursive,
   )
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
-import System.FilePath (takeExtension, (</>))
+import System.FilePath (takeDirectory, takeExtension, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (rawSystem)
 
@@ -111,20 +114,25 @@ runRun = do
 -- ---------------------------------------------------------------------------
 -- test
 
-runTest :: Maybe FilePath -> IO ()
-runTest mFile = do
+runTest :: Maybe FilePath -> Bool -> IO ()
+runTest mFile showCov = do
   m <- loadManifest
   stdlib <- resolveStdlib (mStdlib m)
+  let srcDir = takeDirectory (mEntry m)
   files <- case mFile of
     Just f -> return [f]
     Nothing -> findTestFiles (mTestDir m)
   if null files
     then putStrLn ("no test files found in `" ++ mTestDir m ++ "`") >> exitSuccess
     else do
-      pairs <- mapM (runTestFile stdlib) files
+      covRef <- newIORef Set.empty
+      pairs <- mapM (runTestFile srcDir stdlib covRef) files
       let passed = sum (map fst pairs)
           failed = sum (map snd pairs)
       putStrLn ""
+      when showCov $ do
+        covered <- readIORef covRef
+        printCoverageReport (mCovIgnore m) covered
       if failed == 0
         then printOk ("all " ++ show passed ++ " test(s) passed")
         else do
@@ -142,11 +150,11 @@ runTest mFile = do
 
 -- | Compile a test file once, then run each @test_*@ function individually.
 -- Falls back to file-level execution when the file has its own @main@.
-runTestFile :: FilePath -> FilePath -> IO (Int, Int)
-runTestFile stdlib fp = do
+runTestFile :: FilePath -> FilePath -> IORef (Set.Set FuncName) -> FilePath -> IO (Int, Int)
+runTestFile srcDir stdlib covRef fp = do
   src <- readFile fp
   printColored $ dim ++ "testing " ++ reset ++ fp ++ "\n"
-  bc <- compileSource stdlib fp
+  bc <- compileSourceWith [srcDir, stdlib] fp
   let fns = scanTestFunctions src
   if null fns || hasMain src
     then do
@@ -157,15 +165,15 @@ runTestFile stdlib fp = do
         Left (ExitFailure _) ->
           printColored (bold ++ red ++ "  FAIL" ++ reset ++ " (file)\n") >> return (0, 1)
     else do
-      results <- mapM (runOneFn bc) fns
+      results <- mapM (runOneFn bc covRef) fns
       let p = length (filter id results)
           f = length (filter not results)
       return (p, f)
 
-runOneFn :: [Compiler.Bytecode] -> String -> IO Bool
-runOneFn bc fname = do
+runOneFn :: [Compiler.Bytecode] -> IORef (Set.Set FuncName) -> String -> IO Bool
+runOneFn bc covRef fname = do
   putStr (dotLine fname)
-  result <- executeFunction (FuncName (T.pack fname)) bc
+  result <- executeFunctionCov covRef (FuncName (T.pack fname)) bc
   case result of
     Right () ->
       printColored (bold ++ green ++ "ok" ++ reset ++ "\n") >> return True
@@ -173,6 +181,69 @@ runOneFn bc fname = do
       printColored (bold ++ red ++ "FAIL" ++ reset ++ "\n")
       mapM_ (\l -> putStrLn ("    " ++ l)) (filter (not . null) (lines errMsg))
       return False
+
+-- ---------------------------------------------------------------------------
+-- Coverage report
+
+-- | True when @fp@ matches any pattern in the ignore list.
+-- Patterns are matched as suffixes, so @"main.qa"@ matches @"src/main.qa"@.
+isIgnored :: [FilePath] -> FilePath -> Bool
+isIgnored patterns fp = any (`isSuffixOf` fp) patterns
+
+printCoverageReport :: [FilePath] -> Set.Set FuncName -> IO ()
+printCoverageReport ignoreList covered = do
+  allFiles <- findQaWith (const True) "src"
+  let srcFiles = filter (not . isIgnored ignoreList) allFiles
+  when (null srcFiles) $ return ()
+  printColored $ "\n" ++ bold ++ "Coverage:" ++ reset ++ "\n"
+  counts <- mapM (reportCovFile covered) srcFiles
+  let totalFns = sum (map fst counts)
+      totalCov = sum (map snd counts)
+  printColored $
+    "  "
+      ++ bold
+      ++ "total"
+      ++ reset
+      ++ "  "
+      ++ show totalCov
+      ++ "/"
+      ++ show totalFns
+      ++ " ("
+      ++ pct totalCov totalFns
+      ++ ")\n"
+
+reportCovFile :: Set.Set FuncName -> FilePath -> IO (Int, Int)
+reportCovFile covered fp = do
+  src <- readFile fp
+  let fns = scanSourceFunctions src
+      results = [(name, FuncName (T.pack name) `Set.member` covered) | name <- fns]
+      covCount = length (filter snd results)
+      total = length results
+  printColored $ "  " ++ dim ++ fp ++ reset ++ "  " ++ show covCount ++ "/" ++ show total ++ " (" ++ pct covCount total ++ ")\n"
+  mapM_ printCovLine results
+  return (total, covCount)
+
+printCovLine :: (String, Bool) -> IO ()
+printCovLine (name, True) =
+  printColored $ "    " ++ green ++ "+" ++ reset ++ " " ++ name ++ "\n"
+printCovLine (name, False) =
+  printColored $ "    " ++ red ++ "-" ++ reset ++ " " ++ name ++ "\n"
+
+pct :: Int -> Int -> String
+pct _ 0 = "n/a"
+pct n d = show ((n * 100) `div` d) ++ "%"
+
+-- | Scan source text for all @fn@ declarations; return their names.
+scanSourceFunctions :: String -> [String]
+scanSourceFunctions src =
+  [ name
+    | l <- lines src,
+      let s = dropWhile (== ' ') l,
+      "fn " `isPrefixOf` s || "static fn " `isPrefixOf` s,
+      let after = if "static fn " `isPrefixOf` s then drop 10 s else drop 3 s,
+      let name = takeWhile (\c -> isAlphaNum c || c == '_') after,
+      not (null name)
+  ]
 
 dotLine :: String -> String
 dotLine name =
