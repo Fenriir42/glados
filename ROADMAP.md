@@ -1,6 +1,6 @@
 # Quant Language - Roadmap
 
-Current state of the `feat/revival` branch as of 2026-07-20.
+Current state of the `feat/revival` branch as of 2026-07-22.
 
 ---
 
@@ -29,8 +29,12 @@ Current state of the `feat/revival` branch as of 2026-07-20.
 | FFI | Done | `extern "lib.so" { fn … }` blocks; `dlopen`/`dlsym` + libffi; types: `int`, `float`, `bool`, `str`, `void` |
 | FFI variadics | Done | `...T` param syntax in `extern` blocks; uses `ffi_prep_cif_var`; args passed flat past fixed params |
 | FFI pointer type | Done | `ptr` keyword type; `VPointer Word64` runtime value; `ptr.null`, `ptr.is_null`, `ptr.to_int`, `ptr.from_int` builtins |
-| Formatter | Done | Comment-preserving; idempotent; wired as LSP `textDocument/formatting` |
+| Formatter | Done | Comment-preserving; idempotent; wired as LSP `textDocument/formatting`; `quant-fmt` binary (`glados fmt` dispatches to it) |
 | LSP server | Done | 19 protocol features — see table below |
+| Project manager | Done | `glados init/build/run/clean/test/doc/fmt/lint` subcommands; `quant.toml` manifest |
+| Test runner | Done | `glados test`; discovers `*_test.qa`; `assert_eq/ne/true/false/panic` builtins; TAP output; exit 1 on failure |
+| Coverage | Done | `glados test --cov`; fn + line + branch bars per file and total; `--cov-min`, `--cov-out JSON` |
+| Doc generator | Done | `glados doc`; scans `//` comments above `fn`/`struct`/`error`; HTML (dark sidebar, scroll-spy) or `--format md` |
 | VS Code extension (highlighting) | Done | Syntax highlighting, snippets, language config; `.vsix` in `extension/vscode/quant-highlighter/` |
 | VS Code extension (LSP client) | Done | TypeScript client with `vscode-languageclient`; auto-starts `quant-lsp`; `.vsix` in `extension/vscode/quant-lsp/` |
 | Docs site | Done | Astro/Starlight; all pages written |
@@ -94,142 +98,26 @@ Current state of the `feat/revival` branch as of 2026-07-20.
 
 ---
 
-## V1 Tooling
+## V1 Tooling — status
 
-The language and LSP are feature-complete. The remaining V1 work is the
-surrounding toolchain — the things that make the language *pleasant to use at
-scale* rather than just *correct*.
+The language, LSP, and surrounding toolchain are feature-complete for V1.
 
----
+### Completed
 
-### 1. Project manager
+| Tool | Command | Notes |
+|------|---------|-------|
+| Project manager | `glados init/build/run/clean` | `quant.toml` manifest; `glados init NAME` scaffolds project |
+| Test runner | `glados test [FILE]` | Discovers `*_test.qa`; `assert_eq/ne/true/false/panic` builtins; TAP output |
+| Coverage | `glados test --cov` | fn + line + branch bars; `--cov-min N`, `--cov-out FILE` (JSON) |
+| Doc generator | `glados doc [--format html\|md] [--out DIR]` | Scans `//` comments; dark-sidebar HTML or Markdown |
+| Formatter | `glados fmt` | Dispatches to `quant-fmt` binary (comment-preserving, idempotent) |
 
-A `quant` top-level command with `init`, `build`, `run`, `clean` subcommands
-backed by a `quant.toml` manifest. No package registry yet — just project
-structure and a better UX than knowing the raw CLI flags.
+### Remaining
 
-```toml
-# quant.toml
-name    = "my-project"
-version = "0.1.0"
-entry   = "src/main.qa"
-stdlib  = "/usr/local/share/quant/lib"  # optional override
-```
-
-```bash
-quant init my-project   # scaffold quant.toml + src/main.qa
-quant run               # compile + execute
-quant build             # compile to binary without running
-quant build --release   # optimised build
-quant clean             # remove build artefacts
-```
-
-**Implementation:**
-
-| Layer | Change |
-|-------|--------|
-| CLI (`cli/`) | Add `init`, `run`, `build`, `clean` subcommands to the existing `optparse-applicative` parser |
-| Manifest | Parse `quant.toml` with `tomland` or `toml-parser`; resolve `entry` and `stdlib` paths from it |
-| Scaffold | `quant init` writes `quant.toml` + `src/main.qa` (hello-world template) |
-| Build cache | Optional: track source mtime vs. bytecode mtime, skip recompile if unchanged |
-
-No new language features required — purely CLI and packaging work.
-
----
-
-### 2. Test runner
-
-Built into the project manager as `quant test`. Discovers test files, runs
-every `fn test_*()`, and reports pass/fail with a count.
-
-```bash
-quant test              # run all tests/
-quant test tests/math_test.qa   # run one file
-```
-
-```quant
-// tests/math_test.qa
-import math
-
-fn test_pi() -> void {
-    assert_eq(math.pi(), 3.141592653589793);
-}
-
-fn test_log2() -> void {
-    assert_eq(math.log2(8.0), 3.0);
-}
-```
-
-**Implementation:**
-
-| Layer | Change |
-|-------|--------|
-| Discovery | Scan `tests/` (or configurable `test_dir` in `quant.toml`) for `*_test.qa` files |
-| Convention | Any `fn test_*(...)` with no parameters is a test case |
-| Assert builtins | Add `assert_eq`, `assert_ne`, `assert_true`, `assert_false`, `assert_panic` as VM builtins that throw a `TestFailure` error on mismatch |
-| Runner | Compile each test file; call each `test_*` function; catch `TestFailure`; print TAP-compatible output |
-| Exit code | Exit 1 if any test fails — plays nicely with CI |
-
----
-
-### 3. Linter
-
-A `quant lint` command that reports style and correctness warnings beyond the
-type checker. Runs over the parsed AST without executing anything.
-
-```bash
-quant lint              # lint all .qa files in the project
-quant lint src/main.qa  # lint one file
-```
-
-**Checks (initial set):**
-
-| Rule | Example violation | Severity |
-|------|------------------|----------|
-| Unused variables | `x: int = 5;` never read | Warning |
-| Unreachable code | statements after `return` | Warning |
-| Unused function parameters | `fn foo(x: int, y: int)` where `y` is never used | Warning |
-| Naming: functions snake_case | `fn MyFunc()` | Warning |
-| Naming: types PascalCase | `struct myStruct` | Warning |
-| Naming: error types PascalCase | `error ioError` | Warning |
-| Empty blocks | `if (cond) {};` | Info |
-| Shadowed variable | inner `x` hides outer `x` | Warning |
-| Missing return on all paths | non-void function can fall off end | Error |
-
-**Implementation:**
-
-| Layer | Change |
-|-------|--------|
-| New package `linter/` | AST visitor that accumulates `LintDiagnostic` values |
-| CLI | `quant lint` subcommand; `--fix` flag for auto-fixable rules |
-| LSP integration | Feed lint diagnostics into `publishDiagnostics` alongside type errors |
-
----
-
-### 4. Doc generator
-
-A `quant doc` command that extracts leading `//` comments from public
-functions and emits an HTML or Markdown API reference.
-
-```bash
-quant doc               # generate docs/api/ from src/
-quant doc --format md   # emit Markdown instead of HTML
-```
-
-```quant
-// Returns the nth Fibonacci number.
-//
-// Uses iterative computation — O(n) time, O(1) space.
-fn fib(n: int) -> int { ... }
-```
-
-**Implementation:**
-
-| Layer | Change |
-|-------|--------|
-| Comment attachment | The formatter already preserves comments in the AST; attach them to the nearest `DeclFunction` |
-| Renderer | Walk public declarations; emit a Markdown/HTML template per module |
-| CLI | `quant doc` subcommand; `--out DIR`, `--format html\|md` |
+| Tool | Command | Status | Notes |
+|------|---------|--------|-------|
+| Linter | `glados lint` | **Not implemented** | `glados lint` delegates to `wheatley` binary; the binary itself does not exist yet. Man page written. Planned: AST visitor for unused vars, unreachable code, naming conventions, shadow warnings, missing-return errors. LSP integration via `publishDiagnostics`. |
+| `quant-fmt` install | — | **Not wired** | `quant-fmt` is built by cabal but not added to `make install`, so `glados fmt` fails at runtime if installed via `make`. |
 
 ---
 
