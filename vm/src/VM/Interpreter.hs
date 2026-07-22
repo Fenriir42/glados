@@ -4,6 +4,7 @@ module VM.Interpreter
     runProgram,
     runFunction,
     runFunctionCov,
+    runFunctionLineCov,
   )
 where
 
@@ -102,7 +103,11 @@ data VMState = VMState
     vmNextId :: Int,
     vmFunctions :: Map FuncName Bytecode,
     vmCurrentFunc :: FuncName,
-    vmCoverage :: Maybe (IORef (Set.Set FuncName))
+    vmCoverage :: Maybe (IORef (Set.Set FuncName)),
+    -- | Per-function hit line numbers for line coverage.
+    vmLineCov :: Maybe (IORef (Map.Map FuncName (Set.Set Int))),
+    -- | Per-branch outcome tracking: (funcName, sourceLine) -> outcomes seen.
+    vmBranchCov :: Maybe (IORef (Map.Map (FuncName, Int) (Set.Set Bool)))
   }
 
 type VM a = ExceptT VMError (StateT VMState IO) a
@@ -133,7 +138,9 @@ runProgram bytecodes = do
                 vmNextId = 0,
                 vmFunctions = funcs,
                 vmCurrentFunc = FuncName "main",
-                vmCoverage = Nothing
+                vmCoverage = Nothing,
+                vmLineCov = Nothing,
+                vmBranchCov = Nothing
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -161,7 +168,9 @@ runFunction fname bytecodes = do
                 vmNextId = 0,
                 vmFunctions = funcs,
                 vmCurrentFunc = fname,
-                vmCoverage = Nothing
+                vmCoverage = Nothing,
+                vmLineCov = Nothing,
+                vmBranchCov = Nothing
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -189,7 +198,46 @@ runFunctionCov covRef fname bytecodes = do
                 vmNextId = 0,
                 vmFunctions = funcs,
                 vmCurrentFunc = fname,
-                vmCoverage = Just covRef
+                vmCoverage = Just covRef,
+                vmLineCov = Nothing,
+                vmBranchCov = Nothing
+              }
+      (result, _) <- runStateT (runExceptT execLoop) initState
+      return result
+
+-- | Like 'runFunctionCov' but also records per-function hit line numbers via
+-- 'ICovMark' instructions and per-branch outcomes via 'ICovBranch' instructions.
+runFunctionLineCov ::
+  IORef (Set.Set FuncName) ->
+  IORef (Map.Map FuncName (Set.Set Int)) ->
+  IORef (Map.Map (FuncName, Int) (Set.Set Bool)) ->
+  FuncName ->
+  [Bytecode] ->
+  IO (Either VMError Value)
+runFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes = do
+  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  case Map.lookup fname funcs of
+    Nothing -> return $ Left $ VMUndefinedFunction fname
+    Just bc -> do
+      let initState =
+            VMState
+              { vmStack = [],
+                vmLocals = Map.empty,
+                vmIP = 0,
+                vmInstrs = bytecodeInstructions bc,
+                vmStrings = bytecodeStrings bc,
+                vmCallStack = [],
+                vmHeap = Map.empty,
+                vmDictHeap = Map.empty,
+                vmStructHeap = Map.empty,
+                vmSocketHeap = Map.empty,
+                vmFFILibs = Map.empty,
+                vmNextId = 0,
+                vmFunctions = funcs,
+                vmCurrentFunc = fname,
+                vmCoverage = Just covRef,
+                vmLineCov = Just lineCovRef,
+                vmBranchCov = Just branchCovRef
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -329,6 +377,28 @@ execInstr = \case
             }
         return Nothing
   INop -> return Nothing
+  ICovMark lineNo -> do
+    mRef <- gets vmLineCov
+    case mRef of
+      Nothing -> return Nothing
+      Just ref -> do
+        func <- gets vmCurrentFunc
+        S.liftIO $ modifyIORef ref (Map.insertWith Set.union func (Set.singleton lineNo))
+        return Nothing
+  ICovBranch branchId -> do
+    mRef <- gets vmBranchCov
+    case mRef of
+      Nothing -> return Nothing
+      Just ref -> do
+        v <- peek "ICovBranch"
+        let wasTaken = case v of
+              VBool b -> b
+              VInt 0 -> False
+              VInt _ -> True
+              _ -> False
+        func <- gets vmCurrentFunc
+        S.liftIO $ modifyIORef ref (Map.insertWith Set.union (func, branchId) (Set.singleton wasTaken))
+        return Nothing
   INewDict -> do
     nid <- gets vmNextId
     modify $ \s ->

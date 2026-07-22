@@ -11,15 +11,18 @@ module PM
 where
 
 import AST.Types.Common (FuncName (..))
-import Compile (compileSource, compileSourceWith, execute, executeFunctionCov, resolveStdlib)
+import Compile (compileSource, compileSourceWith, execute, executeFunctionLineCov, resolveStdlib)
 import qualified Compiler (Bytecode)
+import Compiler.Bytecode (Instruction (ICovBranch, ICovMark), bytecodeFunction, bytecodeInstructions)
 import Compiler.Serialize (encodeBytecodes)
 import Control.Exception (try)
 import Control.Monad (when)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Char (isAlphaNum)
-import Data.IORef (IORef, newIORef, readIORef)
-import Data.List (isPrefixOf, isSuffixOf)
+import Data.IORef (IORef, modifyIORef, newIORef, readIORef)
+import Data.List (intercalate, isPrefixOf, isSuffixOf)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Display (bold, dim, green, printColored, printOk, printStep, red, reset, yellow)
@@ -114,8 +117,8 @@ runRun = do
 -- ---------------------------------------------------------------------------
 -- test
 
-runTest :: Maybe FilePath -> Bool -> IO ()
-runTest mFile showCov = do
+runTest :: Maybe FilePath -> Bool -> Maybe Int -> Maybe FilePath -> IO ()
+runTest mFile showCov covMin covOut = do
   m <- loadManifest
   stdlib <- resolveStdlib (mStdlib m)
   let srcDir = takeDirectory (mEntry m)
@@ -126,13 +129,20 @@ runTest mFile showCov = do
     then putStrLn ("no test files found in `" ++ mTestDir m ++ "`") >> exitSuccess
     else do
       covRef <- newIORef Set.empty
-      pairs <- mapM (runTestFile srcDir stdlib covRef) files
+      lineCovRef <- newIORef Map.empty
+      branchCovRef <- newIORef Map.empty
+      bcMapRef <- newIORef Map.empty
+      pairs <- mapM (runTestFile srcDir stdlib covRef lineCovRef branchCovRef bcMapRef) files
       let passed = sum (map fst pairs)
           failed = sum (map snd pairs)
       putStrLn ""
-      when showCov $ do
+      let doCov = showCov || isJust covMin || isJust covOut
+      when doCov $ do
         covered <- readIORef covRef
-        printCoverageReport (mCovIgnore m) covered
+        lineCovHits <- readIORef lineCovRef
+        branchCovHits <- readIORef branchCovRef
+        bcMap <- readIORef bcMapRef
+        printCoverageReport (mCovIgnore m) covMin covOut covered lineCovHits branchCovHits bcMap
       if failed == 0
         then printOk ("all " ++ show passed ++ " test(s) passed")
         else do
@@ -150,11 +160,20 @@ runTest mFile showCov = do
 
 -- | Compile a test file once, then run each @test_*@ function individually.
 -- Falls back to file-level execution when the file has its own @main@.
-runTestFile :: FilePath -> FilePath -> IORef (Set.Set FuncName) -> FilePath -> IO (Int, Int)
-runTestFile srcDir stdlib covRef fp = do
+runTestFile ::
+  FilePath ->
+  FilePath ->
+  IORef (Set.Set FuncName) ->
+  IORef (Map.Map FuncName (Set.Set Int)) ->
+  IORef (Map.Map (FuncName, Int) (Set.Set Bool)) ->
+  IORef (Map.Map FuncName Compiler.Bytecode) ->
+  FilePath ->
+  IO (Int, Int)
+runTestFile srcDir stdlib covRef lineCovRef branchCovRef bcMapRef fp = do
   src <- readFile fp
   printColored $ dim ++ "testing " ++ reset ++ fp ++ "\n"
   bc <- compileSourceWith [srcDir, stdlib] fp
+  modifyIORef bcMapRef (\m -> foldr (\b acc -> Map.insert (bytecodeFunction b) b acc) m bc)
   let fns = scanTestFunctions src
   if null fns || hasMain src
     then do
@@ -165,15 +184,21 @@ runTestFile srcDir stdlib covRef fp = do
         Left (ExitFailure _) ->
           printColored (bold ++ red ++ "  FAIL" ++ reset ++ " (file)\n") >> return (0, 1)
     else do
-      results <- mapM (runOneFn bc covRef) fns
+      results <- mapM (runOneFn bc covRef lineCovRef branchCovRef) fns
       let p = length (filter id results)
           f = length (filter not results)
       return (p, f)
 
-runOneFn :: [Compiler.Bytecode] -> IORef (Set.Set FuncName) -> String -> IO Bool
-runOneFn bc covRef fname = do
+runOneFn ::
+  [Compiler.Bytecode] ->
+  IORef (Set.Set FuncName) ->
+  IORef (Map.Map FuncName (Set.Set Int)) ->
+  IORef (Map.Map (FuncName, Int) (Set.Set Bool)) ->
+  String ->
+  IO Bool
+runOneFn bc covRef lineCovRef branchCovRef fname = do
   putStr (dotLine fname)
-  result <- executeFunctionCov covRef (FuncName (T.pack fname)) bc
+  result <- executeFunctionLineCov covRef lineCovRef branchCovRef (FuncName (T.pack fname)) bc
   case result of
     Right () ->
       printColored (bold ++ green ++ "ok" ++ reset ++ "\n") >> return True
@@ -185,43 +210,166 @@ runOneFn bc covRef fname = do
 -- ---------------------------------------------------------------------------
 -- Coverage report
 
+data FileCovData = FileCovData
+  { fcPath :: FilePath,
+    fcFunctions :: [(String, Bool)],
+    fcLineHit :: Int,
+    fcLineTotal :: Int,
+    -- | Branch coverage: (both-outcomes-seen, total-branch-points)
+    fcBranchHit :: Int,
+    fcBranchTotal :: Int
+  }
+
 -- | True when @fp@ matches any pattern in the ignore list.
 -- Patterns are matched as suffixes, so @"main.qa"@ matches @"src/main.qa"@.
 isIgnored :: [FilePath] -> FilePath -> Bool
 isIgnored patterns fp = any (`isSuffixOf` fp) patterns
 
-printCoverageReport :: [FilePath] -> Set.Set FuncName -> IO ()
-printCoverageReport ignoreList covered = do
+printCoverageReport ::
+  [FilePath] ->
+  Maybe Int ->
+  Maybe FilePath ->
+  Set.Set FuncName ->
+  Map.Map FuncName (Set.Set Int) ->
+  Map.Map (FuncName, Int) (Set.Set Bool) ->
+  Map.Map FuncName Compiler.Bytecode ->
+  IO ()
+printCoverageReport ignoreList covMin covOut covered lineCovHits branchCovHits bcMap = do
   allFiles <- findQaWith (const True) "src"
   let srcFiles = filter (not . isIgnored ignoreList) allFiles
   when (null srcFiles) $ return ()
+  fileData <- mapM (collectFileCov covered lineCovHits branchCovHits bcMap) srcFiles
   printColored $ "\n" ++ bold ++ "Coverage:" ++ reset ++ "\n"
-  counts <- mapM (reportCovFile covered) srcFiles
-  let totalFns = sum (map fst counts)
-      totalCov = sum (map snd counts)
+  mapM_ renderFileCov fileData
+  let totalFns = sum (map (length . fcFunctions) fileData)
+      totalCov = sum (map (length . filter snd . fcFunctions) fileData)
+      totalLines = sum (map fcLineTotal fileData)
+      totalLinesHit = sum (map fcLineHit fileData)
+      totalBranches = sum (map fcBranchTotal fileData)
+      totalBranchHit = sum (map fcBranchHit fileData)
+      totalPct = if totalFns == 0 then 100 else (totalCov * 100) `div` totalFns
   printColored $
     "  "
       ++ bold
       ++ "total"
       ++ reset
-      ++ "  "
+      ++ "  fn "
+      ++ covBar totalCov totalFns
+      ++ " "
       ++ show totalCov
       ++ "/"
       ++ show totalFns
       ++ " ("
       ++ pct totalCov totalFns
+      ++ ")  ln "
+      ++ covBar totalLinesHit totalLines
+      ++ " "
+      ++ show totalLinesHit
+      ++ "/"
+      ++ show totalLines
+      ++ " ("
+      ++ pct totalLinesHit totalLines
+      ++ ")  br "
+      ++ covBar totalBranchHit totalBranches
+      ++ " "
+      ++ show totalBranchHit
+      ++ "/"
+      ++ show totalBranches
+      ++ " ("
+      ++ pct totalBranchHit totalBranches
       ++ ")\n"
+  case covOut of
+    Just path -> writeCovJson path fileData >> printStep "written" path
+    Nothing -> return ()
+  case covMin of
+    Just threshold ->
+      when (totalPct < threshold) $ do
+        printColored $
+          bold
+            ++ red
+            ++ "coverage below threshold"
+            ++ reset
+            ++ ": "
+            ++ show totalPct
+            ++ "% < "
+            ++ show threshold
+            ++ "%\n"
+        exitFailure
+    Nothing -> return ()
 
-reportCovFile :: Set.Set FuncName -> FilePath -> IO (Int, Int)
-reportCovFile covered fp = do
+collectFileCov ::
+  Set.Set FuncName ->
+  Map.Map FuncName (Set.Set Int) ->
+  Map.Map (FuncName, Int) (Set.Set Bool) ->
+  Map.Map FuncName Compiler.Bytecode ->
+  FilePath ->
+  IO FileCovData
+collectFileCov covered lineCovHits branchCovHits bcMap fp = do
   src <- readFile fp
   let fns = scanSourceFunctions src
       results = [(name, FuncName (T.pack name) `Set.member` covered) | name <- fns]
-      covCount = length (filter snd results)
-      total = length results
-  printColored $ "  " ++ dim ++ fp ++ reset ++ "  " ++ show covCount ++ "/" ++ show total ++ " (" ++ pct covCount total ++ ")\n"
-  mapM_ printCovLine results
-  return (total, covCount)
+      (lineHit, lineTotal, branchHit, branchTotal) = foldr countAll (0, 0, 0, 0) fns
+  return (FileCovData fp results lineHit lineTotal branchHit branchTotal)
+  where
+    countAll name (lh, lt, bh, bt) =
+      let fname = FuncName (T.pack name)
+          instrs = maybe [] bytecodeInstructions (Map.lookup fname bcMap)
+          execLines = Set.fromList [n | ICovMark n <- instrs]
+          hitLines = Map.findWithDefault Set.empty fname lineCovHits
+          branchLines = [n | ICovBranch n <- instrs]
+          -- A branch point is "fully covered" when both True and False were seen.
+          (bHit, bTotal) = foldr (countBranch fname) (0, 0) branchLines
+       in ( lh + Set.size (Set.intersection execLines hitLines),
+            lt + Set.size execLines,
+            bh + bHit,
+            bt + bTotal
+          )
+    countBranch fname lineNo (bh, bt) =
+      let outcomes = Map.findWithDefault Set.empty (fname, lineNo) branchCovHits
+          fullyHit = Set.size outcomes >= 2
+       in (bh + if fullyHit then 1 else 0, bt + 1)
+
+renderFileCov :: FileCovData -> IO ()
+renderFileCov fd = do
+  let fp = fcPath fd
+      fns = fcFunctions fd
+      lineHit = fcLineHit fd
+      lineTotal = fcLineTotal fd
+      branchHit = fcBranchHit fd
+      branchTotal = fcBranchTotal fd
+  let covCount = length (filter snd fns)
+      total = length fns
+  printColored $
+    "  "
+      ++ dim
+      ++ fp
+      ++ reset
+      ++ "  fn "
+      ++ covBar covCount total
+      ++ " "
+      ++ show covCount
+      ++ "/"
+      ++ show total
+      ++ " ("
+      ++ pct covCount total
+      ++ ")  ln "
+      ++ covBar lineHit lineTotal
+      ++ " "
+      ++ show lineHit
+      ++ "/"
+      ++ show lineTotal
+      ++ " ("
+      ++ pct lineHit lineTotal
+      ++ ")  br "
+      ++ covBar branchHit branchTotal
+      ++ " "
+      ++ show branchHit
+      ++ "/"
+      ++ show branchTotal
+      ++ " ("
+      ++ pct branchHit branchTotal
+      ++ ")\n"
+  mapM_ printCovLine fns
 
 printCovLine :: (String, Bool) -> IO ()
 printCovLine (name, True) =
@@ -229,9 +377,99 @@ printCovLine (name, True) =
 printCovLine (name, False) =
   printColored $ "    " ++ red ++ "-" ++ reset ++ " " ++ name ++ "\n"
 
+covBar :: Int -> Int -> String
+covBar covered total =
+  let width = 10
+      filled = if total == 0 then width else (covered * width) `div` total
+   in "[" ++ replicate filled '#' ++ replicate (width - filled) '.' ++ "]"
+
 pct :: Int -> Int -> String
 pct _ 0 = "n/a"
 pct n d = show ((n * 100) `div` d) ++ "%"
+
+writeCovJson :: FilePath -> [FileCovData] -> IO ()
+writeCovJson outPath fileData = do
+  let totalFns = sum (map (length . fcFunctions) fileData)
+      totalCov = sum (map (length . filter snd . fcFunctions) fileData)
+      totalLines = sum (map fcLineTotal fileData)
+      totalLinesHit = sum (map fcLineHit fileData)
+      totalBranches = sum (map fcBranchTotal fileData)
+      totalBranchHit = sum (map fcBranchHit fileData)
+      totalPct = if totalFns == 0 then 100 else (totalCov * 100) `div` totalFns
+      totalLinePct = if totalLines == 0 then 100 else (totalLinesHit * 100) `div` totalLines
+      totalBranchPct = if totalBranches == 0 then 100 else (totalBranchHit * 100) `div` totalBranches
+      fileEntries = intercalate ",\n    " (map renderFileEntry fileData)
+      json =
+        "{\n"
+          ++ "  \"total\": {\"covered\": "
+          ++ show totalCov
+          ++ ", \"total\": "
+          ++ show totalFns
+          ++ ", \"pct\": "
+          ++ show totalPct
+          ++ ", \"lines_hit\": "
+          ++ show totalLinesHit
+          ++ ", \"lines_total\": "
+          ++ show totalLines
+          ++ ", \"lines_pct\": "
+          ++ show totalLinePct
+          ++ ", \"branches_hit\": "
+          ++ show totalBranchHit
+          ++ ", \"branches_total\": "
+          ++ show totalBranches
+          ++ ", \"branches_pct\": "
+          ++ show totalBranchPct
+          ++ "},\n"
+          ++ "  \"files\": [\n    "
+          ++ fileEntries
+          ++ "\n  ]\n}\n"
+  writeFile outPath json
+
+renderFileEntry :: FileCovData -> String
+renderFileEntry fd =
+  let fp = fcPath fd
+      fns = fcFunctions fd
+      lineHit = fcLineHit fd
+      lineTotal = fcLineTotal fd
+      branchHit = fcBranchHit fd
+      branchTotal = fcBranchTotal fd
+      cov = length (filter snd fns)
+      total = length fns
+      pctVal = if total == 0 then 100 else (cov * 100) `div` total
+      linePct = if lineTotal == 0 then 100 else (lineHit * 100) `div` lineTotal
+      branchPct = if branchTotal == 0 then 100 else (branchHit * 100) `div` branchTotal
+      fnParts = intercalate ", " (map renderFnEntry fns)
+   in "{\"path\": \""
+        ++ fp
+        ++ "\", \"covered\": "
+        ++ show cov
+        ++ ", \"total\": "
+        ++ show total
+        ++ ", \"pct\": "
+        ++ show pctVal
+        ++ ", \"lines_hit\": "
+        ++ show lineHit
+        ++ ", \"lines_total\": "
+        ++ show lineTotal
+        ++ ", \"lines_pct\": "
+        ++ show linePct
+        ++ ", \"branches_hit\": "
+        ++ show branchHit
+        ++ ", \"branches_total\": "
+        ++ show branchTotal
+        ++ ", \"branches_pct\": "
+        ++ show branchPct
+        ++ ", \"functions\": ["
+        ++ fnParts
+        ++ "]}"
+
+renderFnEntry :: (String, Bool) -> String
+renderFnEntry (name, isCov) =
+  "{\"name\": \""
+    ++ name
+    ++ "\", \"covered\": "
+    ++ (if isCov then "true" else "false")
+    ++ "}"
 
 -- | Scan source text for all @fn@ declarations; return their names.
 scanSourceFunctions :: String -> [String]

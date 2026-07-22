@@ -5,6 +5,7 @@ module Compile
     execute,
     executeFunction,
     executeFunctionCov,
+    executeFunctionLineCov,
     collectStdlibFuncNames,
     displayTypeError,
     displayTypeWarning,
@@ -47,7 +48,7 @@ import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
 import Text.Megaparsec (errorBundlePretty, many, runParser)
 import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
-import VM (runFunction, runFunctionCov, runProgram)
+import VM (runFunction, runFunctionCov, runFunctionLineCov, runProgram)
 import VM.Interpreter (VMError (..))
 
 -- ---------------------------------------------------------------------------
@@ -137,6 +138,21 @@ executeFunction fname bytecodes = do
 executeFunctionCov :: IORef (Set.Set FuncName) -> FuncName -> [Compiler.Bytecode] -> IO (Either String ())
 executeFunctionCov covRef fname bytecodes = do
   result <- runFunctionCov covRef fname bytecodes
+  return $ case result of
+    Right _ -> Right ()
+    Left err -> Left (prettyVMError err)
+
+-- | Like 'executeFunctionCov' but also records per-function hit line numbers
+-- via 'ICovMark' instructions and per-branch outcomes via 'ICovBranch'.
+executeFunctionLineCov ::
+  IORef (Set.Set FuncName) ->
+  IORef (Map.Map FuncName (Set.Set Int)) ->
+  IORef (Map.Map (FuncName, Int) (Set.Set Bool)) ->
+  FuncName ->
+  [Compiler.Bytecode] ->
+  IO (Either String ())
+executeFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes = do
+  result <- runFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes
   return $ case result of
     Right _ -> Right ()
     Left err -> Left (prettyVMError err)

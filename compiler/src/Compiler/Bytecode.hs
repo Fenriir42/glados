@@ -184,6 +184,13 @@ data Instruction
       CRetType
       -- | argument count
       Int
+  | -- | Coverage mark: records that the given source line was reached.
+    -- No-op when coverage tracking is disabled in the VM.
+    ICovMark Int
+  | -- | Branch probe: peeks TOS (must be VBool) and records which direction
+    -- the branch at the given source line was taken.
+    -- No-op when coverage tracking is disabled in the VM.
+    ICovBranch Int
   deriving stock (Show, Eq, Generic)
 
 instance Hashable Instruction

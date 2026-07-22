@@ -183,6 +183,8 @@ instance Binary Instruction where
     ICallIndirect argc -> tag 27 >> put (argc :: Int)
     INewDict -> tag 28
     ICallFFI lib sym retTy argc -> tag 29 >> put lib >> put sym >> put retTy >> put (argc :: Int)
+    ICovMark n -> tag 30 >> put (n :: Int)
+    ICovBranch n -> tag 31 >> put (n :: Int)
     where
       tag n = put (n :: Word8)
 
@@ -218,6 +220,8 @@ instance Binary Instruction where
       27 -> ICallIndirect <$> get
       28 -> pure INewDict
       29 -> ICallFFI <$> get <*> get <*> get <*> get
+      30 -> ICovMark <$> (get :: Get Int)
+      31 -> ICovBranch <$> (get :: Get Int)
       t -> fail $ "Unknown Instruction tag: " ++ show t
 
 instance Binary Bytecode where

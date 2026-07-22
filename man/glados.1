@@ -50,16 +50,43 @@ optimisations. Bytecode is written to \fI.build/\fR.
 Compile and immediately execute the project, forwarding any extra
 arguments to the program.
 .TP
-.B test [\-\-cov] [\fIFILE\fR]
+.B test [\-\-cov] [\-\-cov\-min \fIPCT\fR] [\-\-cov\-out \fIFILE\fR] [\fIFILE\fR]
 Discover and run all test functions. Test files must match
 \fI*_test.qa\fR inside the \fBtests/\fR directory (configurable in
 \fBquant.toml\fR). Any function whose name begins with \fBtest_\fR and
 takes no parameters is treated as a test case.
+.RS
+.TP
+.B \-\-cov
+Print a full coverage report after the test run showing three metrics:
+.RS
+.IP \(bu 2
+\fBfn\fR \(em function coverage: which functions in \fIsrc/\fR were called.
+.IP \(bu 2
+\fBln\fR \(em line coverage: which executable source lines were reached,
+tracked via \fBCOV_MARK\fR bytecode probes emitted at every statement.
+.IP \(bu 2
+\fBbr\fR \(em branch coverage: for every \fBif\fR/\fBwhile\fR condition,
+whether both the true and false outcomes were observed during the test run,
+tracked via \fBCOV_BRANCH\fR probes inserted after each condition expression.
+.RE
+Per-file and overall totals are displayed with progress bars.
+Covered functions are shown with \fB+\fR, uncovered with \fB\-\fR.
+Files listed in \fBquant.toml\fR \fB[test] cov_ignore\fR are excluded.
+.TP
+.B \-\-cov\-min \fIPCT\fR
+Fail with exit status 1 if total function coverage is below \fIPCT\fR
+percent. Implies \fB\-\-cov\fR output. Use in CI to enforce a minimum
+coverage threshold.
+.TP
+.B \-\-cov\-out \fIFILE\fR
+Write the coverage report as a JSON file to \fIFILE\fR. The JSON contains
+per-file and per-function covered/total/pct fields. Implies \fB\-\-cov\fR
+output.
+.RE
 .br
-With \fB\-\-cov\fR, print a function-level coverage report after tests
-showing which functions in \fIsrc/\fR were called during the test run.
-.br
-Exits with status 1 if any test fails.
+Exits with status 1 if any test fails or if \fB\-\-cov\-min\fR is set and
+the threshold is not met.
 .TP
 .B lint
 Run

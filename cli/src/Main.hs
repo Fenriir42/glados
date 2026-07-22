@@ -26,7 +26,7 @@ data Command
   | CmdInit String
   | CmdBuild Bool
   | CmdRun
-  | CmdTest (Maybe FilePath) Bool
+  | CmdTest (Maybe FilePath) Bool (Maybe Int) (Maybe FilePath)
   | CmdLint
   | CmdFmt Bool
   | CmdDoc String FilePath
@@ -92,6 +92,8 @@ testParser =
   CmdTest
     <$> optional (argument str (metavar "FILE" <> help "run only this test file"))
     <*> switch (long "cov" <> help "print function coverage report after tests")
+    <*> optional (option auto (long "cov-min" <> metavar "PCT" <> help "fail if coverage is below PCT%"))
+    <*> optional (strOption (long "cov-out" <> metavar "FILE" <> help "write JSON coverage report to FILE"))
 
 fmtParser :: Parser Command
 fmtParser =
@@ -136,7 +138,7 @@ dispatch (CmdCompiler o) = runCompiler o
 dispatch (CmdInit name) = runInit name
 dispatch (CmdBuild rel) = runBuild rel
 dispatch CmdRun = runRun
-dispatch (CmdTest mf cov) = runTest mf cov
+dispatch (CmdTest mf cov covMin covOut) = runTest mf cov covMin covOut
 dispatch CmdLint = runLint
 dispatch (CmdFmt check) = runFmt check
 dispatch (CmdDoc fmt out) = runDoc fmt out
