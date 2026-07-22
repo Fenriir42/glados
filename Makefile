@@ -89,12 +89,13 @@ MAN_DEST   = $(DESTDIR)$(PREFIX)/share/man/man1
 
 .PHONY: install
 install:
-	@ cabal build cli glados-lsp glados-repl quant-fmt
+	@ cabal build cli glados-lsp glados-repl quant-fmt wheatley
 	@ install -d $(BIN_DEST) $(SHARE_DEST) $(MAN_DEST)
 	@ install -m 755 $(shell cabal -v0 list-bin exe:cli) $(BIN_DEST)/glados
 	@ install -m 755 $(shell cabal -v0 list-bin exe:glados-lsp) $(BIN_DEST)/quant-lsp
 	@ install -m 755 $(shell cabal -v0 list-bin exe:glados-repl) $(BIN_DEST)/glados-repl
 	@ install -m 755 $(shell cabal -v0 list-bin exe:quant-fmt) $(BIN_DEST)/quant-fmt
+	@ install -m 755 $(shell cabal -v0 list-bin exe:wheatley) $(BIN_DEST)/wheatley
 	@ cp -r std/. $(SHARE_DEST)/
 	@ install -m 644 man/glados.1 $(MAN_DEST)/glados.1
 	@ install -m 644 man/quant-lsp.1 $(MAN_DEST)/quant-lsp.1
@@ -105,12 +106,13 @@ install:
 	@ $(LOG_TIME) "Install $(C_GREEN)quant-lsp$(C_RESET) -> $(BIN_DEST)/quant-lsp"
 	@ $(LOG_TIME) "Install $(C_GREEN)glados-repl$(C_RESET) -> $(BIN_DEST)/glados-repl"
 	@ $(LOG_TIME) "Install $(C_GREEN)quant-fmt$(C_RESET) -> $(BIN_DEST)/quant-fmt"
+	@ $(LOG_TIME) "Install $(C_GREEN)wheatley$(C_RESET) -> $(BIN_DEST)/wheatley"
 	@ $(LOG_TIME) "Install $(C_GREEN)stdlib$(C_RESET) -> $(SHARE_DEST)"
 	@ $(LOG_TIME) "Install $(C_GREEN)man pages$(C_RESET) -> $(MAN_DEST)"
 
 .PHONY: uninstall
 uninstall:
-	@ rm -f $(PREFIX)/bin/glados $(PREFIX)/bin/quant-lsp $(PREFIX)/bin/glados-repl $(PREFIX)/bin/quant-fmt
+	@ rm -f $(PREFIX)/bin/glados $(PREFIX)/bin/quant-lsp $(PREFIX)/bin/glados-repl $(PREFIX)/bin/quant-fmt $(PREFIX)/bin/wheatley
 	@ rm -rf $(PREFIX)/share/quant
 	@ rm -f $(PREFIX)/share/man/man1/glados.1
 	@ rm -f $(PREFIX)/share/man/man1/quant-lsp.1

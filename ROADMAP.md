@@ -112,11 +112,7 @@ The language, LSP, and surrounding toolchain are feature-complete for V1.
 | Doc generator | `glados doc [--format html\|md] [--out DIR]` | Scans `//` comments; dark-sidebar HTML or Markdown |
 | Formatter | `glados fmt` | Dispatches to `quant-fmt` binary (comment-preserving, idempotent) |
 
-### Remaining
-
-| Tool | Command | Status | Notes |
-|------|---------|--------|-------|
-| Linter | `glados lint` | **Not implemented** | `glados lint` delegates to `wheatley` binary; the binary itself does not exist yet. Man page written. Planned: AST visitor for unused vars, unreachable code, naming conventions, shadow warnings, missing-return errors. LSP integration via `publishDiagnostics`. |
+| Linter | `glados lint` | **Done** | `wheatley` binary; 8 rules: `unused-var`, `unused-param`, `unreachable-code`, `missing-return` (error), `fn-naming`, `type-naming`, `empty-block`, `shadow`; `--deny`/`--allow`/`--rules` flags |
 | `quant-fmt` install | — | **Done** | Wired into `make install`; builds and installs to `$(BIN_DEST)/quant-fmt`. |
 
 ---

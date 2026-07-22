@@ -9,5 +9,6 @@ packages:
   vm/
   cli/
   formatter/
+  linter/
 
 tests: True
