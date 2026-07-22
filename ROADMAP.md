@@ -117,7 +117,7 @@ The language, LSP, and surrounding toolchain are feature-complete for V1.
 | Tool | Command | Status | Notes |
 |------|---------|--------|-------|
 | Linter | `glados lint` | **Not implemented** | `glados lint` delegates to `wheatley` binary; the binary itself does not exist yet. Man page written. Planned: AST visitor for unused vars, unreachable code, naming conventions, shadow warnings, missing-return errors. LSP integration via `publishDiagnostics`. |
-| `quant-fmt` install | — | **Not wired** | `quant-fmt` is built by cabal but not added to `make install`, so `glados fmt` fails at runtime if installed via `make`. |
+| `quant-fmt` install | — | **Done** | Wired into `make install`; builds and installs to `$(BIN_DEST)/quant-fmt`. |
 
 ---
 
