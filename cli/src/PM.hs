@@ -25,7 +25,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import Display (bold, dim, green, printColored, printOk, printStep, red, reset, yellow)
+import Display (bold, dim, green, printColored, printOk, printStep, red, reset)
 import Manifest (Manifest (..), loadManifest)
 import System.Directory
   ( createDirectoryIfMissing,
@@ -35,7 +35,7 @@ import System.Directory
     removeDirectoryRecursive,
   )
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
-import System.FilePath (takeDirectory, takeExtension, (</>))
+import System.FilePath (takeBaseName, takeDirectory, takeExtension, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (rawSystem)
 
@@ -548,15 +548,368 @@ runFmt check = do
 -- ---------------------------------------------------------------------------
 -- doc
 
+data DocEntry = DocEntry
+  { deName :: String,
+    deSig :: String,
+    deDoc :: [String]
+  }
+
+data DocPage = DocPage
+  { dpModule :: String,
+    dpEntries :: [DocEntry]
+  }
+
 runDoc :: String -> FilePath -> IO ()
-runDoc _format _out = do
-  putStrLn $
-    bold
-      ++ yellow
-      ++ "warning"
-      ++ reset
-      ++ ": doc generation is not yet implemented"
-  exitSuccess
+runDoc format outDir = do
+  m <- loadManifest
+  let srcDir = takeDirectory (mEntry m)
+  files <- findQaWith (const True) srcDir
+  if null files
+    then putStrLn "no source files found" >> exitSuccess
+    else do
+      createDirectoryIfMissing True outDir
+      pages <- mapM buildDocPage files
+      let withEntries = filter (not . null . dpEntries) pages
+      case format of
+        "md" -> do
+          mapM_ (writeDocPageMd outDir) withEntries
+          writeDocIndexMd outDir (mName m) withEntries
+        _ -> do
+          mapM_ (writeDocPageHtml outDir) withEntries
+          writeDocIndexHtml outDir (mName m) withEntries
+      printOk ("docs written to " ++ outDir)
+
+buildDocPage :: FilePath -> IO DocPage
+buildDocPage fp = do
+  src <- readFile fp
+  return DocPage {dpModule = takeBaseName fp, dpEntries = scanDocEntries (lines src)}
+
+scanDocEntries :: [String] -> [DocEntry]
+scanDocEntries = go []
+  where
+    go _ [] = []
+    go buf (l : ls)
+      | isTopLevelDecl l =
+          let (sig, rest) = collectSig (l : ls)
+              entry = DocEntry {deName = extractDeclName l, deSig = sig, deDoc = reverse buf}
+           in entry : go [] rest
+      | isDocComment l = go (stripDocPrefix l : buf) ls
+      | otherwise = go [] ls
+
+isTopLevelDecl :: String -> Bool
+isTopLevelDecl l =
+  not (null l)
+    && head l /= ' '
+    && any (`isPrefixOf` l) ["fn ", "struct ", "error "]
+
+extractDeclName :: String -> String
+extractDeclName l
+  | "fn " `isPrefixOf` l = ident (drop 3 l)
+  | "struct " `isPrefixOf` l = ident (drop 7 l)
+  | "error " `isPrefixOf` l = ident (drop 6 l)
+  | otherwise = ""
+  where
+    ident = takeWhile (\c -> isAlphaNum c || c == '_')
+
+collectSig :: [String] -> (String, [String])
+collectSig ls =
+  let chunk = take 10 ls
+      (before, withBrace) = break (elem '{') chunk
+      sigLines = before ++ take 1 withBrace
+      after = drop 1 withBrace ++ drop 10 ls
+      rawSig = unwords (map (dropWhile (== ' ')) sigLines)
+      clean = reverse . dropWhile (\c -> c == ' ' || c == '{') . reverse $ rawSig
+   in (clean, after)
+
+isDocComment :: String -> Bool
+isDocComment l =
+  not (null l)
+    && head l /= ' '
+    && ("// " `isPrefixOf` l || l == "//")
+
+stripDocPrefix :: String -> String
+stripDocPrefix "//" = ""
+stripDocPrefix l = drop 3 l
+
+docParas :: [String] -> [[String]]
+docParas ls = go ls []
+  where
+    go [] acc = [reverse acc | not (null acc)]
+    go (x : xs) acc
+      | null x = [reverse acc | not (null acc)] ++ go xs []
+      | otherwise = go xs (x : acc)
+
+-- ---------------------------------------------------------------------------
+-- HTML rendering
+
+escHtml :: String -> String
+escHtml = concatMap esc
+  where
+    esc '<' = "&lt;"
+    esc '>' = "&gt;"
+    esc '&' = "&amp;"
+    esc '"' = "&quot;"
+    esc c = [c]
+
+kindFromSig :: String -> String
+kindFromSig s
+  | "fn " `isPrefixOf` s = "fn"
+  | "struct " `isPrefixOf` s = "struct"
+  | "error " `isPrefixOf` s = "error"
+  | otherwise = ""
+
+moduleCss :: String
+moduleCss =
+  intercalate
+    "\n"
+    [ "*{box-sizing:border-box;margin:0;padding:0}",
+      "body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f7ff;color:#111827;line-height:1.6}",
+      ".layout{display:flex;min-height:100vh}",
+      ".sidebar{width:220px;min-width:220px;background:#1e1b2e;color:#c4b5fd;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}",
+      ".sidebar-header{padding:1.2rem 1rem;border-bottom:1px solid rgba(255,255,255,.08)}",
+      ".back{color:#a78bfa;text-decoration:none;font-size:.82rem;display:block;margin-bottom:.5rem}",
+      ".back:hover{color:#c4b5fd}",
+      ".mod-title{font-weight:700;font-size:.98rem;color:#ede9fe;letter-spacing:.02em;display:block}",
+      ".sidebar-nav{padding:.8rem 0;flex:1}",
+      ".sidebar-nav a{display:block;padding:.3rem 1rem;color:#a78bfa;text-decoration:none;font-size:.84rem;font-family:'JetBrains Mono','Fira Code',ui-monospace,monospace;border-left:2px solid transparent;transition:all .12s}",
+      ".sidebar-nav a:hover,.sidebar-nav a.active{color:#ede9fe;background:rgba(167,139,250,.12);border-left-color:#7c3aed}",
+      ".content{flex:1;padding:2.5rem 3rem;min-width:0}",
+      ".page-title{font-size:1.75rem;font-weight:800;color:#1e1b2e;border-bottom:2px solid #7c3aed;padding-bottom:.4rem;margin-bottom:2rem;letter-spacing:-.01em}",
+      ".entry{margin-bottom:1.8rem;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);overflow:hidden;border:1px solid #ede9fe}",
+      ".entry-header{display:flex;align-items:center;justify-content:space-between;padding:.65rem 1.2rem;background:#f5f3ff;border-bottom:1px solid #ede9fe}",
+      ".entry-header h2{font-size:.95rem;font-weight:700;color:#5b21b6;font-family:'JetBrains Mono','Fira Code',ui-monospace,monospace}",
+      ".anchor{color:#c4b5fd;text-decoration:none;font-size:.85rem;transition:color .12s}",
+      ".anchor:hover{color:#7c3aed}",
+      "pre.sig{background:#0d1117;color:#e6edf3;padding:.85rem 1.2rem;font-size:.85rem;overflow-x:auto;font-family:'JetBrains Mono','Fira Code',ui-monospace,monospace;line-height:1.55;margin:0}",
+      ".doc{padding:.85rem 1.2rem;color:#374151}",
+      ".doc p{margin-bottom:.45rem;line-height:1.65}",
+      ".doc p:last-child{margin-bottom:0}",
+      ".no-doc{padding:.6rem 1.2rem;font-size:.83rem;color:#9ca3af;font-style:italic}",
+      "@media(max-width:640px){.sidebar{display:none}.content{padding:1.2rem}}"
+    ]
+
+indexCss :: String
+indexCss =
+  intercalate
+    "\n"
+    [ "*{box-sizing:border-box;margin:0;padding:0}",
+      "body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f7ff;color:#111827;line-height:1.6}",
+      ".hero{background:linear-gradient(135deg,#1e1b2e 0%,#4c1d95 100%);color:#fff;padding:3.5rem 2rem}",
+      ".hero-inner{max-width:920px;margin:0 auto}",
+      ".hero h1{font-size:2.2rem;font-weight:800;margin-bottom:.5rem;letter-spacing:-.02em}",
+      ".hero p{color:#c4b5fd;font-size:1rem}",
+      ".index-content{max-width:920px;margin:2.5rem auto;padding:0 1.5rem 3rem}",
+      ".section-label{font-size:.75rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.1em;margin-bottom:1rem}",
+      ".module-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1.1rem}",
+      ".module-card{background:#fff;border-radius:10px;padding:1.2rem 1.4rem;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #ede9fe;text-decoration:none;color:inherit;display:block;transition:box-shadow .18s,transform .14s}",
+      ".module-card:hover{box-shadow:0 6px 22px rgba(124,58,237,.14);transform:translateY(-2px)}",
+      ".card-title{font-size:1rem;font-weight:700;color:#5b21b6;font-family:'JetBrains Mono','Fira Code',ui-monospace,monospace;margin-bottom:.2rem}",
+      ".card-count{font-size:.75rem;color:#9ca3af;margin-bottom:.85rem}",
+      ".card-entries{list-style:none;font-size:.82rem;font-family:'JetBrains Mono','Fira Code',ui-monospace,monospace}",
+      ".card-entries li{padding:.1rem 0;display:flex;align-items:center;gap:.35rem}",
+      ".k{font-size:.68rem;padding:.1rem .28rem;border-radius:3px;font-weight:700;letter-spacing:.02em;flex-shrink:0}",
+      ".k-fn{background:#ede9fe;color:#7c3aed}",
+      ".k-struct{background:#ecfdf5;color:#065f46}",
+      ".k-error{background:#fef2f2;color:#991b1b}",
+      ".entry-name{color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+    ]
+
+scrollSpyJs :: String
+scrollSpyJs =
+  "(function(){"
+    ++ "var L=document.querySelectorAll('.sidebar-nav a');"
+    ++ "var S=document.querySelectorAll('.entry');"
+    ++ "function spy(){var c='';"
+    ++ "S.forEach(function(s){if(s.getBoundingClientRect().top<=80)c=s.id;});"
+    ++ "L.forEach(function(a){a.classList.toggle('active',a.getAttribute('href')==='#'+c);});"
+    ++ "}window.addEventListener('scroll',spy,{passive:true});spy();"
+    ++ "})();"
+
+writeDocPageHtml :: FilePath -> DocPage -> IO ()
+writeDocPageHtml outDir page = do
+  let fname = outDir </> dpModule page ++ ".html"
+  writeFile fname (renderModuleHtml page)
+  printStep "wrote" fname
+
+writeDocIndexHtml :: FilePath -> String -> [DocPage] -> IO ()
+writeDocIndexHtml outDir projName pages = do
+  let fname = outDir </> "index.html"
+  writeFile fname (renderIndexHtml projName pages)
+  printStep "wrote" fname
+
+renderModuleHtml :: DocPage -> String
+renderModuleHtml page =
+  unlines
+    [ "<!DOCTYPE html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "<meta charset=\"UTF-8\">",
+      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
+      "<title>" ++ escHtml (dpModule page) ++ " - Quant Docs</title>",
+      "<style>" ++ moduleCss ++ "</style>",
+      "</head>",
+      "<body>",
+      "<div class=\"layout\">",
+      "<aside class=\"sidebar\">",
+      "<div class=\"sidebar-header\">",
+      "<a class=\"back\" href=\"index.html\">&#8592; Index</a>",
+      "<span class=\"mod-title\">" ++ escHtml (dpModule page) ++ "</span>",
+      "</div>",
+      "<nav class=\"sidebar-nav\">"
+        ++ concatMap
+          (\e -> "<a href=\"#" ++ escHtml (deName e) ++ "\">" ++ escHtml (deName e) ++ "</a>")
+          (dpEntries page),
+      "</nav>",
+      "</aside>",
+      "<main class=\"content\">",
+      "<h1 class=\"page-title\">" ++ escHtml (dpModule page) ++ "</h1>",
+      concatMap renderEntryHtml (dpEntries page),
+      "</main>",
+      "</div>",
+      "<script>" ++ scrollSpyJs ++ "</script>",
+      "</body>",
+      "</html>"
+    ]
+
+renderEntryHtml :: DocEntry -> String
+renderEntryHtml e =
+  "<section class=\"entry\" id=\""
+    ++ escHtml (deName e)
+    ++ "\">"
+    ++ "<div class=\"entry-header\">"
+    ++ "<h2>"
+    ++ escHtml (deName e)
+    ++ "</h2>"
+    ++ "<a class=\"anchor\" href=\"#"
+    ++ escHtml (deName e)
+    ++ "\">#</a>"
+    ++ "</div>"
+    ++ "<pre class=\"sig\">"
+    ++ escHtml (deSig e)
+    ++ "</pre>"
+    ++ ( if null (deDoc e)
+           then "<div class=\"no-doc\">No documentation.</div>"
+           else "<div class=\"doc\">" ++ concatMap (\ps -> "<p>" ++ escHtml (unwords ps) ++ "</p>") (docParas (deDoc e)) ++ "</div>"
+       )
+    ++ "</section>\n"
+
+renderIndexHtml :: String -> [DocPage] -> String
+renderIndexHtml projName pages =
+  unlines
+    [ "<!DOCTYPE html>",
+      "<html lang=\"en\">",
+      "<head>",
+      "<meta charset=\"UTF-8\">",
+      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
+      "<title>" ++ escHtml projName ++ " - Quant Docs</title>",
+      "<style>" ++ indexCss ++ "</style>",
+      "</head>",
+      "<body>",
+      "<header class=\"hero\">",
+      "<div class=\"hero-inner\">",
+      "<h1>" ++ escHtml projName ++ "</h1>",
+      "<p>Generated from Quant source documentation.</p>",
+      "</div>",
+      "</header>",
+      "<main class=\"index-content\">",
+      "<p class=\"section-label\">Modules</p>",
+      "<div class=\"module-grid\">",
+      concatMap renderModuleCardHtml pages,
+      "</div>",
+      "</main>",
+      "</body>",
+      "</html>"
+    ]
+
+renderModuleCardHtml :: DocPage -> String
+renderModuleCardHtml page =
+  let n = length (dpEntries page)
+      countStr = show n ++ " " ++ if n == 1 then "entry" else "entries"
+      visible = take 6 (dpEntries page)
+      overflow = n - length visible
+   in "<a class=\"module-card\" href=\""
+        ++ escHtml (dpModule page)
+        ++ ".html\">"
+        ++ "<div class=\"card-title\">"
+        ++ escHtml (dpModule page)
+        ++ "</div>"
+        ++ "<div class=\"card-count\">"
+        ++ countStr
+        ++ "</div>"
+        ++ "<ul class=\"card-entries\">"
+        ++ concatMap renderCardEntryHtml visible
+        ++ ( if overflow > 0
+               then "<li><span class=\"entry-name\">+" ++ show overflow ++ " more\8230</span></li>"
+               else ""
+           )
+        ++ "</ul>"
+        ++ "</a>\n"
+
+renderCardEntryHtml :: DocEntry -> String
+renderCardEntryHtml e =
+  let k = kindFromSig (deSig e)
+      klass = case k of
+        "struct" -> "k-struct"
+        "error" -> "k-error"
+        _ -> "k-fn"
+   in "<li><span class=\"k "
+        ++ klass
+        ++ "\">"
+        ++ k
+        ++ "</span><span class=\"entry-name\">"
+        ++ escHtml (deName e)
+        ++ "</span></li>"
+
+-- ---------------------------------------------------------------------------
+-- Markdown rendering
+
+writeDocPageMd :: FilePath -> DocPage -> IO ()
+writeDocPageMd outDir page = do
+  let fname = outDir </> dpModule page ++ ".md"
+  writeFile fname (renderModuleMd page)
+  printStep "wrote" fname
+
+writeDocIndexMd :: FilePath -> String -> [DocPage] -> IO ()
+writeDocIndexMd outDir projName pages = do
+  let fname = outDir </> "index.md"
+  writeFile fname (renderIndexMd projName pages)
+  printStep "wrote" fname
+
+renderModuleMd :: DocPage -> String
+renderModuleMd page =
+  "# "
+    ++ dpModule page
+    ++ "\n\n"
+    ++ concatMap renderEntryMd (dpEntries page)
+
+renderEntryMd :: DocEntry -> String
+renderEntryMd e =
+  "## `"
+    ++ deName e
+    ++ "`\n\n```quant\n"
+    ++ deSig e
+    ++ "\n```\n\n"
+    ++ ( if null (deDoc e)
+           then ""
+           else intercalate "\n\n" (map unwords (docParas (deDoc e))) ++ "\n\n"
+       )
+
+renderIndexMd :: String -> [DocPage] -> String
+renderIndexMd projName pages =
+  "# "
+    ++ projName
+    ++ " API\n\nGenerated from Quant source documentation.\n\n## Modules\n\n"
+    ++ concatMap
+      ( \page ->
+          "- [**"
+            ++ dpModule page
+            ++ "**]("
+            ++ dpModule page
+            ++ ".md) — "
+            ++ show (length (dpEntries page))
+            ++ " entries\n"
+      )
+      pages
 
 -- ---------------------------------------------------------------------------
 -- clean
