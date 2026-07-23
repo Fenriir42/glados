@@ -28,6 +28,7 @@ executable glados-lsp
     LSPServer.CodeAction
     LSPServer.CodeLens
     LSPServer.Completion
+    LSPServer.DeadCode
     LSPServer.Definition
     LSPServer.DocumentSymbol
     LSPServer.Folding

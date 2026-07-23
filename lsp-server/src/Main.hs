@@ -21,6 +21,7 @@ import Data.List (isSuffixOf)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -30,6 +31,7 @@ import LSPServer.CallHierarchy (incomingCalls, outgoingCalls, prepareCallHierarc
 import LSPServer.CodeAction (makeCodeActions)
 import LSPServer.CodeLens (makeCodeLens)
 import LSPServer.Completion (makeCompletionItems)
+import LSPServer.DeadCode (deadCodeDiags)
 import LSPServer.Definition (findDefinition)
 import LSPServer.DocumentSymbol (makeDocumentSymbols)
 import LSPServer.Folding (makeFoldingRanges)
@@ -615,4 +617,9 @@ analyzeAndPublish stateVar nuri version = do
       result <- liftIO $ analyzeText filePath text
       let fs = makeFileState result filePath text
       liftIO $ atomically $ modifyTVar' stateVar (Map.insert nuri fs)
-      publishDiagnostics 100 nuri version (partitionBySource (arDiagnostics result))
+      st <- liftIO $ readTVarIO stateVar
+      let calledNames =
+            Set.fromList
+              [fn | fsj <- Map.elems st, (_, (fn, _)) <- Map.toList (fsCallSites fsj)]
+          dead = deadCodeDiags (fsFuncDefSites fs) calledNames
+      publishDiagnostics 100 nuri version (partitionBySource (arDiagnostics result ++ dead))
