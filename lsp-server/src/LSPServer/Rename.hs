@@ -1,10 +1,11 @@
 module LSPServer.Rename (prepareRename, findRename) where
 
-import AST.Types.Common (FuncName (..), SourceSpan, VarName (..))
+import AST.Types.Common (FilePath' (..), FuncName (..), SourcePos (..), SourceSpan (..), VarName (..))
 import AST.Types.Type (FunctionType)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import qualified Data.Text as T
 import LSPServer.Span (findFuncAtPos, smallest, spanToRange)
 import qualified Language.LSP.Protocol.Types as LSP
 
@@ -32,7 +33,7 @@ prepareRename callSites defSites varUseSites lspLine lspCol =
             Just (sp, (vname, _)) -> Just (spanToRange sp, unVarName vname)
             Nothing -> Nothing
 
--- | Build a WorkspaceEdit renaming the symbol at cursor everywhere in the file.
+-- | Build a WorkspaceEdit renaming the symbol at cursor across all indexed files.
 findRename ::
   Map SourceSpan (FuncName, FunctionType) ->
   Map FuncName SourceSpan ->
@@ -72,7 +73,14 @@ findRename callSites defSites varUseSites currentFile lspLine lspCol newName =
     orElse Nothing y = y
 
 mkEdit :: FilePath -> [SourceSpan] -> Text -> LSP.WorkspaceEdit
-mkEdit fp spans newName =
-  let edits = map (\sp -> LSP.TextEdit (spanToRange sp) newName) spans
-      uri = LSP.filePathToUri fp
-   in LSP.WorkspaceEdit (Just (Map.singleton uri edits)) Nothing Nothing
+mkEdit fallbackFile spans newName =
+  let byFile =
+        Map.fromListWith
+          (++)
+          [ (LSP.filePathToUri fp, [LSP.TextEdit (spanToRange sp) newName])
+            | sp <- spans,
+              let fp = case T.unpack (unFilePath (posFile (spanStart sp))) of
+                    "" -> fallbackFile
+                    p -> p
+          ]
+   in LSP.WorkspaceEdit (Just byFile) Nothing Nothing

@@ -1,9 +1,10 @@
 module LSPServer.References (findReferences) where
 
-import AST.Types.Common (FuncName, SourceSpan, VarName)
+import AST.Types.Common (FilePath' (..), FuncName, SourcePos (..), SourceSpan (..), VarName)
 import AST.Types.Type (FunctionType)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as T
 import LSPServer.Span (findFuncAtPos, smallest, spanToRange)
 import qualified Language.LSP.Protocol.Types as LSP
 
@@ -29,12 +30,12 @@ findReferences callSites builtinSites defSites varUseSites currentFile includeDe
 
     funcRefs fname =
       let callLocs =
-            [ toLocation currentFile sp
+            [ toLocation sp
               | (sp, (fn, _)) <- Map.toList callSites,
                 fn == fname
             ]
           builtinLocs =
-            [ toLocation currentFile sp
+            [ toLocation sp
               | (sp, fn) <- Map.toList builtinSites,
                 fn == fname
             ]
@@ -42,7 +43,7 @@ findReferences callSites builtinSites defSites varUseSites currentFile includeDe
             if includeDecl
               then case Map.lookup fname defSites of
                 Nothing -> []
-                Just sp -> [toLocation currentFile sp]
+                Just sp -> [toLocation sp]
               else []
        in defLoc ++ callLocs ++ builtinLocs
 
@@ -50,11 +51,14 @@ findReferences callSites builtinSites defSites varUseSites currentFile includeDe
       case smallest varUseSites lspLine lspCol of
         Nothing -> []
         Just (_, (_, defSp)) ->
-          [ toLocation currentFile sp
+          [ toLocation sp
             | (sp, (_, d)) <- Map.toList varUseSites,
               d == defSp,
               includeDecl || sp /= defSp
           ]
 
-toLocation :: FilePath -> SourceSpan -> LSP.Location
-toLocation fp sp = LSP.Location (LSP.filePathToUri fp) (spanToRange sp)
+    toLocation sp =
+      let fp = case T.unpack (unFilePath (posFile (spanStart sp))) of
+            "" -> currentFile
+            p -> p
+       in LSP.Location (LSP.filePathToUri fp) (spanToRange sp)

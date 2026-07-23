@@ -2,6 +2,7 @@ module LSPServer.CodeLens (makeCodeLens) where
 
 import AST.Types.Common
   ( Column (..),
+    FilePath' (..),
     FuncName (..),
     Line (..),
     SourcePos (..),
@@ -36,7 +37,7 @@ makeCodeLens fp funcSymbols callSites = concatMap toLenses funcSymbols
           count = length refSpans
           label = refLabel count
           defPos = spanStartPos nameSpan
-          refLocs = map (LSP.Location fileUri . spanToRange) refSpans
+          refLocs = map toRefLoc refSpans
           cmd =
             LSP.Command
               label
@@ -51,6 +52,11 @@ makeCodeLens fp funcSymbols callSites = concatMap toLenses funcSymbols
               "quant-lsp.runFile"
               (Just [toJSON (T.pack fp)])
        in LSP.CodeLens (spanToRange nameSpan) (Just cmd) Nothing
+
+toRefLoc :: SourceSpan -> LSP.Location
+toRefLoc sp =
+  let fp = T.unpack (unFilePath (posFile (spanStart sp)))
+   in LSP.Location (LSP.filePathToUri fp) (spanToRange sp)
 
 refLabel :: Int -> Text
 refLabel 0 = "0 references"

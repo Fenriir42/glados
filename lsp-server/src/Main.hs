@@ -1,22 +1,29 @@
+{-# LANGUAGE OverloadedRecordDot #-}
+
 module Main (main) where
 
 import AST.Types.AST (ImportDecl, Program (..))
 import AST.Types.Common (ErrorName, FuncName, SourceSpan, TypeName, VarName)
 import AST.Types.Type (FunctionType, StructField, Type)
-import Config (defaultOptions)
+import qualified Config
+import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
   ( TVar,
     atomically,
     modifyTVar',
     newTVarIO,
     readTVarIO,
+    writeTVar,
   )
+import Control.Monad (forM_, void)
 import Control.Monad.IO.Class (liftIO)
+import Data.List (isSuffixOf)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import Formatter (formatProgram)
 import LSPServer.Analyze (AnalyzeResult (..), analyzeText)
 import LSPServer.CallHierarchy (incomingCalls, outgoingCalls, prepareCallHierarchy)
@@ -43,7 +50,10 @@ import Language.LSP.Server
 import Language.LSP.VFS (virtualFileText)
 import Lib (lexString)
 import Parser.Decl (parseDecl)
+import System.Directory (doesDirectoryExist, listDirectory)
 import System.Exit (ExitCode (..), exitWith)
+import System.FilePath ((</>))
+import System.IO.Error (catchIOError)
 import Text.Megaparsec (errorBundlePretty, runParser)
 import qualified Text.Megaparsec as MP
 
@@ -75,6 +85,7 @@ type State = Map LSP.NormalizedUri FileState
 main :: IO ()
 main = do
   stateVar <- newTVarIO Map.empty
+  rootVar <- newTVarIO (Nothing :: Maybe FilePath)
   code <-
     runServer $
       ServerDefinition
@@ -82,12 +93,23 @@ main = do
           onConfigChange = const $ pure (),
           defaultConfig = (),
           configSection = "quant-lsp",
-          doInitialize = \env _req -> pure (Right env),
-          staticHandlers = \_caps -> mkHandlers stateVar,
+          doInitialize = \env req -> do
+            let TRequestMessage _ _ _ params = req
+                mRoot = extractWorkspaceRoot params
+            atomically $ writeTVar rootVar mRoot
+            pure (Right env),
+          staticHandlers = \_caps -> mkHandlers stateVar rootVar,
           interpretHandler = \env -> Iso (runLspT env) liftIO,
           options = serverOptions
         }
   exitWith (if code == 0 then ExitSuccess else ExitFailure code)
+
+-- | Extract the workspace root path from InitializeParams.
+extractWorkspaceRoot :: LSP.InitializeParams -> Maybe FilePath
+extractWorkspaceRoot params =
+  case params._rootUri of
+    LSP.InL uri -> LSP.uriToFilePath uri
+    _ -> Nothing
 
 serverOptions :: Options
 serverOptions =
@@ -99,19 +121,33 @@ serverOptions =
               LSP._change = Just LSP.TextDocumentSyncKind_Full,
               LSP._willSave = Nothing,
               LSP._willSaveWaitUntil = Nothing,
-              LSP._save = Nothing
+              LSP._save = Just (LSP.InR (LSP.SaveOptions {LSP._includeText = Just False}))
             },
       optCompletionTriggerCharacters = Just ['.'],
       optSignatureHelpTriggerCharacters = Just ['(', ','],
       optCodeActionKinds = Just [LSP.CodeActionKind_QuickFix]
     }
 
-mkHandlers :: TVar State -> Handlers (LspM ())
-mkHandlers stateVar =
+mkHandlers :: TVar State -> TVar (Maybe FilePath) -> Handlers (LspM ())
+mkHandlers stateVar rootVar =
   mconcat
-    [ notificationHandler SMethod_Initialized $ \_msg -> pure (),
+    [ notificationHandler SMethod_Initialized $ \_msg -> do
+        mRoot <- liftIO $ readTVarIO rootVar
+        case mRoot of
+          Nothing -> return ()
+          Just root ->
+            liftIO $ void $ forkIO $ indexWorkspace stateVar root,
       notificationHandler SMethod_WorkspaceDidChangeConfiguration $ \_msg -> pure (),
-      notificationHandler SMethod_WorkspaceDidChangeWatchedFiles $ \_msg -> pure (),
+      notificationHandler SMethod_WorkspaceDidChangeWatchedFiles $ \msg -> do
+        let TNotificationMessage _ _ (LSP.DidChangeWatchedFilesParams changes) = msg
+        liftIO $ forM_ changes $ \(LSP.FileEvent changeUri changeType) -> do
+          let nuri = LSP.toNormalizedUri changeUri
+              fp = fromMaybe "" (LSP.uriToFilePath changeUri)
+          case changeType of
+            LSP.FileChangeType_Deleted ->
+              atomically $ modifyTVar' stateVar (Map.delete nuri)
+            _ ->
+              analyzeFromDisk stateVar fp,
       notificationHandler SMethod_TextDocumentDidClose $ \_msg -> pure (),
       notificationHandler SMethod_TextDocumentDidOpen $ \msg -> do
         let TNotificationMessage _ _ (LSP.DidOpenTextDocumentParams td) = msg
@@ -123,6 +159,11 @@ mkHandlers stateVar =
             LSP.VersionedTextDocumentIdentifier uri ver = vtd
             nuri = LSP.toNormalizedUri uri
         analyzeAndPublish stateVar nuri (Just ver),
+      notificationHandler SMethod_TextDocumentDidSave $ \msg -> do
+        let TNotificationMessage _ _ (LSP.DidSaveTextDocumentParams tdId _) = msg
+            LSP.TextDocumentIdentifier uri = tdId
+            nuri = LSP.toNormalizedUri uri
+        analyzeAndPublish stateVar nuri Nothing,
       -- Hover
       requestHandler SMethod_TextDocumentHover $ \req responder -> do
         let TRequestMessage _ _ _ (LSP.HoverParams tdId pos _) = req
@@ -264,7 +305,7 @@ mkHandlers stateVar =
                   (fromIntegral lspLine)
                   (fromIntegral lspChar)
         responder (Right (LSP.InL highlights)),
-      -- Find references
+      -- Find references (cross-file: searches all indexed files)
       requestHandler SMethod_TextDocumentReferences $ \req responder -> do
         let TRequestMessage _ _ _ (LSP.ReferenceParams tdId pos _ _ ctx) = req
             LSP.TextDocumentIdentifier uri = tdId
@@ -272,12 +313,14 @@ mkHandlers stateVar =
             LSP.ReferenceContext includeDecl = ctx
             nuri = LSP.toNormalizedUri uri
         st <- liftIO $ readTVarIO stateVar
-        let locs = case Map.lookup nuri st of
+        let allCallSites = Map.unions (map fsCallSites (Map.elems st))
+            allBuiltins = Map.unions (map fsBuiltinCallSites (Map.elems st))
+            locs = case Map.lookup nuri st of
               Nothing -> []
               Just fs ->
                 findReferences
-                  (fsCallSites fs)
-                  (fsBuiltinCallSites fs)
+                  allCallSites
+                  allBuiltins
                   (fsFuncDefSites fs)
                   (fsVarUseSites fs)
                   (fsFilePath fs)
@@ -305,18 +348,19 @@ mkHandlers stateVar =
                   Just (range, _name) ->
                     LSP.InL (LSP.PrepareRenameResult (LSP.InL range))
         responder (Right result),
-      -- Rename
+      -- Rename (cross-file: produces edits in all files that reference the symbol)
       requestHandler SMethod_TextDocumentRename $ \req responder -> do
         let TRequestMessage _ _ _ (LSP.RenameParams _ tdId pos newName) = req
             LSP.TextDocumentIdentifier uri = tdId
             LSP.Position lspLine lspChar = pos
             nuri = LSP.toNormalizedUri uri
         st <- liftIO $ readTVarIO stateVar
-        let result = case Map.lookup nuri st of
+        let allCallSites = Map.unions (map fsCallSites (Map.elems st))
+            result = case Map.lookup nuri st of
               Nothing -> LSP.InR LSP.Null
               Just fs ->
                 case findRename
-                  (fsCallSites fs)
+                  allCallSites
                   (fsFuncDefSites fs)
                   (fsVarUseSites fs)
                   (fsFilePath fs)
@@ -405,19 +449,20 @@ mkHandlers stateVar =
                     (fsVarUseSites fs)
                     (fsFilePath fs)
         responder (Right result),
-      -- Code lens ("N references" above each fn)
+      -- Code lens ("N references" / "Run" above fn main) — cross-file reference count
       requestHandler SMethod_TextDocumentCodeLens $ \req responder -> do
         let TRequestMessage _ _ _ (LSP.CodeLensParams _ _ tdId) = req
             LSP.TextDocumentIdentifier uri = tdId
             nuri = LSP.toNormalizedUri uri
         st <- liftIO $ readTVarIO stateVar
-        let lenses = case Map.lookup nuri st of
+        let allCallSites = Map.unions (map fsCallSites (Map.elems st))
+            lenses = case Map.lookup nuri st of
               Nothing -> []
               Just fs ->
                 makeCodeLens
                   (fsFilePath fs)
                   (fsFuncSymbols fs)
-                  (fsCallSites fs)
+                  allCallSites
         responder (Right (LSP.InL lenses)),
       -- Call hierarchy: prepare
       requestHandler SMethod_TextDocumentPrepareCallHierarchy $ \req responder -> do
@@ -496,6 +541,65 @@ parseForFormat label src =
         Left err -> Left (errorBundlePretty err)
         Right decls -> Right (Program decls)
 
+-- | Construct a FileState from an analysis result.
+makeFileState :: AnalyzeResult -> FilePath -> Text -> FileState
+makeFileState result =
+  FileState
+    (arTypes result)
+    (arCallSites result)
+    (arBuiltinCallSites result)
+    (arDocs result)
+    (arFuncEnv result)
+    (arFuncDefSites result)
+    (arStdlibDefSites result)
+    (arCallWithArgs result)
+    (arFuncSymbols result)
+    (arFoldingRanges result)
+    (arVarUseSites result)
+    (arErrorNames result)
+    (arVarDeclSites result)
+    (arImportDecls result)
+    (arCallsByFunc result)
+    (arVarDeclTypes result)
+    (arStructDefs result)
+    (arStructDefSites result)
+
+-- | Analyse a file from disk and store it in the state (no diagnostics published).
+analyzeFromDisk :: TVar State -> FilePath -> IO ()
+analyzeFromDisk stateVar fp = do
+  mText <- readFileSafe fp
+  case mText of
+    Nothing -> return ()
+    Just text -> do
+      result <- analyzeText fp text
+      let nuri = LSP.toNormalizedUri (LSP.filePathToUri fp)
+          fs = makeFileState result fp text
+      atomically $ modifyTVar' stateVar (Map.insert nuri fs)
+
+-- | Index all .qa files under root in a background thread.
+indexWorkspace :: TVar State -> FilePath -> IO ()
+indexWorkspace stateVar root = do
+  files <- findQaFiles root
+  forM_ files (analyzeFromDisk stateVar)
+
+-- | Recursively find all .qa files under a directory.
+findQaFiles :: FilePath -> IO [FilePath]
+findQaFiles dir = do
+  entries <- catchIOError (listDirectory dir) (const (return []))
+  let paths = map (dir </>) entries
+  results <- mapM classify paths
+  return (concat results)
+  where
+    classify p = do
+      isDir <- catchIOError (doesDirectoryExist p) (const (return False))
+      if isDir
+        then findQaFiles p
+        else return [p | ".qa" `isSuffixOf` p]
+
+readFileSafe :: FilePath -> IO (Maybe Text)
+readFileSafe fp =
+  catchIOError (Just <$> TIO.readFile fp) (const (return Nothing))
+
 analyzeAndPublish ::
   TVar State ->
   LSP.NormalizedUri ->
@@ -509,27 +613,6 @@ analyzeAndPublish stateVar nuri version = do
       let text = virtualFileText vf
           filePath = fromMaybe "<unknown>" (LSP.uriToFilePath (LSP.fromNormalizedUri nuri))
       result <- liftIO $ analyzeText filePath text
-      let fs =
-            FileState
-              (arTypes result)
-              (arCallSites result)
-              (arBuiltinCallSites result)
-              (arDocs result)
-              (arFuncEnv result)
-              (arFuncDefSites result)
-              (arStdlibDefSites result)
-              (arCallWithArgs result)
-              (arFuncSymbols result)
-              (arFoldingRanges result)
-              (arVarUseSites result)
-              (arErrorNames result)
-              (arVarDeclSites result)
-              (arImportDecls result)
-              (arCallsByFunc result)
-              (arVarDeclTypes result)
-              (arStructDefs result)
-              (arStructDefSites result)
-              filePath
-              text
+      let fs = makeFileState result filePath text
       liftIO $ atomically $ modifyTVar' stateVar (Map.insert nuri fs)
       publishDiagnostics 100 nuri version (partitionBySource (arDiagnostics result))
