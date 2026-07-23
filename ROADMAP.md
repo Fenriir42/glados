@@ -1,6 +1,6 @@
 # Quant Language - Roadmap
 
-Current state of the `feat/revival` branch as of 2026-07-22.
+Current state of the `feat/revival` branch as of 2026-07-23.
 
 ---
 
@@ -76,25 +76,25 @@ Current state of the `feat/revival` branch as of 2026-07-22.
 | Folding ranges | `textDocument/foldingRange` | Done |
 | Inlay hints | `textDocument/inlayHint` | Done |
 | Semantic tokens | `textDocument/semanticTokensFull` | Done |
-| Code lens | `textDocument/codeLens` | Done — "N references" above each `fn` |
+| Code lens | `textDocument/codeLens` | Done — "N references" (cross-file) + "Run" above `fn main` |
 | Call hierarchy | `textDocument/prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls` | Done |
 | Formatting | `textDocument/formatting` | Done — comment-preserving formatter |
 | Selection range | `textDocument/selectionRange` | Done |
 | Go to type definition | `textDocument/typeDefinition` | Done — jumps to struct / error declaration |
-| Workspace symbols | `workspace/symbol` | Done — searches all currently open files |
+| Workspace symbols | `workspace/symbol` | Done — searches all indexed files |
 | Code action: add import | `textDocument/codeAction` | Done — inserts `from M import name` for undefined stdlib functions |
 | Code action: fill struct | `textDocument/codeAction` | Done — inserts missing fields with default values |
 | Variable type inlay hints | `textDocument/inlayHint` | Done — shows inferred type after `var: type` declarations |
 
 ### LSP: remaining gap to Rust Analyzer parity
 
-| Feature | LSP method | Priority | Notes |
-|---------|-----------|----------|-------|
-| Workspace-wide indexing | `DidChangeWatchedFiles` + background scan | High | Currently only open files are analysed; `DidChangeWatchedFiles` is a no-op. Need to scan all `.qa` files in the workspace root on startup and re-index on save, so cross-file references, highlight, and rename work without opening every file first. |
-| Run code lens | `textDocument/codeLens` (extend) | Medium | `▶ Run` above `fn main()` triggers `glados run <file>` in the integrated terminal via `workbench.action.terminal.sendSequence`. |
-| On-type formatting | `textDocument/onTypeFormatting` | Low | Auto-indent after `{` / `}` / `;`. |
-| Diagnostic: dead code | `publishDiagnostics` (extend) | Low | Warn on functions never called from `main` or re-exported. |
-| Status bar indexing indicator | custom notification | Low | Show "Quant: indexing…" while the LSP analyses; RA-style. |
+All high/medium items are done. Remaining are low-priority polish:
+
+| Feature | LSP method | Notes |
+|---------|-----------|-------|
+| On-type formatting | `textDocument/onTypeFormatting` | Auto-indent after `{` / `}` / `;`. |
+| Diagnostic: dead code | `publishDiagnostics` (extend) | Warn on functions never called from `main` or re-exported. |
+| Status bar indexing indicator | custom notification | Show "Quant: indexing..." while the LSP analyses; RA-style. |
 
 ---
 
@@ -111,9 +111,8 @@ The language, LSP, and surrounding toolchain are feature-complete for V1.
 | Coverage | `glados test --cov` | fn + line + branch bars; `--cov-min N`, `--cov-out FILE` (JSON) |
 | Doc generator | `glados doc [--format html\|md] [--out DIR]` | Scans `//` comments; dark-sidebar HTML or Markdown |
 | Formatter | `glados fmt` | Dispatches to `quant-fmt` binary (comment-preserving, idempotent) |
-
-| Linter | `glados lint` | **Done** | `wheatley` binary; 8 rules: `unused-var`, `unused-param`, `unreachable-code`, `missing-return` (error), `fn-naming`, `type-naming`, `empty-block`, `shadow`; `--deny`/`--allow`/`--rules` flags |
-| `quant-fmt` install | — | **Done** | Wired into `make install`; builds and installs to `$(BIN_DEST)/quant-fmt`. |
+| Linter | `glados lint` | `wheatley` binary; 8 rules: `unused-var`, `unused-param`, `unreachable-code`, `missing-return` (error), `fn-naming`, `type-naming`, `empty-block`, `shadow`; `--deny`/`--allow`/`--rules` flags |
+| Workspace-wide LSP indexing | — | Background scan on startup; re-index on `DidChangeWatchedFiles`; cross-file references, rename, and code lens |
 
 ---
 
