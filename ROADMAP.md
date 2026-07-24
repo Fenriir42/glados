@@ -94,7 +94,7 @@ All planned LSP features are complete.
 
 ## V1 Tooling — status
 
-The language, LSP, and surrounding toolchain are feature-complete for V1.
+The language core, LSP, and initial toolchain are done. Remaining V1 work is tracked below.
 
 ### Completed
 
@@ -113,14 +113,55 @@ The language, LSP, and surrounding toolchain are feature-complete for V1.
 
 ---
 
-## Post-V1 / future
+## V1 — upcoming
 
-- **Package manager** — resolve external Quant packages from a registry (`quant.toml` `[dependencies]` section)
-- **FFI callbacks** — create a C function pointer from a Quant lambda using libffi's closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`)
-- **Tuples** — `(int, str)` for lightweight multiple returns
-- **Enum types** — named variants without payload, beyond the error system
-- **Closures capturing environment** — lambdas that close over local variables from the enclosing scope
-- **Async / await** — cooperative concurrency
-- **Generic structs** — `struct Pair[A, B] { first: A, second: B }`
-- **Multi-target codegen** — LLVM or C emission instead of the bytecode VM
-- **Graphics / game library** — SDL2 or similar via FFI
+### Language features
+
+| Feature | Notes |
+|---------|-------|
+| Tuples | `(int, str)` type syntax; `(a, b)` literal; destructuring in `let` and function params; lightweight multiple returns without a struct |
+| Closures capturing environment | Lambdas that close over locals from the enclosing scope; requires a heap-allocated capture record and an indirect call through it |
+| Enum types | Named variants without payload, e.g. `enum Direction { North, South, East, West }`; matchable in `match`; distinct from the error system |
+| Generic structs | `struct Pair[A, B] { first: A, second: B }`; instantiated at call sites; type-erased like generic functions |
+| Interfaces | `interface Printable { fn print(self) }` + `impl Printable for MyStruct { ... }`; enables ad-hoc polymorphism and replaces duck-typing patterns |
+| Operator overloading | `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }` — at least `+`, `-`, `*`, `/`, `==`, `<` |
+| Destructuring | `let (x, y) = point` for tuples; `let { name, age } = person` for structs in `let` bindings and `match` arms |
+| FFI callbacks | C function pointer from a Quant lambda via libffi closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`) |
+| Async / await | Cooperative concurrency; `async fn`, `await expr`; backed by a lightweight task scheduler |
+| Multi-target codegen | LLVM IR or C emission as an alternative backend to the bytecode VM; enables AOT compilation and better performance |
+
+### Debugger (DAP)
+
+Full Debug Adapter Protocol implementation so VS Code can set breakpoints, step through Quant code, and inspect variables — the biggest remaining DX gap.
+
+| Component | Notes |
+|-----------|-------|
+| DAP server (`quant-dap`) | New binary; speaks DAP over stdio; launched by VS Code when `F5` is pressed |
+| VM debug hooks | `IBreakpoint` instruction or a breakpoint table the VM checks; single-step mode; stack frame introspection |
+| Variable inspection | Walk the VM value stack and local variable slots; map bytecode offsets back to source positions via a debug info table emitted by the compiler |
+| VS Code launch config | `launch.json` with `"type": "quant"` for Run and Debug buttons; contributed by the `quant-lsp` extension |
+| Stack frames & stepping | `stackTrace`, `scopes`, `variables`, `next`, `stepIn`, `stepOut`, `continue`, `pause` DAP requests |
+| Breakpoints | `setBreakpoints` — resolve source line to bytecode offset via debug info; conditional breakpoints via expression evaluation |
+
+### Tooling
+
+| Tool | Command | Notes |
+|------|---------|-------|
+| File watcher | `glados watch [CMD]` | Re-runs `glados build` (or an arbitrary subcommand) whenever a `.qa` file changes; uses `inotify`/`kqueue`; similar to `cargo watch` |
+| Benchmarking | `glados bench [FILE]` | Discovers `*_bench.qa`; `bench_fn` builtin wraps a closure and reports ns/op, iterations, and standard deviation; TAP-compatible output |
+| CI template | `glados init --ci github` | Adds `.github/workflows/quant.yml` to the scaffolded project; runs `glados build`, `glados test`, and `glados lint` on push |
+| Package manager | `glados add <pkg>`, `glados publish` | `[dependencies]` section in `quant.toml`; resolves packages from a central registry; downloads, caches, and links `.qa` source trees |
+
+### Standard library expansion
+
+| Module | Status | Planned additions |
+|--------|--------|-------------------|
+| `net/http` | In progress | `get/post/put/delete` client; `serve/handle/response` server-side API |
+| `path` | Planned | `join/basename/dirname/ext/absolute/relative/exists/is_dir/is_file` |
+| `datetime` | Planned | `now/parse/format/add/diff/unix`; ISO-8601 and RFC-3339 support |
+| `crypto` | Planned | `sha256/sha512/md5` (via libcrypto FFI); `rand_bytes/rand_int` (via `/dev/urandom`) |
+| `os` | Planned | `spawn/wait/kill` (child processes); `pipe/read/write` (anonymous pipes); `signal` handling |
+| `sqlite` | Planned | `open/close/exec/query/bind` via FFI to `libsqlite3`; returns `array(dict(str, str))` |
+| `csv` | Planned | `parse/encode/rows/headers`; RFC 4180 compliant |
+| `yaml` | Planned | `parse/encode`; maps to the same value tree as `json` |
+| `test` | Planned | Property-based testing: `forall(gen, fn)`; built-in generators for `int/str/array`; shrinking on failure |
