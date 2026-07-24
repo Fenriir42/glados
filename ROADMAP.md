@@ -110,6 +110,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | Dead code diagnostic | `publishDiagnostics` | Functions with no callers anywhere in the workspace shown greyed-out (`DiagnosticTag_Unnecessary`) |
 | On-type formatting | `textDocument/onTypeFormatting` | Auto-indent after `\n` and `}`; matches opening brace indentation |
 | Status bar indexing indicator | custom `$/quant/indexingStatus` | Shows "$(sync~spin) Quant: indexing..." in VS Code status bar while background scan runs |
+| DAP debugger | `quant-dap` | Breakpoints, step-over/in/continue, stack frames, locals + heap expansion; stdout capture as DAP output events |
 
 ---
 
@@ -130,18 +131,21 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | Async / await | Cooperative concurrency; `async fn`, `await expr`; backed by a lightweight task scheduler |
 | Multi-target codegen | LLVM IR or C emission as an alternative backend to the bytecode VM; enables AOT compilation and better performance |
 
-### Debugger (DAP)
+### Debugger (DAP) -- done
 
-Full Debug Adapter Protocol implementation so VS Code can set breakpoints, step through Quant code, and inspect variables — the biggest remaining DX gap.
+Full Debug Adapter Protocol implementation — VS Code can set breakpoints, step through Quant code, and inspect variables.
 
-| Component | Notes |
-|-----------|-------|
-| DAP server (`quant-dap`) | New binary; speaks DAP over stdio; launched by VS Code when `F5` is pressed |
-| VM debug hooks | `IBreakpoint` instruction or a breakpoint table the VM checks; single-step mode; stack frame introspection |
-| Variable inspection | Walk the VM value stack and local variable slots; map bytecode offsets back to source positions via a debug info table emitted by the compiler |
-| VS Code launch config | `launch.json` with `"type": "quant"` for Run and Debug buttons; contributed by the `quant-lsp` extension |
-| Stack frames & stepping | `stackTrace`, `scopes`, `variables`, `next`, `stepIn`, `stepOut`, `continue`, `pause` DAP requests |
-| Breakpoints | `setBreakpoints` — resolve source line to bytecode offset via debug info; conditional breakpoints via expression evaluation |
+| Component | Status | Notes |
+|-----------|--------|-------|
+| DAP server (`quant-dap`) | done | `dap-server/` package; speaks DAP over stdio via JSON+Content-Length framing |
+| VM debug hooks | done | `vmDebugHook :: Maybe (VMState -> IO ())` in `VMState`; called at every `ICovMark`; blocks on `MVar ResumeCmd` while paused |
+| Debug info table | done | `DAP.DebugInfo`: `ICovMark` instructions indexed by function+offset → line and line → [(func,offset)] |
+| Variable inspection | done | Locals, array/dict/struct expansion via `variablesReference` ranges; `displayValue` renders all `BC.Value` variants |
+| VS Code launch config | done | `"debuggers"` contribution in `quant-lsp` extension; `DebugAdapterDescriptorFactory` launches `quant-dap` |
+| Stack frames & stepping | done | `stackTrace`, `scopes`, `variables`, `next`, `stepIn`, `stepOut`, `continue`, `pause` DAP requests |
+| Breakpoints | done | `setBreakpoints` resolves source lines to bytecode offsets via debug info; line breakpoints only (no conditional) |
+| stdout capture | done | VM stdout redirected through a pipe; capture thread forwards lines as DAP `output` events |
+| Man page | done | `man/quant-dap.1` |
 
 ### Tooling
 

@@ -20,7 +20,7 @@
   "engines": {
     "vscode": "^1.82.0"
   },
-  "categories": ["Programming Languages", "Linters"],
+  "categories": ["Programming Languages", "Linters", "Debuggers"],
   "galleryBanner": {
     "color": "#1e1e1e",
     "theme": "dark"
@@ -88,9 +88,65 @@
           ],
           "default": "off",
           "markdownDescription": "Trace LSP communication between VS Code and the Quant language server."
+        },
+        "quant-lsp.debugAdapterPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `quant-dap` debug adapter binary. Leave empty to search `$PATH`."
         }
       }
-    }
+    },
+    "debuggers": [
+      {
+        "type": "quant",
+        "label": "Quant Debug",
+        "languages": ["quant"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the Quant source file to debug.",
+                "default": "${file}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false,
+                "description": "Break immediately when the program starts."
+              },
+              "stdlib": {
+                "type": "string",
+                "default": "",
+                "description": "Path to the Quant standard library directory (overrides QUANT_STDLIB)."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "quant",
+            "request": "launch",
+            "name": "Debug Quant File",
+            "program": "${file}",
+            "stopOnEntry": false
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Quant: Debug Current File",
+            "description": "Debug the currently open Quant file.",
+            "body": {
+              "type": "quant",
+              "request": "launch",
+              "name": "Debug Quant File",
+              "program": "^\"${1:${file}}\"",
+              "stopOnEntry": false
+            }
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "compile": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",

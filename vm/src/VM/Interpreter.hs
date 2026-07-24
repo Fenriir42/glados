@@ -1,10 +1,13 @@
 -- | Stack-based bytecode interpreter for the Quant VM.
 module VM.Interpreter
   ( VMError (..),
+    VMState (..),
+    Frame (..),
     runProgram,
     runFunction,
     runFunctionCov,
     runFunctionLineCov,
+    runDebugProgram,
   )
 where
 
@@ -107,7 +110,9 @@ data VMState = VMState
     -- | Per-function hit line numbers for line coverage.
     vmLineCov :: Maybe (IORef (Map.Map FuncName (Set.Set Int))),
     -- | Per-branch outcome tracking: (funcName, sourceLine) -> outcomes seen.
-    vmBranchCov :: Maybe (IORef (Map.Map (FuncName, Int) (Set.Set Bool)))
+    vmBranchCov :: Maybe (IORef (Map.Map (FuncName, Int) (Set.Set Bool))),
+    -- | Optional debug hook called at each ICovMark (pauses VM for DAP).
+    vmDebugHook :: Maybe (VMState -> IO ())
   }
 
 type VM a = ExceptT VMError (StateT VMState IO) a
@@ -140,7 +145,8 @@ runProgram bytecodes = do
                 vmCurrentFunc = FuncName "main",
                 vmCoverage = Nothing,
                 vmLineCov = Nothing,
-                vmBranchCov = Nothing
+                vmBranchCov = Nothing,
+                vmDebugHook = Nothing
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -170,7 +176,8 @@ runFunction fname bytecodes = do
                 vmCurrentFunc = fname,
                 vmCoverage = Nothing,
                 vmLineCov = Nothing,
-                vmBranchCov = Nothing
+                vmBranchCov = Nothing,
+                vmDebugHook = Nothing
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -200,7 +207,8 @@ runFunctionCov covRef fname bytecodes = do
                 vmCurrentFunc = fname,
                 vmCoverage = Just covRef,
                 vmLineCov = Nothing,
-                vmBranchCov = Nothing
+                vmBranchCov = Nothing,
+                vmDebugHook = Nothing
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -237,7 +245,40 @@ runFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes = do
                 vmCurrentFunc = fname,
                 vmCoverage = Just covRef,
                 vmLineCov = Just lineCovRef,
-                vmBranchCov = Just branchCovRef
+                vmBranchCov = Just branchCovRef,
+                vmDebugHook = Nothing
+              }
+      (result, _) <- runStateT (runExceptT execLoop) initState
+      return result
+
+-- | Like 'runProgram' but calls @hook@ at each 'ICovMark' instruction,
+-- enabling step-by-step debugging.  The hook may block to pause execution.
+runDebugProgram :: (VMState -> IO ()) -> [Bytecode] -> IO (Either VMError Value)
+runDebugProgram hook bytecodes = do
+  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  case Map.lookup (FuncName "main") funcs of
+    Nothing -> return $ Left $ VMUndefinedFunction (FuncName "main")
+    Just mainBc -> do
+      let initState =
+            VMState
+              { vmStack = [],
+                vmLocals = Map.empty,
+                vmIP = 0,
+                vmInstrs = bytecodeInstructions mainBc,
+                vmStrings = bytecodeStrings mainBc,
+                vmCallStack = [],
+                vmHeap = Map.empty,
+                vmDictHeap = Map.empty,
+                vmStructHeap = Map.empty,
+                vmSocketHeap = Map.empty,
+                vmFFILibs = Map.empty,
+                vmNextId = 0,
+                vmFunctions = funcs,
+                vmCurrentFunc = FuncName "main",
+                vmCoverage = Nothing,
+                vmLineCov = Nothing,
+                vmBranchCov = Nothing,
+                vmDebugHook = Just hook
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -380,11 +421,15 @@ execInstr = \case
   ICovMark lineNo -> do
     mRef <- gets vmLineCov
     case mRef of
-      Nothing -> return Nothing
+      Nothing -> return ()
       Just ref -> do
         func <- gets vmCurrentFunc
         S.liftIO $ modifyIORef ref (Map.insertWith Set.union func (Set.singleton lineNo))
-        return Nothing
+    hookM <- gets vmDebugHook
+    case hookM of
+      Nothing -> return ()
+      Just hook -> S.get >>= S.liftIO . hook
+    return Nothing
   ICovBranch branchId -> do
     mRef <- gets vmBranchCov
     case mRef of

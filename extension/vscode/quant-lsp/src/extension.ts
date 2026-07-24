@@ -27,6 +27,13 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.debug.registerDebugAdapterDescriptorFactory(
+      "quant",
+      new QuantDebugAdapterDescriptorFactory(),
+    ),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand(
       "quant-lsp.showReferences",
       (
@@ -172,4 +179,46 @@ function findOnPath(name: string): string | undefined {
     }
   }
   return undefined;
+}
+
+class QuantDebugAdapterDescriptorFactory
+  implements vscode.DebugAdapterDescriptorFactory
+{
+  createDebugAdapterDescriptor(
+    _session: vscode.DebugSession,
+    _executable: vscode.DebugAdapterExecutable | undefined,
+  ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
+    const config = vscode.workspace.getConfiguration("quant-lsp");
+    const configured = config.get<string>("debugAdapterPath", "");
+    const adapterPath = resolveAdapterPath(configured);
+    if (!adapterPath) {
+      void vscode.window
+        .showWarningMessage(
+          "Quant: quant-dap binary not found. Build it with `cabal install dap-server` or set quant-lsp.debugAdapterPath.",
+          "Open Settings",
+        )
+        .then((action) => {
+          if (action === "Open Settings") {
+            void vscode.commands.executeCommand(
+              "workbench.action.openSettings",
+              "quant-lsp.debugAdapterPath",
+            );
+          }
+        });
+      return undefined;
+    }
+    const session = _session.configuration as {
+      stdlib?: string;
+    };
+    const args = session.stdlib ? ["--stdlib", session.stdlib] : [];
+    return new vscode.DebugAdapterExecutable(adapterPath, args);
+  }
+}
+
+function resolveAdapterPath(configured: string): string | undefined {
+  if (configured && path.isAbsolute(configured)) {
+    return fs.existsSync(configured) ? configured : undefined;
+  }
+  const name = configured || "quant-dap";
+  return findOnPath(name);
 }

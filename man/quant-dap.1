@@ -1,0 +1,118 @@
+.TH QUANT-DAP 1 "July 2026" "Quant 1.0.0" "Quant Language Tools"
+.SH NAME
+quant\-dap \- Debug Adapter Protocol server for Quant
+.SH SYNOPSIS
+.B quant\-dap
+.RB [ \-\-stdlib
+.IR dir ]
+.SH DESCRIPTION
+.B quant\-dap
+implements the Debug Adapter Protocol (DAP) for the Quant language.
+It communicates over stdin/stdout using JSON with Content-Length framing
+and is intended to be launched automatically by a DAP-capable editor
+such as VS Code when the user starts a debug session.
+.PP
+The adapter compiles the target source file in-process, then runs the
+resulting bytecode under a debug-aware VM.
+Breakpoints, single-stepping, stack inspection, and variable expansion
+are all supported.
+.SH OPTIONS
+.TP
+.BI \-\-stdlib " dir"
+Path to the Quant standard library directory.
+Overrides the
+.B QUANT_STDLIB
+environment variable and the compiled-in default
+.IR /usr/local/share/quant/lib .
+.SH PROTOCOL FEATURES
+.TP
+.B Breakpoints
+Line breakpoints in the source file; verified breakpoints are reported
+back to the editor immediately.
+.TP
+.B Step commands
+.BR next \ (step\ over),
+.BR stepIn \ (step\ into),
+and
+.BR continue .
+.BR stepOut \ is\ treated\ as\ continue .
+.TP
+.B Stack trace
+Full call stack with source file and line number for each frame.
+.TP
+.B Scopes and variables
+Local variables for each stack frame, with recursive expansion of
+arrays, dicts, and structs.
+.TP
+.B Program output
+Standard output from the running program is forwarded to the editor
+as DAP
+.B output
+events on the
+.I stdout
+category.
+.TP
+.B Compile errors
+Type errors and parse failures are reported as DAP
+.B output
+events on the
+.I stderr
+category before the session terminates.
+.SH LAUNCH CONFIGURATION
+For VS Code, add a configuration to
+.I .vscode/launch.json:
+.PP
+.nf
+{
+  "type": "quant",
+  "request": "launch",
+  "name": "Debug Quant File",
+  "program": "${file}",
+  "stopOnEntry": false
+}
+.fi
+.PP
+.TP
+.B program
+Path to the
+.I .qa
+source file to compile and debug.
+.TP
+.B stopOnEntry
+If
+.BR true ,
+execution pauses at the first statement.
+Defaults to
+.BR false .
+.TP
+.B stdlib
+Optional path to the standard library directory, passed to
+.B quant\-dap
+as
+.BR \-\-stdlib .
+.SH ENVIRONMENT
+.TP
+.B QUANT_STDLIB
+Path to the Quant standard library.
+Used when
+.B \-\-stdlib
+is not given on the command line.
+.SH NOTES
+.B quant\-dap
+is ordinarily started by the editor, not the user.
+For VS Code, install the Quant LSP extension and configure a launch
+configuration as described above; the extension will launch
+.B quant\-dap
+automatically when a debug session begins.
+.PP
+The adapter path can be configured in VS Code via the
+.B quant\-lsp.debugAdapterPath
+setting.
+Leave the setting empty to search
+.BR $PATH .
+.SH SEE ALSO
+.BR glados (1),
+.BR quant\-lsp (1),
+.BR glados\-repl (1)
+.SH AUTHORS
+The Quant team <https://github.com/Sigmapitech/glados>

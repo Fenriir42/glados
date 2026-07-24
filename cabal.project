@@ -10,5 +10,6 @@ packages:
   cli/
   formatter/
   linter/
+  dap-server/
 
 tests: True
