@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 
 module Main (main) where
@@ -17,10 +18,13 @@ import Control.Concurrent.STM
   )
 import Control.Monad (forM_, void)
 import Control.Monad.IO.Class (liftIO)
+import Data.Aeson (object, (.=))
 import Data.List (isSuffixOf)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import Data.Proxy (Proxy (..))
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -38,6 +42,7 @@ import LSPServer.Folding (makeFoldingRanges)
 import LSPServer.Highlight (findHighlights)
 import qualified LSPServer.Hover as Hover
 import LSPServer.InlayHints (makeInlayHints)
+import LSPServer.OnTypeFormat (onTypeFormat)
 import LSPServer.References (findReferences)
 import LSPServer.Rename (findRename, prepareRename)
 import LSPServer.SelectionRange (findSelectionRange)
@@ -127,18 +132,23 @@ serverOptions =
             },
       optCompletionTriggerCharacters = Just ['.'],
       optSignatureHelpTriggerCharacters = Just ['(', ','],
-      optCodeActionKinds = Just [LSP.CodeActionKind_QuickFix]
+      optCodeActionKinds = Just [LSP.CodeActionKind_QuickFix],
+      optDocumentOnTypeFormattingTriggerCharacters = Just ('\n' :| ['}'])
     }
 
 mkHandlers :: TVar State -> TVar (Maybe FilePath) -> Handlers (LspM ())
 mkHandlers stateVar rootVar =
   mconcat
     [ notificationHandler SMethod_Initialized $ \_msg -> do
+        env <- getLspEnv
         mRoot <- liftIO $ readTVarIO rootVar
         case mRoot of
           Nothing -> return ()
           Just root ->
-            liftIO $ void $ forkIO $ indexWorkspace stateVar root,
+            liftIO $ void $ forkIO $ do
+              runLspT env $ sendIndexingStatus True
+              indexWorkspace stateVar root
+              runLspT env $ sendIndexingStatus False,
       notificationHandler SMethod_WorkspaceDidChangeConfiguration $ \_msg -> pure (),
       notificationHandler SMethod_WorkspaceDidChangeWatchedFiles $ \msg -> do
         let TNotificationMessage _ _ (LSP.DidChangeWatchedFilesParams changes) = msg
@@ -531,8 +541,33 @@ mkHandlers stateVar rootVar =
                   (fsFuncSymbols fs)
                   (fsFilePath fs)
                   chItem
-        responder (Right (LSP.InL calls))
+        responder (Right (LSP.InL calls)),
+      -- On-type formatting (auto-indent after { and })
+      requestHandler SMethod_TextDocumentOnTypeFormatting $ \req responder -> do
+        let TRequestMessage _ _ _ (LSP.DocumentOnTypeFormattingParams tdId pos ch _) = req
+            LSP.TextDocumentIdentifier uri = tdId
+            LSP.Position lspLine lspCol = pos
+            nuri = LSP.toNormalizedUri uri
+        mFile <- getVirtualFile nuri
+        let edits = case mFile of
+              Nothing -> []
+              Just vf ->
+                case T.uncons ch of
+                  Nothing -> []
+                  Just (c, _) ->
+                    onTypeFormat
+                      (virtualFileText vf)
+                      (fromIntegral lspLine)
+                      (fromIntegral lspCol)
+                      c
+        responder (Right (LSP.InL edits))
     ]
+
+sendIndexingStatus :: Bool -> LspM () ()
+sendIndexingStatus indexing =
+  sendNotification
+    (SMethod_CustomMethod (Proxy :: Proxy "$/quant/indexingStatus"))
+    (object ["indexing" .= indexing])
 
 parseForFormat :: FilePath -> Text -> Either String (Program ())
 parseForFormat label src =

@@ -86,15 +86,9 @@ Current state of the `feat/revival` branch as of 2026-07-23.
 | Code action: fill struct | `textDocument/codeAction` | Done — inserts missing fields with default values |
 | Variable type inlay hints | `textDocument/inlayHint` | Done — shows inferred type after `var: type` declarations |
 
-### LSP: remaining gap to Rust Analyzer parity
+### LSP: parity with Rust Analyzer achieved
 
-All high/medium items are done. Remaining are low-priority polish:
-
-| Feature | LSP method | Notes |
-|---------|-----------|-------|
-| On-type formatting | `textDocument/onTypeFormatting` | Auto-indent after `{` / `}` / `;`. |
-| Diagnostic: dead code | `publishDiagnostics` (extend) | Warn on functions never called from `main` or re-exported. |
-| Status bar indexing indicator | custom notification | Show "Quant: indexing..." while the LSP analyses; RA-style. |
+All planned LSP features are complete.
 
 ---
 
@@ -113,6 +107,9 @@ The language, LSP, and surrounding toolchain are feature-complete for V1.
 | Formatter | `glados fmt` | Dispatches to `quant-fmt` binary (comment-preserving, idempotent) |
 | Linter | `glados lint` | `wheatley` binary; 8 rules: `unused-var`, `unused-param`, `unreachable-code`, `missing-return` (error), `fn-naming`, `type-naming`, `empty-block`, `shadow`; `--deny`/`--allow`/`--rules` flags |
 | Workspace-wide LSP indexing | — | Background scan on startup; re-index on `DidChangeWatchedFiles`; cross-file references, rename, and code lens |
+| Dead code diagnostic | `publishDiagnostics` | Functions with no callers anywhere in the workspace shown greyed-out (`DiagnosticTag_Unnecessary`) |
+| On-type formatting | `textDocument/onTypeFormatting` | Auto-indent after `\n` and `}`; matches opening brace indentation |
+| Status bar indexing indicator | custom `$/quant/indexingStatus` | Shows "$(sync~spin) Quant: indexing..." in VS Code status bar while background scan runs |
 
 ---
 

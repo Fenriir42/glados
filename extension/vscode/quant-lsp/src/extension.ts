@@ -125,6 +125,24 @@ export function activate(context: vscode.ExtensionContext): void {
     clientOptions,
   );
 
+  const statusBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    100,
+  );
+  statusBar.text = "$(sync~spin) Quant: indexing…";
+  context.subscriptions.push(statusBar);
+
+  client.onNotification(
+    "$/quant/indexingStatus",
+    (params: { indexing: boolean }) => {
+      if (params.indexing) {
+        statusBar.show();
+      } else {
+        statusBar.hide();
+      }
+    },
+  );
+
   client.start();
   context.subscriptions.push(client);
 }

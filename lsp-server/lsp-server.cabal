@@ -35,6 +35,7 @@ executable glados-lsp
     LSPServer.Highlight
     LSPServer.Hover
     LSPServer.InlayHints
+    LSPServer.OnTypeFormat
     LSPServer.References
     LSPServer.Rename
     LSPServer.SelectionRange
