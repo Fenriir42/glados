@@ -45,7 +45,8 @@ import Language.LSP.Protocol.Types
   )
 import Lexer (parseRawTokens)
 import Parser.Decl (parseDecl)
-import System.Directory (getCurrentDirectory, listDirectory)
+import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory, listDirectory)
+import System.Environment (lookupEnv)
 import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
 import System.IO (IOMode (..), hGetContents, hSetEncoding, openFile, utf8)
 import Text.Megaparsec
@@ -101,11 +102,49 @@ emptyResult :: [Diagnostic] -> AnalyzeResult
 emptyResult diags =
   AnalyzeResult diags Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty [] [] Map.empty [] Map.empty [] Map.empty Map.empty Map.empty Map.empty
 
+-- | Resolve the Quant standard library directory using the same priority order
+-- as the CLI: QUANT_STDLIB env var, system install, then ./std fallback.
+resolveStdlib :: FilePath -> IO FilePath
+resolveStdlib cwd = do
+  env <- lookupEnv "QUANT_STDLIB"
+  case env of
+    Just d -> return d
+    Nothing -> do
+      let sys = "/usr/local/share/quant/lib"
+      ok <- doesDirectoryExist sys
+      if ok then return sys else return (cwd </> "std")
+
+-- | Walk up the directory tree from @start@ looking for @quant.toml@.
+findProjectRoot :: FilePath -> IO (Maybe FilePath)
+findProjectRoot dir = do
+  exists <- doesFileExist (dir </> "quant.toml")
+  if exists
+    then return (Just dir)
+    else do
+      let parent = takeDirectory dir
+      if parent == dir then return Nothing else findProjectRoot parent
+
+-- | Collect import search paths for a source file.
+-- Always includes the file's own directory and the stdlib.
+-- If a quant.toml is found above the file, also adds <root>/src and <root>
+-- so that user modules are visible from test files in a sibling directory.
+importPaths :: FilePath -> FilePath -> IO [FilePath]
+importPaths fp stdlibDir = do
+  let fileDir = takeDirectory fp
+  mRoot <- findProjectRoot fileDir
+  let extra = case mRoot of
+        Nothing -> []
+        Just root -> [root </> "src", root]
+      candidates = fileDir : extra ++ [stdlibDir]
+      unique = foldr (\x acc -> if x `elem` acc then acc else x : acc) [] candidates
+  return unique
+
 -- | Lex, resolve imports, type-check a source file.
 analyzeText :: FilePath -> Text -> IO AnalyzeResult
 analyzeText fp text = do
   cwd <- getCurrentDirectory
-  let stdlibDir = cwd </> "std"
+  stdlibDir <- resolveStdlib cwd
+  impPaths <- importPaths fp stdlibDir
   case runParser parseRawTokens fp text of
     Left bundle ->
       return (emptyResult (bundleToDiags bundle))
@@ -116,7 +155,7 @@ analyzeText fp text = do
         Right rawDecls -> do
           let importDecls =
                 [(sp, d) | Located sp (DeclImport d) <- rawDecls]
-          resolvedOrErr <- resolveImports [takeDirectory fp, stdlibDir] rawDecls
+          resolvedOrErr <- resolveImports impPaths rawDecls
           stdDocs <- extractStdlibDocs stdlibDir
           stdDefSites <- extractStdlibDefSites stdlibDir
           let decls = case resolvedOrErr of

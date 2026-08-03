@@ -25,7 +25,7 @@
     "color": "#1e1e1e",
     "theme": "dark"
   },
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
@@ -76,7 +76,7 @@
         "quant-lsp.serverPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path to the `glados-lsp` binary. Leave empty to search `$PATH`."
+          "markdownDescription": "Absolute path to the `quant-lsp` binary. Leave empty to search `$PATH`."
         },
         "quant-lsp.trace.server": {
           "type": "string",
@@ -93,6 +93,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Absolute path to the `quant-dap` debug adapter binary. Leave empty to search `$PATH`."
+        },
+        "quant-lsp.gladosPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the `glados` binary. Leave empty to search `$PATH`."
         }
       }
     },
