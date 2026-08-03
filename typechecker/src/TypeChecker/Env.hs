@@ -6,12 +6,14 @@ module TypeChecker.Env
     lookupFunc,
     lookupStruct,
     lookupError,
+    lookupInterface,
     lookupGenericParams,
     insertVar,
     insertVarWithSpan,
     insertFunc,
     insertStruct,
     insertError,
+    insertInterface,
     insertGenericParams,
     withVars,
     withTypeVars,
@@ -36,11 +38,13 @@ data Env = Env
     -- | Type variable names in scope inside a generic function body
     envTypeVars :: Set TypeName,
     -- | Type parameters per generic function (for call-site inference)
-    envGenericParams :: Map FuncName [TypeName]
+    envGenericParams :: Map FuncName [TypeName],
+    -- | Interface name -> list of required unqualified method names
+    envInterfaces :: Map TypeName [FuncName]
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty
+emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty Map.empty
 
 lookupVar :: VarName -> Env -> Maybe QualifiedType
 lookupVar v = Map.lookup v . envVars
@@ -89,6 +93,12 @@ insertGenericParams f tvs env =
 lookupGenericParams :: FuncName -> Env -> [TypeName]
 lookupGenericParams f env =
   Map.findWithDefault [] f (envGenericParams env)
+
+lookupInterface :: TypeName -> Env -> Maybe [FuncName]
+lookupInterface t = Map.lookup t . envInterfaces
+
+insertInterface :: TypeName -> [FuncName] -> Env -> Env
+insertInterface t ms env = env {envInterfaces = Map.insert t ms (envInterfaces env)}
 
 setReturnType :: QualifiedType -> Env -> Env
 setReturnType qt env = env {envReturnType = Just qt}

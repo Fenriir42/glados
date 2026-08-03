@@ -643,6 +643,74 @@ fn main() -> void {
 }
 ```
 
+## Interfaces
+
+An interface declares a named set of method signatures that a type must implement. Any type can satisfy multiple interfaces.
+
+### Declaring an interface
+
+```quant
+interface Shape {
+    fn area(self) -> float;
+    fn perimeter(self) -> float;
+}
+```
+
+### Implementing an interface
+
+Use `impl InterfaceName for TypeName`. The type checker reports an error if any required method is missing.
+
+```quant
+struct Circle { radius: float }
+struct Rect { width: float, height: float }
+
+impl Shape for Circle {
+    fn area(self) -> float {
+        return 3.14159 * self.radius * self.radius;
+    }
+    fn perimeter(self) -> float {
+        return 2.0 * 3.14159 * self.radius;
+    }
+}
+
+impl Shape for Rect {
+    fn area(self) -> float {
+        return self.width * self.height;
+    }
+    fn perimeter(self) -> float {
+        return 2.0 * (self.width + self.height);
+    }
+}
+```
+
+### Calling interface methods
+
+Methods from `impl Foo for Bar` are called with the same dot syntax as inherent methods. Under the hood they compile to `TypeName.method` functions, identical to inherent impl blocks.
+
+```quant
+fn main() -> void {
+    c: Circle = Circle { radius: 5.0 };
+    r: Rect = Rect { width: 4.0, height: 6.0 };
+
+    println(c.area());       // 78.53975
+    println(c.perimeter());  // 31.4159
+    println(r.area());       // 24.0
+    println(r.perimeter());  // 20.0
+}
+```
+
+A type may implement multiple interfaces:
+
+```quant
+interface Describable {
+    fn describe(self) -> str;
+}
+
+impl Describable for Circle {
+    fn describe(self) -> str { return "circle"; }
+}
+```
+
 ## Generics
 
 Quant supports parametric polymorphism through type parameters declared in square brackets after the function name. A generic function works with any concrete type supplied at the call site; the type checker verifies correctness for each use.

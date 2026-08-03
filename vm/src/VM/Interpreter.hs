@@ -402,9 +402,13 @@ execInstr = \case
               else throwError $ VMUndefinedFunction fname
   IRet -> do
     retVal <- pop "IRet"
+    -- Resolve any VStringRef in the return value while still in the callee's
+    -- string pool; once we restore the caller's frame the index is invalid.
+    calleeStrings <- gets vmStrings
+    let resolvedRetVal = resolveStringRef calleeStrings retVal
     frames <- gets vmCallStack
     case frames of
-      [] -> return (Just retVal)
+      [] -> return (Just resolvedRetVal)
       (frame : rest) -> do
         modify $ \s ->
           s
@@ -413,7 +417,7 @@ execInstr = \case
               vmInstrs = fInstrs frame,
               vmStrings = fStrings frame,
               vmCallStack = rest,
-              vmStack = retVal : vmStack s,
+              vmStack = resolvedRetVal : vmStack s,
               vmCurrentFunc = fFunc frame
             }
         return Nothing

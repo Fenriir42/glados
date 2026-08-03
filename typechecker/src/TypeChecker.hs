@@ -5,13 +5,13 @@ module TypeChecker
   )
 where
 
-import AST.Types.AST (Decl (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), Program (..), StructDecl (..), programDecls)
+import AST.Types.AST (Decl (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), InterfaceDecl (..), InterfaceMethodSig (..), Program (..), StructDecl (..), programDecls)
 import AST.Types.Common (FuncName, Located (..), SourceSpan, TypeName, VarName, locSpan, unLocated)
 import AST.Types.Type (ErrorType (..), FunctionType (..), StructType (..), Type)
 import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import TypeChecker.Env (Env, emptyEnv, envFuncs, insertError, insertFunc, insertGenericParams, insertStruct)
+import TypeChecker.Env (Env, emptyEnv, envFuncs, insertError, insertFunc, insertGenericParams, insertInterface, insertStruct)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -40,7 +40,9 @@ typeCheck prog =
       ffiEnv = foldr collectFFI funcEnv decls
       structEnv = foldr collectStruct ffiEnv decls
       implEnv = foldr collectImpl structEnv decls
-      fullEnv = foldr collectError implEnv decls
+      implForEnv = foldr collectImplFor implEnv decls
+      ifaceEnv = foldr collectInterface implForEnv decls
+      fullEnv = foldr collectError ifaceEnv decls
       finalState = execState (mapM_ (checkDecl fullEnv) decls) initialTCState
       defSites =
         Map.fromList $
@@ -50,6 +52,10 @@ typeCheck prog =
             ++ [ (unLocated (funcDeclName fd), locSpan (funcDeclName fd))
                  | Located _ (DeclImpl _ idecl) <- decls,
                    Located _ fd <- implMethods idecl
+               ]
+            ++ [ (unLocated (funcDeclName fd), locSpan (funcDeclName fd))
+                 | Located _ (DeclImplFor _ ifdecl) <- decls,
+                   Located _ fd <- implForMethods ifdecl
                ]
    in TypeCheckResult
         (tcsErrors finalState)
@@ -99,6 +105,27 @@ typeCheck prog =
         env
         (implMethods idecl)
     collectImpl _ env = env
+
+    collectImplFor :: Located (Decl ()) -> Env -> Env
+    collectImplFor (Located _ (DeclImplFor _ ifdecl)) env =
+      foldr
+        ( \(Located _ fd) e ->
+            let fname = unLocated (funcDeclName fd)
+                tvs = map unLocated (funcDeclTypeParams fd)
+                e' = insertFunc fname (mkFuncType fd) e
+             in if null tvs then e' else insertGenericParams fname tvs e'
+        )
+        env
+        (implForMethods ifdecl)
+    collectImplFor _ env = env
+
+    collectInterface :: Located (Decl ()) -> Env -> Env
+    collectInterface (Located _ (DeclInterface _ idecl)) env =
+      insertInterface
+        (unLocated (ifaceDeclName idecl))
+        [unLocated (ifaceMethodName sig) | sig <- ifaceDeclMethods idecl]
+        env
+    collectInterface _ env = env
 
     collectError :: Located (Decl ()) -> Env -> Env
     collectError (Located _ (DeclError _ ed)) env =

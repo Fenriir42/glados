@@ -1,0 +1,54 @@
+interface Shape {
+    fn area(self) -> float;
+    fn perimeter(self) -> float;
+}
+
+interface Describable {
+    fn describe(self) -> str;
+}
+
+struct Circle { radius: float }
+struct Rect { width: float, height: float }
+
+impl Shape for Circle {
+    fn area(self) -> float {
+        return 3.14159 * self.radius * self.radius;
+    }
+    fn perimeter(self) -> float {
+        return 2.0 * 3.14159 * self.radius;
+    }
+}
+
+impl Shape for Rect {
+    fn area(self) -> float {
+        return self.width * self.height;
+    }
+    fn perimeter(self) -> float {
+        return 2.0 * (self.width + self.height);
+    }
+}
+
+impl Describable for Circle {
+    fn describe(self) -> str {
+        return "circle";
+    }
+}
+
+impl Describable for Rect {
+    fn describe(self) -> str {
+        return "rect";
+    }
+}
+
+fn main() -> void {
+    c: Circle = Circle { radius: 5.0 };
+    r: Rect = Rect { width: 4.0, height: 6.0 };
+
+    println(c.area());
+    println(c.perimeter());
+    println(r.area());
+    println(r.perimeter());
+
+    println(c.describe());
+    println(r.describe());
+}

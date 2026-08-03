@@ -11,8 +11,11 @@ import AST.Types.AST
     ForInit (..),
     FunctionDecl (..),
     ImplDecl (..),
+    ImplForDecl (..),
     ImportDecl (..),
     ImportTarget (..),
+    InterfaceDecl (..),
+    InterfaceMethodSig (..),
     LValue (..),
     MatchArm (..),
     MatchPattern (..),
@@ -262,6 +265,8 @@ fmtDecl cm opts n (Located _ (DeclFunction vis fd)) =
   fmtFuncDecl cm opts n (spanLine (spanStart (blockSpan (funcDeclBody fd)))) vis fd
 fmtDecl _ opts n (Located _ (DeclStruct vis sd)) = fmtStructDecl opts n vis sd
 fmtDecl cm opts n (Located _ (DeclImpl vis idecl)) = fmtImplDecl cm opts n vis idecl
+fmtDecl _ opts n (Located _ (DeclInterface vis idecl)) = fmtInterfaceDecl opts n vis idecl
+fmtDecl cm opts n (Located _ (DeclImplFor vis ifdecl)) = fmtImplForDecl cm opts n vis ifdecl
 fmtDecl _ _ _ (Located _ (DeclImport _)) = []
 fmtDecl _ opts n (Located _ (DeclError vis ed)) = fmtErrorDecl opts n vis ed
 fmtDecl _ opts n (Located _ (DeclErrorSet vis esd)) = fmtErrorSetDecl opts n vis esd
@@ -327,6 +332,32 @@ fmtImplDecl cm opts n vis idecl =
   let tname = unTypeName (locValue (implTypeName idecl))
       header = [ind opts n <> fmtVis vis <> "impl " <> tname <> " {"]
       methods = concatMap (fmtMethod cm opts (n + 1)) (implMethods idecl)
+      footer = [ind opts n <> "}"]
+   in header ++ methods ++ footer
+  where
+    fmtMethod cm' opts' n' (Located _ fd) =
+      fmtFuncDecl cm' opts' n' (spanLine (spanStart (blockSpan (funcDeclBody fd)))) Public fd
+
+fmtInterfaceDecl :: FormatOptions -> Int -> Visibility -> InterfaceDecl -> Lines
+fmtInterfaceDecl opts n vis idecl =
+  let tname = unTypeName (locValue (ifaceDeclName idecl))
+      header = [ind opts n <> fmtVis vis <> "interface " <> tname <> " {"]
+      sigs = concatMap (fmtInterfaceMethodSig opts (n + 1)) (ifaceDeclMethods idecl)
+      footer = [ind opts n <> "}"]
+   in header ++ sigs ++ footer
+
+fmtInterfaceMethodSig :: FormatOptions -> Int -> InterfaceMethodSig -> Lines
+fmtInterfaceMethodSig opts n sig =
+  let params = T.intercalate ", " [fmtParam (locValue p) | p <- ifaceMethodParams sig]
+      ret = fmtQType (locValue (ifaceMethodReturnType sig))
+   in [ind opts n <> "fn " <> unFuncName (locValue (ifaceMethodName sig)) <> "(" <> params <> ") -> " <> ret <> ";"]
+
+fmtImplForDecl :: CommentsMap -> FormatOptions -> Int -> Visibility -> ImplForDecl () -> Lines
+fmtImplForDecl cm opts n vis ifdecl =
+  let ifaceName = unTypeName (locValue (implForIfaceName ifdecl))
+      typeName = unTypeName (locValue (implForTypeName ifdecl))
+      header = [ind opts n <> fmtVis vis <> "impl " <> ifaceName <> " for " <> typeName <> " {"]
+      methods = concatMap (fmtMethod cm opts (n + 1)) (implForMethods ifdecl)
       footer = [ind opts n <> "}"]
    in header ++ methods ++ footer
   where

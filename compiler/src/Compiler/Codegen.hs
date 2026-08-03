@@ -18,6 +18,7 @@ import AST.Types.AST
     ForInit (..),
     FunctionDecl (..),
     ImplDecl (..),
+    ImplForDecl (..),
     LValue (..),
     MatchArm (..),
     MatchPattern (..),
@@ -268,7 +269,14 @@ compileProgram methodCallMap (Program decls) =
                 DeclImpl vis idecl <- [d],
                 Located _ fd <- implMethods idecl
             ]
-          funcs = map snd visDecls ++ map snd implDecls
+          implForDecls =
+            [ (vis, fd)
+              | decl <- decls,
+                let d = unLocated decl,
+                DeclImplFor vis ifdecl <- [d],
+                Located _ fd <- implForMethods ifdecl
+            ]
+          funcs = map snd visDecls ++ map snd implDecls ++ map snd implForDecls
           -- Static functions whose names contain '.' were imported from another
           -- module and are private helpers; calls to them from outside that
           -- module are rejected at the ExprCall site.

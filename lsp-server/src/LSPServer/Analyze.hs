@@ -3,7 +3,7 @@
 
 module LSPServer.Analyze (AnalyzeResult (..), analyzeText, emptyResult) where
 
-import AST.Types.AST (Block (..), Decl (..), ErrorDecl (..), FunctionDecl (..), ImplDecl (..), ImportDecl (..), ImportTarget (..), ModulePath (..), Program (..), Stmt (..), StructDecl (..))
+import AST.Types.AST (Block (..), Decl (..), ErrorDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), ImportDecl (..), ImportTarget (..), ModulePath (..), Program (..), Stmt (..), StructDecl (..))
 import AST.Types.Common
   ( Column (..),
     ErrorName (..),
@@ -195,6 +195,17 @@ analyzeText fp text = do
                        | Located _ (DeclImpl _ idecl) <- rawDecls,
                          Located _ fd <- implMethods idecl
                      ]
+                  ++ [ let nameSpan = locSpan (funcDeclName fd)
+                           bodySpan = blockSpan (funcDeclBody fd)
+                           fullSpan = SourceSpan (spanStart nameSpan) (spanEnd bodySpan)
+                        in ( unLocated (funcDeclName fd),
+                             FunctionType (funcDeclParams fd) (funcDeclReturnType fd),
+                             nameSpan,
+                             fullSpan
+                           )
+                       | Located _ (DeclImplFor _ ifdecl) <- rawDecls,
+                         Located _ fd <- implForMethods ifdecl
+                     ]
               foldingRanges = collectFoldingRanges rawDecls
               callsByFunc =
                 Map.fromList
@@ -263,6 +274,8 @@ collectFoldingRanges = concatMap collectDecl
     collectDecl (Located _ (DeclFunction _ fd)) = collectBlock (funcDeclBody fd)
     collectDecl (Located _ (DeclImpl _ idecl)) =
       concatMap (collectBlock . funcDeclBody . unLocated) (implMethods idecl)
+    collectDecl (Located _ (DeclImplFor _ ifdecl)) =
+      concatMap (collectBlock . funcDeclBody . unLocated) (implForMethods ifdecl)
     collectDecl _ = []
 
     collectBlock (Block sp stmts) =

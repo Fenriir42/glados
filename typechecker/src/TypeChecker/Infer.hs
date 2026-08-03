@@ -14,6 +14,7 @@ import AST.Types.AST
     ForInit (..),
     FunctionDecl (..),
     ImplDecl (..),
+    ImplForDecl (..),
     LValue (..),
     MatchArm (..),
     MatchPattern (..),
@@ -30,6 +31,7 @@ import AST.Types.Common
     locSpan,
     unErrorName,
     unFieldName,
+    unFuncName,
     unLocated,
     unTypeName,
   )
@@ -83,6 +85,7 @@ import TypeChecker.Env
     lookupError,
     lookupFunc,
     lookupGenericParams,
+    lookupInterface,
     lookupStruct,
     lookupVar,
     lookupVarDef,
@@ -506,9 +509,21 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
 -- Declaration checking
 
 checkDecl :: Env -> Located (Decl ()) -> TC ()
-checkDecl env (Located _ decl) = case decl of
+checkDecl env (Located declSpan decl) = case decl of
   DeclFunction _ fd -> checkFunction env fd
   DeclImpl _ idecl -> mapM_ (checkFunction env . unLocated) (implMethods idecl)
+  DeclImplFor _ ifdecl -> do
+    let ifaceName = unLocated (implForIfaceName ifdecl)
+        typeName = unLocated (implForTypeName ifdecl)
+    case lookupInterface ifaceName env of
+      Nothing -> recordError (TCUndefinedInterface declSpan ifaceName)
+      Just requiredMethods ->
+        forM_ requiredMethods $ \mname -> do
+          let qualName = FuncName (unTypeName typeName <> "." <> unFuncName mname)
+          case lookupFunc qualName env of
+            Nothing -> recordError (TCMissingInterfaceMethod declSpan ifaceName typeName mname)
+            Just _ -> return ()
+    mapM_ (checkFunction env . unLocated) (implForMethods ifdecl)
   _ -> return ()
 
 checkFunction :: Env -> FunctionDecl () -> TC ()

@@ -9,6 +9,9 @@ module AST.Types.AST
     FunctionDecl (..),
     StructDecl (..),
     ImplDecl (..),
+    InterfaceMethodSig (..),
+    InterfaceDecl (..),
+    ImplForDecl (..),
     ModulePath (..),
     ImportTarget (..),
     ImportDecl (..),
@@ -82,6 +85,8 @@ data Decl ann
   = DeclFunction Visibility (FunctionDecl ann)
   | DeclStruct Visibility StructDecl
   | DeclImpl Visibility (ImplDecl ann)
+  | DeclInterface Visibility InterfaceDecl
+  | DeclImplFor Visibility (ImplForDecl ann)
   | DeclImport ImportDecl
   | DeclError Visibility ErrorDecl
   | DeclErrorSet Visibility ErrorSetDecl
@@ -122,6 +127,26 @@ data StructDecl = StructDecl
 data ImplDecl ann = ImplDecl
   { implTypeName :: Located TypeName,
     implMethods :: [Located (FunctionDecl ann)]
+  }
+  deriving stock (Show, Eq, Generic)
+
+data InterfaceMethodSig = InterfaceMethodSig
+  { ifaceMethodName :: Located FuncName,
+    ifaceMethodParams :: [Located Parameter],
+    ifaceMethodReturnType :: Located QualifiedType
+  }
+  deriving stock (Show, Eq, Generic)
+
+data InterfaceDecl = InterfaceDecl
+  { ifaceDeclName :: Located TypeName,
+    ifaceDeclMethods :: [InterfaceMethodSig]
+  }
+  deriving stock (Show, Eq, Generic)
+
+data ImplForDecl ann = ImplForDecl
+  { implForIfaceName :: Located TypeName,
+    implForTypeName :: Located TypeName,
+    implForMethods :: [Located (FunctionDecl ann)]
   }
   deriving stock (Show, Eq, Generic)
 

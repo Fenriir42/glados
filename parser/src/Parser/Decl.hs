@@ -1,7 +1,7 @@
 module Parser.Decl where
 
 import AST.Types.AST
-  ( Decl (DeclError, DeclErrorSet, DeclFFI, DeclFunction, DeclImpl, DeclImport, DeclStruct),
+  ( Decl (DeclError, DeclErrorSet, DeclFFI, DeclFunction, DeclImpl, DeclImplFor, DeclImport, DeclInterface, DeclStruct),
     ErrorDecl (..),
     ErrorSetDecl (..),
     FFIDecl (..),
@@ -15,6 +15,9 @@ import AST.Types.AST
         funcDeclTypeParams
       ),
     ImplDecl (..),
+    ImplForDecl (..),
+    InterfaceDecl (..),
+    InterfaceMethodSig (..),
     StructDecl (..),
     Visibility (..),
   )
@@ -256,6 +259,66 @@ parseImplMethod selfType = do
           }
   return $ Located (fnSpan <> bodySpan) fd
 
+-- | Parse one method signature inside an @interface@ block (no body, ends with @;@).
+parseInterfaceMethodSig :: TokenParser InterfaceMethodSig
+parseInterfaceMethodSig = do
+  _ <- matchKeyword "fn"
+  Located nameSpan (TokIdentifier mname) <- MP.satisfy isIdentifier
+  Located _ funcType <- parseFunctionType
+  _ <- matchSymbol ";"
+  return $
+    InterfaceMethodSig
+      { ifaceMethodName = Located nameSpan (FuncName mname),
+        ifaceMethodParams = funcParams funcType,
+        ifaceMethodReturnType = funcReturnType funcType
+      }
+
+-- | Parse @interface Name { fn method(...) -> R; ... }@.
+parseDeclInterface :: TokenParser (Located (Decl ann))
+parseDeclInterface = do
+  Located visSpan visibility <- parseVisibility
+  Located ifaceSpan _ <- MP.satisfy isInterfaceKw
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  _ <- matchSymbol "{"
+  methods <- MP.many parseInterfaceMethodSig
+  Located endSpan _ <- matchSymbol "}"
+  let combinedSpan = case visibility of
+        Static -> visSpan <> ifaceSpan <> endSpan
+        Public -> ifaceSpan <> endSpan
+      idecl =
+        InterfaceDecl
+          { ifaceDeclName = Located nameSpan (TypeName name),
+            ifaceDeclMethods = methods
+          }
+  return $ Located combinedSpan (DeclInterface visibility idecl)
+  where
+    isInterfaceKw (Located _ (TokIdentifier "interface")) = True
+    isInterfaceKw _ = False
+
+-- | Parse @impl InterfaceName for TypeName { fn method(...) -> R { ... } ... }@.
+-- Each method's @self@ parameter is replaced with @TypeName@ at parse time (same as inherent impl).
+parseDeclImplFor :: TokenParser (Located (Decl ann))
+parseDeclImplFor = do
+  Located visSpan visibility <- parseVisibility
+  Located implSpan _ <- matchKeyword "impl"
+  Located ifaceNameSpan (TokIdentifier ifaceName) <- MP.satisfy isIdentifier
+  _ <- matchKeyword "for"
+  Located typeNameSpan (TokIdentifier typeName) <- MP.satisfy isIdentifier
+  let tname = TypeName typeName
+  _ <- matchSymbol "{"
+  methods <- MP.many (parseImplMethod tname)
+  Located endSpan _ <- matchSymbol "}"
+  let combinedSpan = case visibility of
+        Static -> visSpan <> implSpan <> endSpan
+        Public -> implSpan <> endSpan
+      ifdecl =
+        ImplForDecl
+          { implForIfaceName = Located ifaceNameSpan (TypeName ifaceName),
+            implForTypeName = Located typeNameSpan tname,
+            implForMethods = methods
+          }
+  return $ Located combinedSpan (DeclImplFor visibility ifdecl)
+
 parseDeclFFI :: TokenParser (Located (Decl ann))
 parseDeclFFI = do
   Located ffiSpan _ <- matchKeyword "extern"
@@ -294,6 +357,12 @@ parseDecl =
         _ <- MP.lookAhead (MP.try structStart)
         parseDeclStruct,
       do
+        _ <- MP.lookAhead (MP.try interfaceStart)
+        parseDeclInterface,
+      do
+        _ <- MP.lookAhead (MP.try implForStart)
+        parseDeclImplFor,
+      do
         _ <- MP.lookAhead (MP.try implStart)
         parseDeclImpl,
       do
@@ -312,6 +381,12 @@ parseDecl =
   where
     functionStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "fn"
     structStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isStructKw
+    interfaceStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isInterfaceKw
+    implForStart =
+      MP.optional (MP.satisfy isStaticId)
+        >> matchKeyword "impl"
+        >> MP.satisfy isIdentifier
+        >> matchKeyword "for"
     implStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "impl"
     errorStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "error"
     errorsetStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isErrorsetKw
@@ -319,5 +394,7 @@ parseDecl =
     isStaticId _ = False
     isStructKw (Located _ (TokIdentifier "struct")) = True
     isStructKw _ = False
+    isInterfaceKw (Located _ (TokIdentifier "interface")) = True
+    isInterfaceKw _ = False
     isErrorsetKw (Located _ (TokIdentifier "errorset")) = True
     isErrorsetKw _ = False

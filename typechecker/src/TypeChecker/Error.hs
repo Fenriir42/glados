@@ -27,6 +27,8 @@ data TypeCheckError
   | TCConditionNotBool SourceSpan Type
   | TCUnknownError SourceSpan ErrorName
   | TCMissingStructFields SourceSpan TypeName [FieldName]
+  | TCUndefinedInterface SourceSpan TypeName
+  | TCMissingInterfaceMethod SourceSpan TypeName TypeName FuncName
   deriving stock (Show, Eq)
 
 tcErrSpan :: TypeCheckError -> SourceSpan
@@ -42,6 +44,8 @@ tcErrSpan (TCInvalidCast s _ _) = s
 tcErrSpan (TCConditionNotBool s _) = s
 tcErrSpan (TCUnknownError s _) = s
 tcErrSpan (TCMissingStructFields s _ _) = s
+tcErrSpan (TCUndefinedInterface s _) = s
+tcErrSpan (TCMissingInterfaceMethod s _ _ _) = s
 
 tcErrMessage :: TypeCheckError -> String
 tcErrMessage (TCUndefinedVar _ v) =
@@ -76,3 +80,13 @@ tcErrMessage (TCMissingStructFields _ tname missing) =
     ++ T.unpack (unTypeName tname)
     ++ "` init missing fields: "
     ++ intercalate ", " (map (T.unpack . unFieldName) missing)
+tcErrMessage (TCUndefinedInterface _ iname) =
+  "undefined interface `" ++ T.unpack (unTypeName iname) ++ "`"
+tcErrMessage (TCMissingInterfaceMethod _ iname tname mname) =
+  "impl of `"
+    ++ T.unpack (unTypeName iname)
+    ++ "` for `"
+    ++ T.unpack (unTypeName tname)
+    ++ "` is missing method `"
+    ++ T.unpack (unFuncName mname)
+    ++ "`"
