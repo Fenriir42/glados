@@ -239,6 +239,8 @@ exprHasCall prefix = \case
   ExprParen e -> exprHasCall prefix (unLocated e)
   ExprCast e _ -> exprHasCall prefix (unLocated e)
   ExprTupleInit elems -> any (exprHasCall prefix . unLocated) elems
+  ExprMethodCall recv _ args ->
+    exprHasCall prefix (unLocated recv) || any (exprHasCall prefix . unLocated) args
 
 -- ---------------------------------------------------------------------------
 -- Prefix renaming (for real implementation modules)
@@ -350,6 +352,7 @@ renameExpr names prefix = \case
   ExprParen e -> ExprParen (fmap rE e)
   ExprCast e t -> ExprCast (fmap rE e) t
   ExprTupleInit elems -> ExprTupleInit (map (fmap rE) elems)
+  ExprMethodCall recv m args -> ExprMethodCall (fmap rE recv) m (map (fmap rE) args)
   where
     rE = renameExpr names prefix
 

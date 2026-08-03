@@ -5,10 +5,10 @@ module TypeChecker
   )
 where
 
-import AST.Types.AST (Decl (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), Program (..), StructDecl (..), programDecls)
+import AST.Types.AST (Decl (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), Program (..), StructDecl (..), programDecls)
 import AST.Types.Common (FuncName, Located (..), SourceSpan, TypeName, VarName, locSpan, unLocated)
 import AST.Types.Type (ErrorType (..), FunctionType (..), StructType (..), Type)
-import Control.Monad.State (execState)
+import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import TypeChecker.Env (Env, emptyEnv, envFuncs, insertError, insertFunc, insertGenericParams, insertStruct)
@@ -24,7 +24,10 @@ data TypeCheckResult = TypeCheckResult
     tcFuncDefSites :: Map FuncName SourceSpan,
     tcCallWithArgs :: Map SourceSpan (FuncName, FunctionType, [SourceSpan]),
     tcVarUseSites :: Map SourceSpan (VarName, SourceSpan),
-    tcVarDeclSites :: Map SourceSpan (VarName, SourceSpan)
+    tcVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
+    -- | Maps each ExprMethodCall span to the resolved function name (e.g. Vec2.len).
+    -- Module-style calls (math.sqrt) are absent, only real method calls appear.
+    tcMethodCallMap :: Map SourceSpan FuncName
   }
 
 -- | Type-check a parsed program.  Returns all diagnostics, a map from
@@ -36,13 +39,18 @@ typeCheck prog =
       funcEnv = foldr collectFunc emptyEnv decls
       ffiEnv = foldr collectFFI funcEnv decls
       structEnv = foldr collectStruct ffiEnv decls
-      fullEnv = foldr collectError structEnv decls
+      implEnv = foldr collectImpl structEnv decls
+      fullEnv = foldr collectError implEnv decls
       finalState = execState (mapM_ (checkDecl fullEnv) decls) initialTCState
       defSites =
-        Map.fromList
+        Map.fromList $
           [ (unLocated (funcDeclName fd), locSpan (funcDeclName fd))
             | Located _ (DeclFunction _ fd) <- decls
           ]
+            ++ [ (unLocated (funcDeclName fd), locSpan (funcDeclName fd))
+                 | Located _ (DeclImpl _ idecl) <- decls,
+                   Located _ fd <- implMethods idecl
+               ]
    in TypeCheckResult
         (tcsErrors finalState)
         (tcsTypes finalState)
@@ -53,6 +61,7 @@ typeCheck prog =
         (tcsCallWithArgs finalState)
         (tcsVarUseSites finalState)
         (tcsVarDeclSites finalState)
+        (tcsMethodCallMap finalState)
   where
     collectFunc :: Located (Decl ()) -> Env -> Env
     collectFunc (Located _ (DeclFunction _ fd)) env =
@@ -77,6 +86,19 @@ typeCheck prog =
           fields = map unLocated (structDeclFields sd)
        in insertStruct tname (StructType tname tvs fields) env
     collectStruct _ env = env
+
+    collectImpl :: Located (Decl ()) -> Env -> Env
+    collectImpl (Located _ (DeclImpl _ idecl)) env =
+      foldr
+        ( \(Located _ fd) e ->
+            let fname = unLocated (funcDeclName fd)
+                tvs = map unLocated (funcDeclTypeParams fd)
+                e' = insertFunc fname (mkFuncType fd) e
+             in if null tvs then e' else insertGenericParams fname tvs e'
+        )
+        env
+        (implMethods idecl)
+    collectImpl _ env = env
 
     collectError :: Located (Decl ()) -> Env -> Env
     collectError (Located _ (DeclError _ ed)) env =

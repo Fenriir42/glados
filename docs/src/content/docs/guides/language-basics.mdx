@@ -524,6 +524,43 @@ fn main() -> void {
 }
 ```
 
+## Impl Blocks
+
+An `impl` block attaches methods to a struct. A method is a function whose first parameter is named `self` and receives the receiver value.
+
+```quant
+struct Vec2 {
+    x: float,
+    y: float,
+}
+
+impl Vec2 {
+    fn len_sq(self) -> float {
+        return self.x * self.x + self.y * self.y;
+    }
+
+    fn scale(self, factor: float) -> Vec2 {
+        return Vec2 { x: self.x * factor, y: self.y * factor };
+    }
+
+    fn dot(self, other: Vec2) -> float {
+        return self.x * other.x + self.y * other.y;
+    }
+}
+
+fn main() -> void {
+    v: Vec2 = Vec2 { x: 3.0, y: 4.0 };
+    println(v.len_sq());        // 25.0
+    w: Vec2 = v.scale(2.0);
+    println(w.x);               // 6.0
+    println(v.dot(Vec2 { x: 1.0, y: 0.0 })); // 3.0
+}
+```
+
+Methods are called with dot syntax: `receiver.method(args)`. The receiver is automatically passed as `self`. Under the hood, each method compiles to a regular function named `TypeName.method` -- there is no virtual dispatch or vtable.
+
+Multiple `impl` blocks for the same type are not yet supported; put all methods in a single block.
+
 ## Generic Structs
 
 A struct can be parameterised over one or more type variables using square-bracket syntax after the name. The compiler infers the concrete type arguments from the values you provide at initialisation; the resulting type carries full type information for field access and return types.
@@ -542,7 +579,7 @@ struct Box[T] {
 }
 ```
 
-Type parameters must be used in at least one field. They follow the same rules as function type parameters — a single uppercase letter by convention, but any identifier works.
+Type parameters must be used in at least one field. They follow the same rules as function type parameters, a single uppercase letter by convention, but any identifier works.
 
 ### Instantiation
 

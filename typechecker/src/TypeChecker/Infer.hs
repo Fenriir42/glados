@@ -13,6 +13,7 @@ import AST.Types.AST
     Expr (..),
     ForInit (..),
     FunctionDecl (..),
+    ImplDecl (..),
     LValue (..),
     MatchArm (..),
     MatchPattern (..),
@@ -68,7 +69,7 @@ import AST.Types.Type
     qualType,
   )
 import Control.Monad (foldM, foldM_, forM_, unless, void, when)
-import Control.Monad.State (State, modify)
+import Control.Monad.State.Strict (State, modify)
 import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -97,11 +98,12 @@ data TCState = TCState
     tcsBuiltinCallSites :: Map SourceSpan FuncName,
     tcsCallWithArgs :: Map SourceSpan (FuncName, FunctionType, [SourceSpan]),
     tcsVarUseSites :: Map SourceSpan (VarName, SourceSpan),
-    tcsVarDeclSites :: Map SourceSpan (VarName, SourceSpan)
+    tcsVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
+    tcsMethodCallMap :: Map SourceSpan FuncName
   }
 
 initialTCState :: TCState
-initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
+initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type TC = State TCState
 
@@ -131,6 +133,10 @@ recordVarUse useSp name defSp =
 recordVarDecl :: SourceSpan -> VarName -> SourceSpan -> TC ()
 recordVarDecl nameSp name stmtSp =
   modify $ \s -> s {tcsVarDeclSites = Map.insert nameSp (name, stmtSp) (tcsVarDeclSites s)}
+
+recordMethodCall :: SourceSpan -> FuncName -> TC ()
+recordMethodCall sp fname =
+  modify $ \s -> s {tcsMethodCallMap = Map.insert sp fname (tcsMethodCallMap s)}
 
 -- ---------------------------------------------------------------------------
 -- Expression inference
@@ -224,6 +230,26 @@ inferExpr env (Located sp expr) = do
       if length types == length elems
         then return (Just (TypeTuple types))
         else return Nothing
+    go (ExprMethodCall receiver (Located methodSp methodFuncName) args) = do
+      mReceiverType <- inferExpr env receiver
+      case structNameOf mReceiverType of
+        Just tname -> do
+          -- Real method call: Vec2.len(receiver, args)
+          let qualFname = FuncName (unTypeName tname <> "." <> unFuncName methodFuncName)
+          recordMethodCall methodSp qualFname
+          inferCall sp methodSp qualFname (receiver : args)
+        Nothing -> do
+          -- Module/qualified call fallback: reconstruct "module.method" from receiver expr
+          let qualFname = FuncName (receiverPrefix (unLocated receiver) <> unFuncName methodFuncName)
+          inferCall sp methodSp qualFname args
+      where
+        structNameOf (Just (TypeStruct n)) = Just n
+        structNameOf (Just (TypeGenericApp n _)) = Just n
+        structNameOf _ = Nothing
+        receiverPrefix (ExprVar (Located _ v)) = unVarName v <> "."
+        receiverPrefix (ExprField (Located _ e) (Located _ f)) =
+          receiverPrefix e <> unFieldName f <> "."
+        receiverPrefix _ = ""
     go (ExprStructInit (Located initSp tname) fieldExprs) = do
       mFieldTypes <- mapM (\(_, e) -> inferExpr env e) fieldExprs
       case lookupStruct tname env of
@@ -482,6 +508,7 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
 checkDecl :: Env -> Located (Decl ()) -> TC ()
 checkDecl env (Located _ decl) = case decl of
   DeclFunction _ fd -> checkFunction env fd
+  DeclImpl _ idecl -> mapM_ (checkFunction env . unLocated) (implMethods idecl)
   _ -> return ()
 
 checkFunction :: Env -> FunctionDecl () -> TC ()

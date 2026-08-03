@@ -76,6 +76,7 @@ test-suite compiler-test
     , ast
     , base                >=4.7 && <5
     , compiler
+    , containers
     , directory
     , filepath
     , hspec

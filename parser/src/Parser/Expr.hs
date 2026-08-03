@@ -55,6 +55,36 @@ parseExprCall = do
   Located endSpan _ <- matchSymbol ")"
   return $ Located (nameSpan <> endSpan) (ExprCall (Located nameSpan (FuncName name)) args)
 
+-- | Parse a method call: @receiver.method(args)@ where the dotted name is a
+-- single token produced by the lexer.  The last dot segment becomes the method
+-- name; everything before it becomes the receiver expression.
+-- This also handles module calls like @math.sqrt(x)@, the type checker
+-- distinguishes method calls from module calls at resolution time.
+parseExprMethodCall :: TokenParser (Located (Expr ann))
+parseExprMethodCall = do
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  -- Only match dotted names (at least one dot)
+  case T.breakOnEnd "." name of
+    ("", _) -> MP.empty
+    (_, "") -> MP.empty
+    (prefixWithDot, methodName) -> do
+      _ <- matchSymbol "("
+      args <- MP.sepBy parseExpr (matchSymbol ",")
+      Located endSpan _ <- matchSymbol ")"
+      let receiverText = T.dropEnd 1 prefixWithDot
+          receiverExpr = buildReceiver nameSpan receiverText
+          locMethod = Located nameSpan (FuncName methodName)
+      return $ Located (nameSpan <> endSpan) (ExprMethodCall receiverExpr locMethod args)
+  where
+    buildReceiver sp txt =
+      case T.splitOn "." txt of
+        [] -> Located sp (ExprVar (Located sp (VarName txt)))
+        (base : fields) ->
+          foldl'
+            (\e f -> Located sp (ExprField e (Located sp (FieldName f))))
+            (Located sp (ExprVar (Located sp (VarName base))))
+            fields
+
 -- | Parse a qualified function call of the form @module.function(args)@.
 -- Produces an @ExprCall@ with name @"module.function"@.
 parseExprDottedCall :: TokenParser (Located (Expr ann))
@@ -262,6 +292,7 @@ parsePrimary =
       parseExprLiteral,
       MP.try parseExprLambda,
       MP.try parseExprDottedCall,
+      MP.try parseExprMethodCall,
       MP.try parseExprCall,
       parseExprCast,
       parseExprParen,

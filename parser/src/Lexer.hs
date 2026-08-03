@@ -114,7 +114,8 @@ reservedNames =
     "orerror",
     "match",
     "extern",
-    "ptr"
+    "ptr",
+    "impl"
   ]
 
 tokInt :: Parser Token

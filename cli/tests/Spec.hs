@@ -9,7 +9,7 @@ import Parser.Decl (parseDecl)
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
 import Text.Megaparsec (errorBundlePretty, many, runParser)
-import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
+import TypeChecker (TypeCheckResult (..), tcErrors, tcMethodCallMap, typeCheck)
 import TypeChecker.Error (TypeCheckError (..))
 import VM (runProgram)
 
@@ -33,10 +33,11 @@ runPipeline src =
       case runParser (many parseDecl) "<test>" tokens of
         Left bundle -> return $ ParseError (errorBundlePretty bundle)
         Right decls -> do
-          let typeErrs = tcErrors (typeCheck (Program decls))
+          let tcResult = typeCheck (Program decls)
+              typeErrs = tcErrors tcResult
           if not (null typeErrs)
             then return $ TypeErrors typeErrs
-            else case compileProgram (Program decls) of
+            else case compileProgram (tcMethodCallMap tcResult) (Program decls) of
               Left err -> return $ CompileError (show err)
               Right bcs -> do
                 result <- runProgram bcs
@@ -61,10 +62,11 @@ runPipelineWithImports src =
           case declsOrErr of
             Left importErr -> return $ ImportError importErr
             Right decls -> do
-              let typeErrs = tcErrors (typeCheck (Program decls))
+              let tcResult = typeCheck (Program decls)
+                  typeErrs = tcErrors tcResult
               if not (null typeErrs)
                 then return $ TypeErrors typeErrs
-                else case compileProgram (Program decls) of
+                else case compileProgram (tcMethodCallMap tcResult) (Program decls) of
                   Left err -> return $ CompileError (show err)
                   Right bcs -> do
                     result <- runProgram bcs
@@ -88,10 +90,11 @@ runPipelineWithModule modName modSrc mainSrc =
             case declsOrErr of
               Left importErr -> return $ ImportError importErr
               Right decls -> do
-                let typeErrs = tcErrors (typeCheck (Program decls))
+                let tcResult = typeCheck (Program decls)
+                    typeErrs = tcErrors tcResult
                 if not (null typeErrs)
                   then return $ TypeErrors typeErrs
-                  else case compileProgram (Program decls) of
+                  else case compileProgram (tcMethodCallMap tcResult) (Program decls) of
                     Left err -> return $ CompileError (show err)
                     Right bcs -> do
                       result <- runProgram bcs

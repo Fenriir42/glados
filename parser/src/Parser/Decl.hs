@@ -1,7 +1,7 @@
 module Parser.Decl where
 
 import AST.Types.AST
-  ( Decl (DeclError, DeclErrorSet, DeclFFI, DeclFunction, DeclImport, DeclStruct),
+  ( Decl (DeclError, DeclErrorSet, DeclFFI, DeclFunction, DeclImpl, DeclImport, DeclStruct),
     ErrorDecl (..),
     ErrorSetDecl (..),
     FFIDecl (..),
@@ -14,12 +14,14 @@ import AST.Types.AST
         funcDeclReturnType,
         funcDeclTypeParams
       ),
+    ImplDecl (..),
     StructDecl (..),
     Visibility (..),
   )
-import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), Located (..), TypeName (..), unLocated, unTypeName)
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), Located (..), TypeName (..), VarName (..), unLocated, unTypeName, unVarName)
 import AST.Types.Type
   ( ArrayType (ArrayType),
+    Constness (..),
     ErrorField (..),
     ErrorSetMember (..),
     FunctionType (..),
@@ -204,6 +206,56 @@ parseDeclErrorSet = do
     isErrorsetKw (Located _ (TokIdentifier "errorset")) = True
     isErrorsetKw _ = False
 
+-- | Parse @impl TypeName { fn method(self, ...) -> R { ... } ... }@.
+-- Each method's @self@ parameter is replaced with @TypeName@ at parse time.
+parseDeclImpl :: TokenParser (Located (Decl ann))
+parseDeclImpl = do
+  Located visSpan visibility <- parseVisibility
+  Located implSpan _ <- matchKeyword "impl"
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  let tname = TypeName name
+  _ <- matchSymbol "{"
+  methods <- MP.many (parseImplMethod tname)
+  Located endSpan _ <- matchSymbol "}"
+  let combinedSpan = case visibility of
+        Static -> visSpan <> implSpan <> endSpan
+        Public -> implSpan <> endSpan
+      idecl = ImplDecl {implTypeName = Located nameSpan tname, implMethods = methods}
+  return $ Located combinedSpan (DeclImpl visibility idecl)
+
+-- | Parse one method inside an @impl@ block; @self@ is substituted with the
+-- enclosing struct type.
+parseImplMethod :: TypeName -> TokenParser (Located (FunctionDecl ann))
+parseImplMethod selfType = do
+  Located fnSpan _ <- matchKeyword "fn"
+  Located nameSpan (TokIdentifier mname) <- MP.satisfy isIdentifier
+  mTypeParams <- MP.optional $ do
+    _ <- matchSymbol "["
+    tvs <- MP.sepBy1 parseTypeVar (matchSymbol ",")
+    _ <- matchSymbol "]"
+    return tvs
+  let typeParams = fromMaybe [] mTypeParams
+  Located _ funcType <- parseFunctionType
+  Located bodySpan block <- parseBlock
+  let tvSet = Set.fromList (map (unTypeName . unLocated) typeParams)
+      qualSelf = QualifiedType Mutable (TypeStruct selfType)
+      substParam p@(Parameter pname ptype _)
+        | unVarName pname == "self" = p {paramType = qualSelf}
+        | qualType ptype == TypeStruct (TypeName "self") =
+            p {paramName = VarName "self", paramType = qualSelf}
+        | otherwise = subParam tvSet p
+      params = map (fmap substParam) (funcParams funcType)
+      qualFuncName = FuncName (unTypeName selfType <> "." <> mname)
+      fd =
+        FunctionDecl
+          { funcDeclName = Located nameSpan qualFuncName,
+            funcDeclTypeParams = typeParams,
+            funcDeclParams = params,
+            funcDeclReturnType = fmap (subQType tvSet) (funcReturnType funcType),
+            funcDeclBody = block
+          }
+  return $ Located (fnSpan <> bodySpan) fd
+
 parseDeclFFI :: TokenParser (Located (Decl ann))
 parseDeclFFI = do
   Located ffiSpan _ <- matchKeyword "extern"
@@ -242,6 +294,9 @@ parseDecl =
         _ <- MP.lookAhead (MP.try structStart)
         parseDeclStruct,
       do
+        _ <- MP.lookAhead (MP.try implStart)
+        parseDeclImpl,
+      do
         _ <- MP.lookAhead (MP.try errorStart)
         parseDeclError,
       do
@@ -257,6 +312,7 @@ parseDecl =
   where
     functionStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "fn"
     structStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isStructKw
+    implStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "impl"
     errorStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "error"
     errorsetStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isErrorsetKw
     isStaticId (Located _ (TokIdentifier "static")) = True

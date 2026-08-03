@@ -32,7 +32,7 @@ import System.Console.Haskeline
     simpleCompletion,
   )
 import Text.Megaparsec (errorBundlePretty, many, runParser)
-import TypeChecker (TypeCheckResult (..), typeCheck)
+import TypeChecker (TypeCheckResult (..), tcMethodCallMap, typeCheck)
 import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
 import VM (runProgram)
 import VM.Interpreter (VMError (..))
@@ -174,11 +174,12 @@ tryCompile config src existing = do
           case declsOrErr of
             Left importErr -> return (Left importErr)
             Right decls -> do
-              let typeErrs = tcErrors (typeCheck (Program decls))
+              let tcResult = typeCheck (Program decls)
+                  typeErrs = tcErrors tcResult
               case typeErrs of
                 errs@(_ : _) -> return (Left (concatMap formatTypeErr errs))
                 [] ->
-                  return $ case compileProgram (Program decls) of
+                  return $ case compileProgram (tcMethodCallMap tcResult) (Program decls) of
                     Left err -> Left (displayError err (lines src))
                     Right bcs -> Right (existing ++ bcs)
 

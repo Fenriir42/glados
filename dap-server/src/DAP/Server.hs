@@ -62,7 +62,7 @@ import System.IO
   )
 import System.Posix.IO (createPipe, fdToHandle)
 import Text.Megaparsec (many, runParser)
-import TypeChecker (tcErrors, typeCheck)
+import TypeChecker (tcErrors, tcMethodCallMap, typeCheck)
 import VM.Interpreter
   ( Frame (..),
     VMError (..),
@@ -638,10 +638,11 @@ doCompile stdlibDir fp = do
   decls <-
     resolveImports [takeDirectory fp, stdlibDir] rawDecls
       >>= either (ioError . userError) return
-  let typeErrs = tcErrors (typeCheck (Program decls))
+  let tcResult = typeCheck (Program decls)
+      typeErrs = tcErrors tcResult
   unless (null typeErrs) $
     ioError (userError ("type check failed with " ++ show (length typeErrs) ++ " error(s)"))
-  case compileProgram (Program decls) of
+  case compileProgram (tcMethodCallMap tcResult) (Program decls) of
     Left err -> ioError (userError (show err))
     Right bc -> return bc
 

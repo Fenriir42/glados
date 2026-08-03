@@ -8,6 +8,7 @@ module AST.Types.AST
     Decl (..),
     FunctionDecl (..),
     StructDecl (..),
+    ImplDecl (..),
     ModulePath (..),
     ImportTarget (..),
     ImportDecl (..),
@@ -80,6 +81,7 @@ instance Hashable Visibility
 data Decl ann
   = DeclFunction Visibility (FunctionDecl ann)
   | DeclStruct Visibility StructDecl
+  | DeclImpl Visibility (ImplDecl ann)
   | DeclImport ImportDecl
   | DeclError Visibility ErrorDecl
   | DeclErrorSet Visibility ErrorSetDecl
@@ -114,6 +116,12 @@ data StructDecl = StructDecl
   { structDeclName :: Located TypeName,
     structDeclTypeParams :: [Located TypeName],
     structDeclFields :: [Located StructField]
+  }
+  deriving stock (Show, Eq, Generic)
+
+data ImplDecl ann = ImplDecl
+  { implTypeName :: Located TypeName,
+    implMethods :: [Located (FunctionDecl ann)]
   }
   deriving stock (Show, Eq, Generic)
 
@@ -280,6 +288,11 @@ data Expr ann
       (Located Type)
   | -- | Tuple literal: @(a, b)@
     ExprTupleInit [Located (Expr ann)]
+  | -- | Method call: @receiver.method(args)@
+    ExprMethodCall
+      (Located (Expr ann))
+      (Located FuncName)
+      [Located (Expr ann)]
   deriving stock (Show, Eq, Generic)
 
 data LValue ann

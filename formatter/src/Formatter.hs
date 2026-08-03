@@ -10,6 +10,7 @@ import AST.Types.AST
     FFIFuncDecl (..),
     ForInit (..),
     FunctionDecl (..),
+    ImplDecl (..),
     ImportDecl (..),
     ImportTarget (..),
     LValue (..),
@@ -260,6 +261,7 @@ fmtDecl :: CommentsMap -> FormatOptions -> Int -> Located (Decl ()) -> Lines
 fmtDecl cm opts n (Located _ (DeclFunction vis fd)) =
   fmtFuncDecl cm opts n (spanLine (spanStart (blockSpan (funcDeclBody fd)))) vis fd
 fmtDecl _ opts n (Located _ (DeclStruct vis sd)) = fmtStructDecl opts n vis sd
+fmtDecl cm opts n (Located _ (DeclImpl vis idecl)) = fmtImplDecl cm opts n vis idecl
 fmtDecl _ _ _ (Located _ (DeclImport _)) = []
 fmtDecl _ opts n (Located _ (DeclError vis ed)) = fmtErrorDecl opts n vis ed
 fmtDecl _ opts n (Located _ (DeclErrorSet vis esd)) = fmtErrorSetDecl opts n vis esd
@@ -319,6 +321,17 @@ fmtStructDecl opts n vis sd =
           | Located _ f <- structDeclFields sd
         ]
    in [header] ++ dropTrailingComma opts rawFields ++ [ind opts n <> "}"]
+
+fmtImplDecl :: CommentsMap -> FormatOptions -> Int -> Visibility -> ImplDecl () -> Lines
+fmtImplDecl cm opts n vis idecl =
+  let tname = unTypeName (locValue (implTypeName idecl))
+      header = [ind opts n <> fmtVis vis <> "impl " <> tname <> " {"]
+      methods = concatMap (fmtMethod cm opts (n + 1)) (implMethods idecl)
+      footer = [ind opts n <> "}"]
+   in header ++ methods ++ footer
+  where
+    fmtMethod cm' opts' n' (Located _ fd) =
+      fmtFuncDecl cm' opts' n' (spanLine (spanStart (blockSpan (funcDeclBody fd)))) Public fd
 
 fmtErrorDecl :: FormatOptions -> Int -> Visibility -> ErrorDecl -> Lines
 fmtErrorDecl opts n vis ed =
@@ -591,6 +604,13 @@ fmtExpr opts n (ExprCast (Located _ e) (Located _ t)) =
   fmtType t <> "(" <> fmtExpr opts n e <> ")"
 fmtExpr opts n (ExprTupleInit elems) =
   "(" <> T.intercalate ", " [fmtExpr opts n (locValue e) | e <- elems] <> ")"
+fmtExpr opts n (ExprMethodCall (Located _ recv) (Located _ mname) args) =
+  fmtExpr opts n recv
+    <> "."
+    <> unFuncName mname
+    <> "("
+    <> T.intercalate ", " [fmtExpr opts n (locValue a) | a <- args]
+    <> ")"
 
 -- ---------------------------------------------------------------------------
 -- Literals

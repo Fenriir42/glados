@@ -17,6 +17,7 @@ import AST.Types.AST
     FFIFuncDecl (..),
     ForInit (..),
     FunctionDecl (..),
+    ImplDecl (..),
     LValue (..),
     MatchArm (..),
     MatchPattern (..),
@@ -181,7 +182,9 @@ data CompileState = CompileState
     -- FFI function table: name -> (lib path, C return type)
     csFfiFuncs :: Map FuncName (Text, CRetType),
     -- Bytecodes for lambda functions compiled inline (collected, emitted at end)
-    csLambdaBytecodes :: [Bytecode]
+    csLambdaBytecodes :: [Bytecode],
+    -- Maps method-name span to the resolved function name (from the type checker)
+    csMethodCallMap :: Map SourceSpan FuncName
   }
   deriving stock (Show)
 
@@ -204,7 +207,8 @@ initialState =
       csPrivateFunctions = Set.empty,
       csOriginModules = Map.empty,
       csFfiFuncs = Map.empty,
-      csLambdaBytecodes = []
+      csLambdaBytecodes = [],
+      csMethodCallMap = Map.empty
     }
 
 type Compile a = ExceptT CompileError (State CompileState) a
@@ -245,9 +249,9 @@ patchAll addrs target instrs = foldr (\a is -> patchJump is a target) instrs add
 -- ---------------------------------------------------------------------------
 -- Program entry
 
-compileProgram :: Program ann -> Either CompileError [Bytecode]
-compileProgram (Program decls) =
-  evalState (runExceptT go) initialState
+compileProgram :: Map SourceSpan FuncName -> Program ann -> Either CompileError [Bytecode]
+compileProgram methodCallMap (Program decls) =
+  evalState (runExceptT go) (initialState {csMethodCallMap = methodCallMap})
   where
     go :: Compile [Bytecode]
     go = do
@@ -257,7 +261,14 @@ compileProgram (Program decls) =
                 let d = unLocated decl,
                 DeclFunction vis fd <- [d]
             ]
-          funcs = map snd visDecls
+          implDecls =
+            [ (vis, fd)
+              | decl <- decls,
+                let d = unLocated decl,
+                DeclImpl vis idecl <- [d],
+                Located _ fd <- implMethods idecl
+            ]
+          funcs = map snd visDecls ++ map snd implDecls
           -- Static functions whose names contain '.' were imported from another
           -- module and are private helpers; calls to them from outside that
           -- module are rejected at the ExprCall site.
@@ -329,7 +340,9 @@ compileFunction funcDecl captureNames = do
         csFfiFuncs = csFfiFuncs oldState,
         -- Thread lambda bytecodes and the global lambda counter through
         csLambdaBytecodes = csLambdaBytecodes oldState,
-        csTempCount = csTempCount oldState
+        csTempCount = csTempCount oldState,
+        -- Thread the method call map through so ExprMethodCall can resolve names
+        csMethodCallMap = csMethodCallMap oldState
       }
   -- Parameters and captured variables are in scope from the start
   let paramNames = [paramName p | Located _ p <- funcDeclParams funcDecl]
@@ -646,6 +659,8 @@ freeVarsExpr = \case
   ExprSome e -> freeVarsExpr (unLocated e)
   ExprLambda _ _ b -> freeVarsBlock b
   ExprTupleInit elems -> foldMap (freeVarsExpr . unLocated) elems
+  ExprMethodCall recv _ args ->
+    freeVarsExpr (unLocated recv) <> foldMap (freeVarsExpr . unLocated) args
   ExprParen e -> freeVarsExpr (unLocated e)
   ExprCast e _ -> freeVarsExpr (unLocated e)
   ExprNone -> Set.empty
@@ -853,6 +868,24 @@ compileExpr = \case
       void $ emitInstruction IDup
       compileExpr (unLocated elemExpr)
       void $ emitInstruction (IFieldSet (FieldName (T.pack ("_" ++ show (i :: Int)))))
+  ExprMethodCall receiver (Located methodSp rawMethod) args -> do
+    methodMap <- gets csMethodCallMap
+    case Map.lookup methodSp methodMap of
+      Just resolvedFname -> do
+        -- Push extra args reversed, then receiver on top (self = first param = top of stack)
+        mapM_ (compileExpr . unLocated) (reverse args)
+        compileExpr (unLocated receiver)
+        void $ emitInstruction (ICall (FunctionRef resolvedFname) (1 + length args))
+      Nothing -> do
+        -- Module/qualified call: receiver text becomes part of the name
+        let qualFname = FuncName (qualPrefix (unLocated receiver) <> unFuncName rawMethod)
+        mapM_ (compileExpr . unLocated) (reverse args)
+        void $ emitInstruction (ICall (FunctionRef qualFname) (length args))
+    where
+      qualPrefix (ExprVar (Located _ v)) = unVarName v <> "."
+      qualPrefix (ExprField (Located _ e) (Located _ f)) =
+        qualPrefix e <> unFieldName f <> "."
+      qualPrefix _ = ""
   ExprParen expr -> compileExpr (unLocated expr)
   ExprCast expr castType -> do
     compileExpr (unLocated expr)

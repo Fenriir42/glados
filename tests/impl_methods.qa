@@ -1,0 +1,71 @@
+struct Vec2 {
+    x: float,
+    y: float,
+}
+
+impl Vec2 {
+    fn len_sq(self) -> float {
+        return self.x * self.x + self.y * self.y;
+    }
+
+    fn scale(self, factor: float) -> Vec2 {
+        return Vec2 { x: self.x * factor, y: self.y * factor };
+    }
+
+    fn add(self, other: Vec2) -> Vec2 {
+        return Vec2 { x: self.x + other.x, y: self.y + other.y };
+    }
+
+    fn dot(self, other: Vec2) -> float {
+        return self.x * other.x + self.y * other.y;
+    }
+}
+
+struct Counter {
+    value: int,
+}
+
+impl Counter {
+    fn increment(self) -> Counter {
+        return Counter { value: self.value + 1 };
+    }
+
+    fn reset(self) -> Counter {
+        return Counter { value: 0 };
+    }
+
+    fn get(self) -> int {
+        return self.value;
+    }
+
+    fn add_n(self, n: int) -> Counter {
+        return Counter { value: self.value + n };
+    }
+}
+
+fn main() -> void {
+    # Vec2 methods
+    v: Vec2 = Vec2 { x: 3.0, y: 4.0 };
+    println(v.len_sq());
+
+    w: Vec2 = v.scale(2.0);
+    println(w.x);
+    println(w.y);
+
+    a: Vec2 = Vec2 { x: 1.0, y: 2.0 };
+    b: Vec2 = Vec2 { x: 3.0, y: 4.0 };
+    c: Vec2 = a.add(b);
+    println(c.x);
+    println(c.y);
+
+    println(a.dot(b));
+
+    # Counter methods
+    cnt: Counter = Counter { value: 0 };
+    cnt = cnt.increment();
+    cnt = cnt.increment();
+    cnt = cnt.add_n(8);
+    println(cnt.get());
+    cnt = cnt.reset();
+    println(cnt.get());
+}

@@ -127,6 +127,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~Closures capturing environment~~ | Done, see "What's complete" table |
 | Enum types | Named variants without payload, e.g. `enum Direction { North, South, East, West }`; matchable in `match`; distinct from the error system |
 | ~~Generic structs~~ | Done, see "What's complete" table |
+| ~~Inherent impl blocks~~ | Done — `impl MyStruct { fn method(self, ...) -> R { ... } }` with `v.method(args)` call syntax; methods compile as regular functions (`TypeName.method`); see `tests/impl_methods.qa` |
 | Interfaces | `interface Printable { fn print(self) }` + `impl Printable for MyStruct { ... }`; enables ad-hoc polymorphism and replaces duck-typing patterns |
 | Operator overloading | `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }`, at least `+`, `-`, `*`, `/`, `==`, `<` |
 | Destructuring | `let (x, y) = point` for tuples; `let { name, age } = person` for structs in `let` bindings and `match` arms |

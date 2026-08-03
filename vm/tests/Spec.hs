@@ -6,6 +6,7 @@ import AST.Types.AST (Program (..))
 import AST.Types.Common (FuncName (..))
 import Compiler.Bytecode (Value (..))
 import Compiler.Codegen (compileProgram)
+import qualified Data.Map as Map
 import Lib (lexString)
 import Parser.Decl (parseDecl)
 import Test.Hspec
@@ -25,7 +26,7 @@ run src =
       case runParser (many parseDecl) "<test>" tokens of
         Left bundle -> return $ Left $ VMRuntimeError ("parse: " ++ errorBundlePretty bundle)
         Right decls ->
-          case compileProgram (Program decls) of
+          case compileProgram Map.empty (Program decls) of
             Left err -> return $ Left $ VMRuntimeError ("compile: " ++ show err)
             Right bcs -> runProgram bcs
 

@@ -46,7 +46,7 @@ import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
 import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
 import Text.Megaparsec (errorBundlePretty, many, runParser)
-import TypeChecker (TypeCheckResult (..), tcErrors, typeCheck)
+import TypeChecker (TypeCheckResult (..), tcErrors, tcMethodCallMap, typeCheck)
 import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
 import VM (runFunction, runFunctionCov, runFunctionLineCov, runProgram)
 import VM.Interpreter (VMError (..))
@@ -79,7 +79,8 @@ compileSource stdlibDir filePath = do
   decls <-
     resolveImports [takeDirectory filePath, stdlibDir] rawDecls
       >>= orDie "import error"
-  let typeErrs = tcErrors (typeCheck (Program decls))
+  let tcResult = typeCheck (Program decls)
+      typeErrs = tcErrors tcResult
   unless (null typeErrs) $ do
     stdFuncs <- collectStdlibFuncNames stdlibDir
     let (implicitWarns, realErrors) = partition (isImplicitStdlib stdFuncs) typeErrs
@@ -87,7 +88,7 @@ compileSource stdlibDir filePath = do
     unless (null realErrors) $ do
       mapM_ (\e -> printErr (displayTypeError e (lines src))) realErrors
       exitFailure
-  case compileProgram (Program decls) of
+  case compileProgram (tcMethodCallMap tcResult) (Program decls) of
     Left err -> printErr (displayError err (lines src)) >> exitFailure
     Right bc -> return bc
 
@@ -111,7 +112,8 @@ compileSourceWith extraDirs filePath = do
   decls <-
     resolveImports (takeDirectory filePath : extraDirs) rawDecls
       >>= orDie "import error"
-  let typeErrs = tcErrors (typeCheck (Program decls))
+  let tcResult = typeCheck (Program decls)
+      typeErrs = tcErrors tcResult
   unless (null typeErrs) $ do
     stdFuncs <- case extraDirs of
       (stdlib : _) -> collectStdlibFuncNames stdlib
@@ -121,7 +123,7 @@ compileSourceWith extraDirs filePath = do
     unless (null realErrors) $ do
       mapM_ (\e -> printErr (displayTypeError e (lines src))) realErrors
       exitFailure
-  case compileProgram (Program decls) of
+  case compileProgram (tcMethodCallMap tcResult) (Program decls) of
     Left err -> printErr (displayError err (lines src)) >> exitFailure
     Right bc -> return bc
 

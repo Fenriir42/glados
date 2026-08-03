@@ -67,6 +67,7 @@ test-suite vm-test
     , ast
     , base
     , compiler
+    , containers
     , hspec
     , megaparsec
     , parser
