@@ -33,9 +33,11 @@ findTypeDefinition exprTypes structDefSites fp lspLine lspCol = do
 -- Unwraps one level of TypeArray so `[ParseError]` also works.
 structTypeName :: Type -> Maybe TypeName
 structTypeName (TypeStruct n) = Just n
+structTypeName (TypeGenericApp n _) = Just n
 structTypeName (TypeArray (ArrayType qt)) =
   case qualType qt of
     TypeStruct n -> Just n
+    TypeGenericApp n _ -> Just n
     _ -> Nothing
 structTypeName _ = Nothing
 

@@ -205,6 +205,7 @@ instance Show StructField where
 
 data StructType = StructType
   { structName :: TypeName,
+    structTypeParams :: [TypeName],
     structFields :: [StructField]
   }
   deriving stock (Eq, Ord, Generic)
@@ -212,12 +213,17 @@ data StructType = StructType
 instance Hashable StructType
 
 instance Show StructType where
-  show (StructType name fields) =
+  show (StructType name tvs fields) =
     "struct "
       ++ T.unpack (unTypeName name)
+      ++ tpStr
       ++ " { "
       ++ intercalate ", " (map show fields)
       ++ " }"
+    where
+      tpStr
+        | null tvs = ""
+        | otherwise = "[" ++ intercalate ", " (map (T.unpack . unTypeName) tvs) ++ "]"
 
 data ErrorField = ErrorField
   { errorFieldName :: FieldName,
@@ -330,6 +336,8 @@ data Type
     TypeVar TypeName
   | -- | Tuple types: @(int, str)@
     TypeTuple [QualifiedType]
+  | -- | Generic struct instantiation: @Pair[int, str]@
+    TypeGenericApp TypeName [QualifiedType]
   deriving stock (Eq, Ord, Generic)
 
 instance Hashable Type
@@ -345,6 +353,8 @@ instance Show Type where
   show (TypeNamed name) = T.unpack (unTypeName name)
   show (TypeVar name) = T.unpack (unTypeName name)
   show (TypeTuple types) = "(" ++ intercalate ", " (map show types) ++ ")"
+  show (TypeGenericApp name args) =
+    T.unpack (unTypeName name) ++ "[" ++ intercalate ", " (map show args) ++ "]"
 
 isNumericType :: Type -> Bool
 isNumericType (TypePrimitive (PrimInt _)) = True

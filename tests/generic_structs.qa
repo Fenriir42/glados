@@ -1,0 +1,58 @@
+struct Pair[A, B] {
+    first: A,
+    second: B,
+}
+
+struct Box[T] {
+    value: T,
+    tag: str,
+}
+
+fn make_pair[A, B](a: A, b: B) -> Pair[A, B] {
+    return Pair { first: a, second: b };
+}
+
+fn get_first[A, B](p: Pair[A, B]) -> A {
+    return p.first;
+}
+
+fn get_second[A, B](p: Pair[A, B]) -> B {
+    return p.second;
+}
+
+fn box_value[T](v: T, tag: str) -> Box[T] {
+    return Box { value: v, tag: tag };
+}
+
+fn swap[A, B](p: Pair[A, B]) -> Pair[B, A] {
+    return Pair { first: p.second, second: p.first };
+}
+
+fn main() -> void {
+    # Basic construction and field access
+    p: Pair[int, str] = Pair { first: 42, second: "hello" };
+    println(p.first);
+    println(p.second);
+
+    # Generic function returning generic struct
+    q: Pair[int, int] = make_pair(10, 20);
+    println(q.first);
+    println(q.second);
+
+    # Field access via generic functions
+    println(get_first(p));
+    println(get_second(p));
+
+    # Box with concrete types
+    b1: Box[int] = box_value(99, "count");
+    b2: Box[str] = box_value("world", "label");
+    println(b1.value);
+    println(b1.tag);
+    println(b2.value);
+    println(b2.tag);
+
+    # Swap generic struct fields
+    s: Pair[str, int] = swap(p);
+    println(s.first);
+    println(s.second);
+}

@@ -15,7 +15,7 @@ import AST.Types.Type
     QualifiedType (QualifiedType),
     ResultType (ResultType),
     Signedness (..),
-    Type (TypeArray, TypeDict, TypeFunction, TypeOption, TypePrimitive, TypeResult, TypeStruct, TypeTuple),
+    Type (TypeArray, TypeDict, TypeFunction, TypeGenericApp, TypeOption, TypePrimitive, TypeResult, TypeStruct, TypeTuple),
     defaultFloatType,
     defaultIntType,
   )
@@ -220,6 +220,12 @@ parseType =
       fmap TypeArray <$> parseArrayType,
       parseTupleType,
       MP.try (fmap TypeFunction <$> parseFunctionType),
+      MP.try $ do
+        Located startSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+        _ <- matchSymbol "["
+        args <- MP.sepBy1 parseQualifiedType (matchSymbol ",")
+        Located endSpan _ <- matchSymbol "]"
+        return $ Located (startSpan <> endSpan) (TypeGenericApp (TypeName name) (map unLocated args)),
       do
         Located span (TokIdentifier name) <- MP.satisfy isIdentifier
         return $ Located span (TypeStruct (TypeName name))

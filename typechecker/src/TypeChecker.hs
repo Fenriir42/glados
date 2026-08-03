@@ -73,8 +73,9 @@ typeCheck prog =
     collectStruct :: Located (Decl ()) -> Env -> Env
     collectStruct (Located _ (DeclStruct _ sd)) env =
       let tname = unLocated (structDeclName sd)
+          tvs = map unLocated (structDeclTypeParams sd)
           fields = map unLocated (structDeclFields sd)
-       in insertStruct tname (StructType tname fields) env
+       in insertStruct tname (StructType tname tvs fields) env
     collectStruct _ env = env
 
     collectError :: Located (Decl ()) -> Env -> Env

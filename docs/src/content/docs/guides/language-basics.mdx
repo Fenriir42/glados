@@ -524,6 +524,88 @@ fn main() -> void {
 }
 ```
 
+## Generic Structs
+
+A struct can be parameterised over one or more type variables using square-bracket syntax after the name. The compiler infers the concrete type arguments from the values you provide at initialisation; the resulting type carries full type information for field access and return types.
+
+### Declaration
+
+```quant
+struct Pair[A, B] {
+    first: A,
+    second: B,
+}
+
+struct Box[T] {
+    value: T,
+    tag: str,
+}
+```
+
+Type parameters must be used in at least one field. They follow the same rules as function type parameters — a single uppercase letter by convention, but any identifier works.
+
+### Instantiation
+
+Provide the concrete type arguments in the variable declaration; the right-hand side fills the fields as usual:
+
+```quant
+fn main() -> void {
+    p: Pair[int, str] = Pair { first: 42, second: "hello" };
+    println(p.first);    // 42
+    println(p.second);   // hello
+
+    b: Box[int] = Box { value: 99, tag: "count" };
+    println(b.value);    // 99
+    println(b.tag);      // count
+}
+```
+
+### Generic functions over generic structs
+
+Functions can take generic struct instances as parameters by mirroring the struct's type parameters:
+
+```quant
+fn get_first[A, B](p: Pair[A, B]) -> A {
+    return p.first;
+}
+
+fn get_second[A, B](p: Pair[A, B]) -> B {
+    return p.second;
+}
+
+fn swap[A, B](p: Pair[A, B]) -> Pair[B, A] {
+    return Pair { first: p.second, second: p.first };
+}
+
+fn main() -> void {
+    p: Pair[int, str] = Pair { first: 7, second: "hello" };
+    println(get_first(p));    // 7
+    println(get_second(p));   // hello
+
+    s: Pair[str, int] = swap(p);
+    println(s.first);         // hello
+    println(s.second);        // 7
+}
+```
+
+The type checker resolves field types through the type-argument binding at each call site; no runtime overhead is added (the implementation is type-erased, like generic functions).
+
+### Returning generic structs
+
+A constructor helper is the idiomatic pattern:
+
+```quant
+fn make_pair[A, B](a: A, b: B) -> Pair[A, B] {
+    return Pair { first: a, second: b };
+}
+
+fn main() -> void {
+    q: Pair[int, int] = make_pair(10, 20);
+    println(q.first);    // 10
+    println(q.second);   // 20
+}
+```
+
 ## Generics
 
 Quant supports parametric polymorphism through type parameters declared in square brackets after the function name. A generic function works with any concrete type supplied at the call site; the type checker verifies correctness for each use.

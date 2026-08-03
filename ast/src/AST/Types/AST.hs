@@ -112,6 +112,7 @@ data FunctionDecl ann = FunctionDecl
 
 data StructDecl = StructDecl
   { structDeclName :: Located TypeName,
+    structDeclTypeParams :: [Located TypeName],
     structDeclFields :: [Located StructField]
   }
   deriving stock (Show, Eq, Generic)

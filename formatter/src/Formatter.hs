@@ -298,11 +298,17 @@ fmtParam p =
 
 fmtStructDecl :: FormatOptions -> Int -> Visibility -> StructDecl -> Lines
 fmtStructDecl opts n vis sd =
-  let header =
+  let tps = structDeclTypeParams sd
+      tpStr =
+        if null tps
+          then ""
+          else "[" <> T.intercalate ", " (map (unTypeName . locValue) tps) <> "]"
+      header =
         ind opts n
           <> fmtVis vis
           <> "struct "
           <> unTypeName (locValue (structDeclName sd))
+          <> tpStr
           <> " {"
       rawFields =
         [ ind opts (n + 1)
@@ -375,6 +381,8 @@ fmtType (TypeDict k v) = "dict(" <> fmtType k <> ", " <> fmtType v <> ")"
 fmtType (TypeNamed (TypeName nm)) = nm
 fmtType (TypeVar (TypeName nm)) = nm
 fmtType (TypeTuple ts) = "(" <> T.intercalate ", " (map fmtQType ts) <> ")"
+fmtType (TypeGenericApp (TypeName nm) args) =
+  nm <> "[" <> T.intercalate ", " (map fmtQType args) <> "]"
 
 fmtFuncTypeText :: FunctionType -> Text
 fmtFuncTypeText (FunctionType params ret) =

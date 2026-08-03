@@ -27,6 +27,7 @@ Current state of the `feat/revival` branch as of 2026-07-23.
 | First-class functions | Done | `(T) -> R` type syntax; `ILoadFunc` + `ICallIndirect` instructions; lambdas |
 | Closures | Done | Lambdas capture enclosing locals by value; `VClosure` + `IMakeClosure` bytecode; value-capture semantics; `tests/closures.qa` |
 | Tuples | Done | `(int, str)` type syntax; `(a, b)` literal; `.0`/`.1` indexed access; destructuring in `let` and `match`; `tests/tuples.qa` |
+| Generic structs | Done | `struct Pair[A, B]` syntax; `TypeGenericApp` type node; field type inference at init site; field access with type-var resolution; `tests/generic_structs.qa` |
 | Dict type | Done | `dict(K, V)`, `{}` literal, subscript get/set; `dict.*` builtins |
 | FFI | Done | `extern "lib.so" { fn … }` blocks; `dlopen`/`dlsym` + libffi; types: `int`, `float`, `bool`, `str`, `void` |
 | FFI variadics | Done | `...T` param syntax in `extern` blocks; uses `ffi_prep_cif_var`; args passed flat past fixed params |
@@ -125,7 +126,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~Tuples~~ | Done, see "What's complete" table |
 | ~~Closures capturing environment~~ | Done, see "What's complete" table |
 | Enum types | Named variants without payload, e.g. `enum Direction { North, South, East, West }`; matchable in `match`; distinct from the error system |
-| Generic structs | `struct Pair[A, B] { first: A, second: B }`; instantiated at call sites; type-erased like generic functions |
+| ~~Generic structs~~ | Done, see "What's complete" table |
 | Interfaces | `interface Printable { fn print(self) }` + `impl Printable for MyStruct { ... }`; enables ad-hoc polymorphism and replaces duck-typing patterns |
 | Operator overloading | `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }`, at least `+`, `-`, `*`, `/`, `==`, `<` |
 | Destructuring | `let (x, y) = point` for tuples; `let { name, age } = person` for structs in `let` bindings and `match` arms |

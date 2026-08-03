@@ -55,7 +55,7 @@ import AST.Types.Type
     QualifiedType (..),
     ResultType (..),
     StructField (..),
-    StructType (..),
+    StructType (structFields, structTypeParams),
     Type (..),
     defaultFloatType,
     defaultIntType,
@@ -194,6 +194,14 @@ inferExpr env (Located sp expr) = do
               let fname = unLocated locField
                   mSf = find (\f -> fieldName f == fname) (structFields st)
                in return (fmap (qualType . fieldType) mSf)
+        Just (TypeGenericApp tname typeArgs) ->
+          case lookupStruct tname env of
+            Nothing -> return Nothing
+            Just st ->
+              let fname = unLocated locField
+                  mSf = find (\f -> fieldName f == fname) (structFields st)
+                  binding = Map.fromList (zip (structTypeParams st) (map qualType typeArgs))
+               in return (fmap (applyBindings binding . qualType . fieldType) mSf)
         -- TypeNamed is used for error-bound variables in err(E v) match arms
         Just (TypeNamed tname) ->
           case lookupError (ErrorName (unTypeName tname)) env of
@@ -217,14 +225,30 @@ inferExpr env (Located sp expr) = do
         then return (Just (TypeTuple types))
         else return Nothing
     go (ExprStructInit (Located initSp tname) fieldExprs) = do
-      forM_ fieldExprs $ \(_, e) -> inferExpr env e
+      mFieldTypes <- mapM (\(_, e) -> inferExpr env e) fieldExprs
       case lookupStruct tname env of
         Just st -> do
           let provided = [fname | (Located _ fname, _) <- fieldExprs]
               missing = [fieldName f | f <- structFields st, fieldName f `notElem` provided]
           unless (null missing) $ recordError (TCMissingStructFields initSp tname missing)
-        Nothing -> return ()
-      return (Just (TypeStruct tname))
+          let tvs = structTypeParams st
+          if null tvs
+            then return (Just (TypeStruct tname))
+            else do
+              let fieldTypePairs =
+                    [ (qualType (fieldType sf), act)
+                      | ((Located _ fn, _), mAct) <- zip fieldExprs mFieldTypes,
+                        sf <- structFields st,
+                        fieldName sf == fn,
+                        Just act <- [mAct]
+                    ]
+                  binding = inferTypeVarBindings tvs (map fst fieldTypePairs) (map snd fieldTypePairs)
+                  typeArgs =
+                    [ QualifiedType Mutable (Map.findWithDefault (TypeVar tv) tv binding)
+                      | tv <- tvs
+                    ]
+              return (Just (TypeGenericApp tname typeArgs))
+        Nothing -> return (Just (TypeStruct tname))
     go (ExprArrayInit (Located _ elemType) elems) = do
       mapM_ (inferExpr env) elems
       return (Just (TypeArray (ArrayType (QualifiedType Mutable elemType))))
@@ -547,6 +571,14 @@ lvalueType env (Located _ lv) = case lv of
             let fname = unLocated locField
                 mSf = find (\f -> fieldName f == fname) (structFields st)
              in fmap (qualType . fieldType) mSf
+      Just (TypeGenericApp tname typeArgs) ->
+        case lookupStruct tname env of
+          Nothing -> Nothing
+          Just st ->
+            let fname = unLocated locField
+                mSf = find (\f -> fieldName f == fname) (structFields st)
+                binding = Map.fromList (zip (structTypeParams st) (map qualType typeArgs))
+             in fmap (applyBindings binding . qualType . fieldType) mSf
       _ -> Nothing
 
 -- | Two types are compatible when they can be used interchangeably.
@@ -589,6 +621,11 @@ typesCompatible t1 t2 = case (t1, t2) of
   (TypeTuple ts1, TypeTuple ts2) ->
     length ts1 == length ts2
       && all (\(q1, q2) -> typesCompatible (qualType q1) (qualType q2)) (zip ts1 ts2)
+  -- generic struct instantiations: compatible if same struct name and type args match
+  (TypeGenericApp n1 args1, TypeGenericApp n2 args2) ->
+    n1 == n2
+      && length args1 == length args2
+      && all (\(a1, a2) -> typesCompatible (qualType a1) (qualType a2)) (zip args1 args2)
   _ -> False
 
 -- ---------------------------------------------------------------------------
@@ -619,6 +656,9 @@ inferTypeVarBindings tvs formals actuals =
        in unifyOne tvs' r1 r2 m'
     unifyOne tvs' (TypeTuple ts1) (TypeTuple ts2) m =
       foldl (\acc (q1, q2) -> unifyOne tvs' (qualType q1) (qualType q2) acc) m (zip ts1 ts2)
+    unifyOne tvs' (TypeGenericApp n1 args1) (TypeGenericApp n2 args2) m
+      | n1 == n2 =
+          foldl (\acc (q1, q2) -> unifyOne tvs' (qualType q1) (qualType q2) acc) m (zip args1 args2)
     unifyOne _ _ _ m = m
 
 -- | Apply a type-variable binding map to a type, substituting TypeVar nodes.
@@ -630,6 +670,8 @@ applyBindings m (TypeOption t) = TypeOption (applyBindings m t)
 applyBindings m (TypeDict k v) = TypeDict (applyBindings m k) (applyBindings m v)
 applyBindings m (TypeTuple ts) =
   TypeTuple (map (\qt -> QualifiedType (qualConstness qt) (applyBindings m (qualType qt))) ts)
+applyBindings m (TypeGenericApp n args) =
+  TypeGenericApp n (map (\qt -> QualifiedType (qualConstness qt) (applyBindings m (qualType qt))) args)
 applyBindings m (TypeFunction ft) =
   TypeFunction
     ft

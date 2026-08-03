@@ -30,6 +30,7 @@ import AST.Types.Type
   )
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
+import qualified Data.Text as T
 import Parser.Import (parseImportDecl)
 import Parser.Stmt (parseBlock)
 import Parser.Type (parseFunctionType, parseQualifiedType, parseType)
@@ -53,6 +54,38 @@ parseVisibility = do
   where
     isStaticId (Located _ (TokIdentifier "static")) = True
     isStaticId _ = False
+
+-- | Parse a single type-parameter name (used in both @fn foo[T]@ and @struct Foo[T]@).
+parseTypeVar :: TokenParser (Located TypeName)
+parseTypeVar = do
+  Located sp (TokIdentifier tv) <- MP.satisfy isIdentifier
+  return (Located sp (TypeName tv))
+
+-- | Substitute type-variable names with @TypeVar@ in a qualified type.
+subQType :: Set.Set T.Text -> QualifiedType -> QualifiedType
+subQType tvs (QualifiedType c t) = QualifiedType c (subType tvs t)
+
+-- | Substitute type-variable names with @TypeVar@ in a type, recursing into
+-- compound types so that e.g. @[T]@, @(T, int)@, and @Pair[T, U]@ all work.
+subType :: Set.Set T.Text -> Type -> Type
+subType tvs (TypeStruct (TypeName n))
+  | Set.member n tvs = TypeVar (TypeName n)
+subType tvs (TypeArray (ArrayType qt)) =
+  TypeArray (ArrayType (subQType tvs qt))
+subType tvs (TypeFunction ft) =
+  TypeFunction
+    ft
+      { funcParams = map (fmap (subParam tvs)) (funcParams ft),
+        funcReturnType = fmap (subQType tvs) (funcReturnType ft)
+      }
+subType tvs (TypeTuple ts) = TypeTuple (map (subQType tvs) ts)
+subType tvs (TypeGenericApp n args) = TypeGenericApp n (map (subQType tvs) args)
+subType tvs (TypeOption t) = TypeOption (subType tvs t)
+subType tvs (TypeDict k v) = TypeDict (subType tvs k) (subType tvs v)
+subType _ t = t
+
+subParam :: Set.Set T.Text -> Parameter -> Parameter
+subParam tvs p = p {paramType = subQType tvs (paramType p)}
 
 parseDeclFunction :: TokenParser (Located (Decl ann))
 parseDeclFunction = do
@@ -82,27 +115,6 @@ parseDeclFunction = do
             funcDeclBody = block
           }
   return $ Located combinedSpan (DeclFunction visibility functionDecl)
-  where
-    parseTypeVar :: TokenParser (Located TypeName)
-    parseTypeVar = do
-      Located sp (TokIdentifier tv) <- MP.satisfy isIdentifier
-      return (Located sp (TypeName tv))
-
-    subQType tvs (QualifiedType c t) = QualifiedType c (subType tvs t)
-
-    subType tvs (TypeStruct (TypeName n))
-      | Set.member n tvs = TypeVar (TypeName n)
-    subType tvs (TypeArray (ArrayType qt)) =
-      TypeArray (ArrayType (subQType tvs qt))
-    subType tvs (TypeFunction ft) =
-      TypeFunction
-        ft
-          { funcParams = map (fmap (subParam tvs)) (funcParams ft),
-            funcReturnType = fmap (subQType tvs) (funcReturnType ft)
-          }
-    subType _ t = t
-
-    subParam tvs p = p {paramType = subQType tvs (paramType p)}
 
 parseStructField :: TokenParser (Located StructField)
 parseStructField = do
@@ -116,10 +128,23 @@ parseDeclStruct = do
   Located visSpan visibility <- parseVisibility
   Located structSpan (TokIdentifier _) <- MP.satisfy isStructKw
   Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  mTypeParams <- MP.optional $ do
+    _ <- matchSymbol "["
+    tvs <- MP.sepBy1 parseTypeVar (matchSymbol ",")
+    _ <- matchSymbol "]"
+    return tvs
+  let typeParams = fromMaybe [] mTypeParams
   _ <- matchSymbol "{"
   fields <- MP.sepEndBy parseStructField (matchSymbol ",")
   Located endSpan _ <- matchSymbol "}"
-  let sd = StructDecl (Located nameSpan (TypeName name)) fields
+  let tvSet = Set.fromList (map (unTypeName . unLocated) typeParams)
+      substFields = map (fmap (subStructField tvSet)) fields
+      sd =
+        StructDecl
+          { structDeclName = Located nameSpan (TypeName name),
+            structDeclTypeParams = typeParams,
+            structDeclFields = substFields
+          }
       combinedSpan = case visibility of
         Static -> visSpan <> structSpan <> endSpan
         Public -> structSpan <> endSpan
@@ -127,6 +152,7 @@ parseDeclStruct = do
   where
     isStructKw (Located _ (TokIdentifier "struct")) = True
     isStructKw _ = False
+    subStructField tvs sf = sf {fieldType = subQType tvs (fieldType sf)}
 
 parseErrorField :: TokenParser (Located ErrorField)
 parseErrorField = do
