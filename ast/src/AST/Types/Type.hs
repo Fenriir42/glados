@@ -328,6 +328,8 @@ data Type
     TypeNamed TypeName
   | -- | Generic type variable: @T@ in @fn foo[T](x: T) -> T@
     TypeVar TypeName
+  | -- | Tuple types: @(int, str)@
+    TypeTuple [QualifiedType]
   deriving stock (Eq, Ord, Generic)
 
 instance Hashable Type
@@ -342,6 +344,7 @@ instance Show Type where
   show (TypeDict k v) = "dict(" ++ show k ++ ", " ++ show v ++ ")"
   show (TypeNamed name) = T.unpack (unTypeName name)
   show (TypeVar name) = T.unpack (unTypeName name)
+  show (TypeTuple types) = "(" ++ intercalate ", " (map show types) ++ ")"
 
 isNumericType :: Type -> Bool
 isNumericType (TypePrimitive (PrimInt _)) = True

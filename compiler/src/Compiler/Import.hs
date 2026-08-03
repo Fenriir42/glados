@@ -209,6 +209,7 @@ stmtHasCall prefix = \case
       patHasCall (MatchRange lo hi) =
         exprHasCall prefix (unLocated lo) || exprHasCall prefix (unLocated hi)
       patHasCall _ = False
+  StmtTupleDecl _ _ e -> exprHasCall prefix (unLocated e)
 
 forInitHasCall :: Text -> ForInit () -> Bool
 forInitHasCall prefix = \case
@@ -237,6 +238,7 @@ exprHasCall prefix = \case
   ExprLambda _ _ body -> blockHasCall prefix body
   ExprParen e -> exprHasCall prefix (unLocated e)
   ExprCast e _ -> exprHasCall prefix (unLocated e)
+  ExprTupleInit elems -> any (exprHasCall prefix . unLocated) elems
 
 -- ---------------------------------------------------------------------------
 -- Prefix renaming (for real implementation modules)
@@ -300,6 +302,7 @@ renameStmt names prefix = \case
       renamePat (MatchLit e) = MatchLit (fmap rE e)
       renamePat (MatchRange lo hi) = MatchRange (fmap rE lo) (fmap rE hi)
       renamePat p = p
+  StmtTupleDecl vars qt e -> StmtTupleDecl vars qt (fmap rE e)
   where
     rE = renameExpr names prefix
     rB = renameBlock names prefix
@@ -346,6 +349,7 @@ renameExpr names prefix = \case
   ExprLambda params ret body -> ExprLambda params ret (renameBlock names prefix body)
   ExprParen e -> ExprParen (fmap rE e)
   ExprCast e t -> ExprCast (fmap rE e) t
+  ExprTupleInit elems -> ExprTupleInit (map (fmap rE) elems)
   where
     rE = renameExpr names prefix
 

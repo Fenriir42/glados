@@ -26,6 +26,7 @@ import AST.Types.AST
   )
 import AST.Types.Common
   ( ErrorName (..),
+    FieldName (..),
     FuncName (..),
     Line (..),
     Located (..),
@@ -577,6 +578,20 @@ compileStmt = \case
     modify $ \s -> s {csContinueJumps = addr : csContinueJumps s}
   StmtBlock block -> compileBlock block
   StmtMatch subj arms -> compileMatch subj arms
+  StmtTupleDecl vars _qt initExpr -> do
+    n <- gets csTempCount
+    modify $ \s -> s {csTempCount = n + 1}
+    let tmpVar = VarName (T.pack ("__tup_" ++ show n))
+    compileExpr (unLocated initExpr)
+    void $ emitInstruction (IStore tmpVar)
+    addToScope tmpVar
+    forM_ (zip [0 ..] vars) $ \(i, locVar) -> do
+      let v = unLocated locVar
+          fn = FieldName (T.pack ("_" ++ show (i :: Int)))
+      void $ emitInstruction (ILoad tmpVar)
+      void $ emitInstruction (IFieldGet fn)
+      void $ emitInstruction (IStore v)
+      addToScope v
 
 -- ---------------------------------------------------------------------------
 -- For-loop init
@@ -630,6 +645,7 @@ freeVarsExpr = \case
   ExprMust e -> freeVarsExpr (unLocated e)
   ExprSome e -> freeVarsExpr (unLocated e)
   ExprLambda _ _ b -> freeVarsBlock b
+  ExprTupleInit elems -> foldMap (freeVarsExpr . unLocated) elems
   ExprParen e -> freeVarsExpr (unLocated e)
   ExprCast e _ -> freeVarsExpr (unLocated e)
   ExprNone -> Set.empty
@@ -654,6 +670,7 @@ freeVarsStmt = \case
   StmtContinue -> Set.empty
   StmtBlock b -> freeVarsBlock b
   StmtMatch e arms -> freeVarsExpr (unLocated e) <> foldMap freeVarsMatchArm arms
+  StmtTupleDecl _ _ e -> freeVarsExpr (unLocated e)
 
 freeVarsLVal :: LValue ann -> Set VarName
 freeVarsLVal = \case
@@ -673,6 +690,7 @@ freeVarsPat :: MatchPattern ann -> Set VarName
 freeVarsPat = \case
   MatchLit e -> freeVarsExpr (unLocated e)
   MatchRange e1 e2 -> freeVarsExpr (unLocated e1) <> freeVarsExpr (unLocated e2)
+  MatchTuple _ -> Set.empty
   _ -> Set.empty
 
 -- ---------------------------------------------------------------------------
@@ -829,6 +847,12 @@ compileExpr = \case
     if null captures
       then void $ emitInstruction (ILoadFunc lambdaName)
       else void $ emitInstruction (IMakeClosure lambdaName captures)
+  ExprTupleInit elems -> do
+    void $ emitInstruction INewStruct
+    forM_ (zip [0 ..] elems) $ \(i, elemExpr) -> do
+      void $ emitInstruction IDup
+      compileExpr (unLocated elemExpr)
+      void $ emitInstruction (IFieldSet (FieldName (T.pack ("_" ++ show (i :: Int)))))
   ExprParen expr -> compileExpr (unLocated expr)
   ExprCast expr castType -> do
     compileExpr (unLocated expr)
@@ -937,6 +961,18 @@ compileMatchArm subjVar (MatchArm pat body) = case pat of
     exitJmp <- emitInstruction (IJump (InstructionPointer 0))
     nextArm <- gets (InstructionPointer . csInstructionCounter)
     modify $ \s -> s {csInstructions = patchJump (csInstructions s) falseJmp nextArm}
+    return [exitJmp]
+  MatchTuple vars -> do
+    -- Tuple patterns always match (type-checked statically); bind each element
+    forM_ (zip [0 ..] vars) $ \(i, locVar) -> do
+      let v = unLocated locVar
+          fn = FieldName (T.pack ("_" ++ show (i :: Int)))
+      void $ emitInstruction (ILoad subjVar)
+      void $ emitInstruction (IFieldGet fn)
+      void $ emitInstruction (IStore v)
+      addToScope v
+    compileLocatedStmt body
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
     return [exitJmp]
 
 -- ---------------------------------------------------------------------------

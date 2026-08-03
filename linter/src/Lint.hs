@@ -256,6 +256,7 @@ allDeclsStmt (StmtFor mInit _ _ body) =
     ++ allDeclsBlock body
 allDeclsStmt (StmtBlock b) = allDeclsBlock b
 allDeclsStmt (StmtMatch _ arms) = concatMap (allDeclsStmt . locValue . matchArmBody) arms
+allDeclsStmt (StmtTupleDecl vars _ _) = vars
 allDeclsStmt _ = []
 
 -- ---------------------------------------------------------------------------
@@ -363,6 +364,8 @@ lintStmt fp scopes sp stmt = case stmt of
     let exprDiags = lintExprDiags fp (locValue expr)
         armDiags = concatMap (lintMatchArm fp scopes) arms
      in (scopes, exprDiags ++ armDiags)
+  StmtTupleDecl _ _ e ->
+    (scopes, lintExprDiags fp (locValue e))
   StmtBreak -> (scopes, [])
   StmtContinue -> (scopes, [])
 
@@ -401,6 +404,7 @@ lintExprDiags fp = \case
   ExprSome e -> go e
   ExprParen e -> go e
   ExprCast e _ -> go e
+  ExprTupleInit elems -> concatMap go elems
   _ -> []
   where
     go = lintExprDiags fp . locValue
@@ -434,6 +438,7 @@ usedVarsStmt = \case
   StmtMatch expr arms ->
     usedVarsExpr (locValue expr)
       <> foldMap (usedVarsStmt . locValue . matchArmBody) arms
+  StmtTupleDecl _ _ e -> usedVarsExpr (locValue e)
   StmtBreak -> Set.empty
   StmtContinue -> Set.empty
 
@@ -466,6 +471,7 @@ usedVarsExpr = \case
   ExprLambda _ _ body -> usedVarsBlock body
   ExprParen e -> go e
   ExprCast e _ -> go e
+  ExprTupleInit elems -> foldMap go elems
   where
     go = usedVarsExpr . locValue
 

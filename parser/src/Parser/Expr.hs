@@ -16,6 +16,7 @@ import Parser.Type (parseParameter, parsePrimitiveType, parseQualifiedType)
 import Parser.Utils
   ( TokenParser,
     isIdentifier,
+    isIntDec,
     isInterpChunk,
     isInterpEnd,
     matchKeyword,
@@ -89,7 +90,7 @@ parseExprStructInit = do
 parseExprAccessChain :: TokenParser (Located (Expr ann))
 parseExprAccessChain = do
   base <- parseExprVar MP.<|> parseExprParen
-  suffixes <- MP.many (MP.try parseFieldSuffix MP.<|> parseIndexSuffix)
+  suffixes <- MP.many (MP.try parseFieldSuffix MP.<|> MP.try parseIntFieldSuffix MP.<|> parseIndexSuffix)
   return $ foldl (\e f -> f e) base suffixes
   where
     parseFieldSuffix = do
@@ -97,6 +98,14 @@ parseExprAccessChain = do
       Located fieldSpan (TokIdentifier fname) <- MP.satisfy isIdentifier
       return $ \e ->
         Located (getSpan e <> fieldSpan) (ExprField e (Located fieldSpan (FieldName fname)))
+    parseIntFieldSuffix = do
+      _ <- matchSymbol "."
+      Located fieldSpan tok <- MP.satisfy isIntDec
+      let idx = case tok of TokInt n _ -> n; _ -> 0
+      return $ \e ->
+        Located
+          (getSpan e <> fieldSpan)
+          (ExprField e (Located fieldSpan (FieldName (T.pack ("_" ++ show idx)))))
     parseIndexSuffix = do
       Located startSpan _ <- matchSymbol "["
       i <- parseExpr
@@ -160,9 +169,12 @@ parseExprCast = do
 parseExprParen :: TokenParser (Located (Expr ann))
 parseExprParen = do
   Located startSpan _ <- matchSymbol "("
-  expr <- parseExpr
+  first <- parseExpr
+  rest <- MP.many (matchSymbol "," >> parseExpr)
   Located endSpan _ <- matchSymbol ")"
-  return $ Located (startSpan <> endSpan) (ExprParen expr)
+  case rest of
+    [] -> return $ Located (startSpan <> endSpan) (ExprParen first)
+    _ -> return $ Located (startSpan <> endSpan) (ExprTupleInit (first : rest))
 
 parseExprMust :: TokenParser (Located (Expr ann))
 parseExprMust = do

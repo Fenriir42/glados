@@ -1,6 +1,6 @@
 module Parser.Type where
 
-import AST.Types.Common (ErrorName (..), Located (..), TypeName (..), VarName (..), getSpan, locSpan)
+import AST.Types.Common (ErrorName (..), Located (..), TypeName (..), VarName (..), getSpan, locSpan, unLocated)
 import AST.Types.Literal (IntBase (BaseDec))
 import AST.Types.Type
   ( ArrayType (ArrayType),
@@ -15,7 +15,7 @@ import AST.Types.Type
     QualifiedType (QualifiedType),
     ResultType (ResultType),
     Signedness (..),
-    Type (TypeArray, TypeDict, TypeFunction, TypeOption, TypePrimitive, TypeResult, TypeStruct),
+    Type (TypeArray, TypeDict, TypeFunction, TypeOption, TypePrimitive, TypeResult, TypeStruct, TypeTuple),
     defaultFloatType,
     defaultIntType,
   )
@@ -146,6 +146,19 @@ parseTypeParam = MP.try parseParameter MP.<|> parseAnonParam
           dotsSpan = maybe voidSpann locSpan mDots
       return $ Located (dotsSpan <> typeSpan) (Parameter (VarName "_") qt isVariadic)
 
+-- | Parse a tuple type: @(T1, T2)@ with at least two elements.
+-- Must not be followed by @->@ (which would make it a function type instead).
+parseTupleType :: TokenParser (Located Type)
+parseTupleType = MP.try $ do
+  Located startSpan _ <- matchSymbol "("
+  types <- MP.sepBy1 parseQualifiedType (matchSymbol ",")
+  Located endSpan _ <- matchSymbol ")"
+  MP.notFollowedBy (matchSymbol "->")
+  case types of
+    [] -> fail "empty tuple"
+    [_] -> fail "single-element tuple not supported"
+    _ -> return $ Located (startSpan <> endSpan) (TypeTuple (map unLocated types))
+
 parseFunctionType :: TokenParser (Located FunctionType)
 parseFunctionType = do
   Located span _ <- matchSymbol "("
@@ -205,7 +218,8 @@ parseType =
       parseDictType,
       fmap TypePrimitive <$> parsePrimitiveType,
       fmap TypeArray <$> parseArrayType,
-      fmap TypeFunction <$> parseFunctionType,
+      parseTupleType,
+      MP.try (fmap TypeFunction <$> parseFunctionType),
       do
         Located span (TokIdentifier name) <- MP.satisfy isIdentifier
         return $ Located span (TypeStruct (TypeName name))

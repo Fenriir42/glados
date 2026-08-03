@@ -187,6 +187,11 @@ data Stmt ann
   | StmtMatch
       (Located (Expr ann))
       [MatchArm ann]
+  | -- | Tuple destructuring: @(x, y): (int, str) = expr@
+    StmtTupleDecl
+      [Located VarName]
+      (Located QualifiedType)
+      (Located (Expr ann))
   deriving stock (Show, Eq, Generic)
 
 -- | A single pattern in a match arm.
@@ -205,6 +210,8 @@ data MatchPattern ann
     MatchRange (Located (Expr ann)) (Located (Expr ann))
   | -- | Wildcard; matches anything
     MatchWildcard
+  | -- | Tuple destructure pattern: @(x, y)@
+    MatchTuple [Located VarName]
   deriving stock (Show, Eq, Generic)
 
 -- | One arm of a match statement.
@@ -270,6 +277,8 @@ data Expr ann
     ExprCast
       (Located (Expr ann))
       (Located Type)
+  | -- | Tuple literal: @(a, b)@
+    ExprTupleInit [Located (Expr ann)]
   deriving stock (Show, Eq, Generic)
 
 data LValue ann

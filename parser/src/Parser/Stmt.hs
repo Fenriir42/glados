@@ -229,6 +229,20 @@ parseMatchPattern =
       MP.try $ do
         _ <- MP.satisfy isWildcardIdent
         return MatchWildcard,
+      -- tuple destructure: (x, y)
+      MP.try $ do
+        _ <- matchSymbol "("
+        vars <-
+          MP.sepBy1
+            ( do
+                Located vspan (TokIdentifier v) <- MP.satisfy isIdentifier
+                return (Located vspan (VarName v))
+            )
+            (matchSymbol ",")
+        _ <- matchSymbol ")"
+        case vars of
+          [_] -> fail "single-variable tuple pattern not supported"
+          _ -> return (MatchTuple vars),
       -- literal / expression
       MatchLit <$> parseExpr
     ]
@@ -249,10 +263,36 @@ parseStmtMatch = do
   let combinedSpan = matchSpan <> endSpan
   return $ Located combinedSpan (StmtMatch subj arms)
 
+-- | Parse a tuple destructuring declaration: @(x, y): (int, str) = expr@
+parseStmtTupleDecl :: TokenParser (Located (Stmt ann))
+parseStmtTupleDecl = MP.try $ do
+  Located startSpan _ <- matchSymbol "("
+  vars <-
+    MP.sepBy1
+      ( do
+          Located vspan (TokIdentifier v) <- MP.satisfy isIdentifier
+          return (Located vspan (VarName v))
+      )
+      (matchSymbol ",")
+  _ <- matchSymbol ")"
+  _ <- matchSymbol ":"
+  Located qtSpan qt <- parseQualifiedType
+  _ <- matchSymbol "="
+  Located exprSpan initExpr <- parseExpr
+  let combinedSpan = startSpan <> qtSpan <> exprSpan
+  case vars of
+    [_] -> fail "single-variable tuple decl not supported"
+    _ ->
+      return $
+        Located
+          combinedSpan
+          (StmtTupleDecl vars (Located qtSpan qt) (Located exprSpan initExpr))
+
 parseStmt :: TokenParser (Located (Stmt ann))
 parseStmt =
   MP.choice
-    [ MP.try parseStmtVarDecl,
+    [ MP.try parseStmtTupleDecl,
+      MP.try parseStmtVarDecl,
       MP.try parseStmtAssign,
       MP.try $ do
         expr <- parseLValue

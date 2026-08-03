@@ -1,0 +1,60 @@
+fn make_point(x: int, y: int) -> (int, int) {
+    return (x, y);
+}
+
+fn swap(t: (int, int)) -> (int, int) {
+    match t {
+        (a, b) => { return (b, a); };
+    };
+}
+
+fn fst(t: (int, str)) -> int {
+    return t.0;
+}
+
+fn snd(t: (int, str)) -> str {
+    return t.1;
+}
+
+fn sum_pair(t: (int, int)) -> int {
+    return t.0 + t.1;
+}
+
+fn main() -> void {
+    # Basic construction and indexed access
+    p: (int, int) = make_point(3, 4);
+    println(p.0);
+    println(p.1);
+
+    # Pass tuple to function and swap
+    s: (int, int) = swap(p);
+    println(s.0);
+    println(s.1);
+
+    # Mixed-type tuple
+    pair: (int, str) = (42, "hello");
+    println(fst(pair));
+    println(snd(pair));
+
+    # Tuple destructuring in let
+    (x, y): (int, int) = make_point(10, 20);
+    println(x);
+    println(y);
+
+    # Tuple in match arm
+    match p {
+        (a, b) => {
+            println(sum_pair((a, b)));
+        };
+    };
+
+    # Three-element tuple
+    triple: (int, int, int) = (100, 200, 300);
+    println(triple.0);
+    println(triple.1);
+    println(triple.2);
+
+    # Tuple returned inline, bound then accessed
+    q: (int, int) = make_point(7, 8);
+    println(q.0);
+}

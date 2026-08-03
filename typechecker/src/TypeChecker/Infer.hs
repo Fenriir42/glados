@@ -28,6 +28,7 @@ import AST.Types.Common
     VarName (..),
     locSpan,
     unErrorName,
+    unFieldName,
     unLocated,
     unTypeName,
   )
@@ -66,12 +67,13 @@ import AST.Types.Type
     qualConstness,
     qualType,
   )
-import Control.Monad (foldM_, forM_, unless, void, when)
+import Control.Monad (foldM, foldM_, forM_, unless, void, when)
 import Control.Monad.State (State, modify)
 import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
+import qualified Data.Text as T
 import TypeChecker.Builtins (builtinReturnType, isKnownBuiltin)
 import TypeChecker.Env
   ( Env (..),
@@ -200,7 +202,20 @@ inferExpr env (Located sp expr) = do
                   mEf = find (\f -> errorFieldName f == fname) (errorTypeFields et)
                in return (fmap errorFieldType mEf)
             Nothing -> return Nothing
+        Just (TypeTuple elemTypes) ->
+          let fname = unFieldName (unLocated locField)
+           in case reads (drop 1 (T.unpack fname)) of
+                [(idx, "")]
+                  | idx >= 0 && idx < length elemTypes ->
+                      return (Just (qualType (elemTypes !! idx)))
+                _ -> return Nothing
         _ -> return Nothing
+    go (ExprTupleInit elems) = do
+      mTypes <- mapM (inferExpr env) elems
+      let types = [QualifiedType Mutable t | Just t <- mTypes]
+      if length types == length elems
+        then return (Just (TypeTuple types))
+        else return Nothing
     go (ExprStructInit (Located initSp tname) fieldExprs) = do
       forM_ fieldExprs $ \(_, e) -> inferExpr env e
       case lookupStruct tname env of
@@ -419,6 +434,23 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
     mSubjType <- inferExpr env subj
     mapM_ (checkMatchArm env mSubjType) arms
     return env
+  StmtTupleDecl vars (Located _ tupleQt) initExpr -> do
+    mT <- inferExpr env initExpr
+    let elemTypes = case mT of
+          Just (TypeTuple ts) -> ts
+          _ -> case qualType tupleQt of
+            TypeTuple ts -> ts
+            _ -> []
+    let pairs = zip vars (elemTypes ++ repeat (QualifiedType Mutable (TypePrimitive PrimNone)))
+    foldM
+      ( \e (Located vsp v, qt) -> do
+          recordVarDecl vsp v stmtSpan
+          recordVarUse vsp v vsp
+          recordType vsp (qualType qt)
+          return (insertVarWithSpan v qt vsp e)
+      )
+      env
+      pairs
 
 -- ---------------------------------------------------------------------------
 -- Declaration checking
@@ -478,6 +510,20 @@ checkMatchArm env mSubjType (MatchArm pat body) = do
       void (inferExpr env hi)
       return env
     MatchWildcard -> return env
+    MatchTuple vars -> do
+      let elemTypes = case mSubjType of
+            Just (TypeTuple ts) -> ts
+            _ -> replicate (length vars) (QualifiedType Mutable (TypePrimitive PrimNone))
+          pairs = zip vars (elemTypes ++ repeat (QualifiedType Mutable (TypePrimitive PrimNone)))
+      foldM
+        ( \e (Located vsp v, qt) -> do
+            recordVarDecl vsp v vsp
+            recordVarUse vsp v vsp
+            recordType vsp (qualType qt)
+            return (insertVarWithSpan v qt vsp e)
+        )
+        env
+        pairs
   void (checkStmt armEnv body)
 
 -- ---------------------------------------------------------------------------
@@ -539,6 +585,10 @@ typesCompatible t1 t2 = case (t1, t2) of
   (TypeDict (TypePrimitive PrimNone) (TypePrimitive PrimNone), TypeDict _ _) -> True
   (TypeDict k1 v1, TypeDict k2 v2) ->
     typesCompatible k1 k2 && typesCompatible v1 v2
+  -- tuple types: compatible if same arity and element types are compatible
+  (TypeTuple ts1, TypeTuple ts2) ->
+    length ts1 == length ts2
+      && all (\(q1, q2) -> typesCompatible (qualType q1) (qualType q2)) (zip ts1 ts2)
   _ -> False
 
 -- ---------------------------------------------------------------------------
@@ -567,6 +617,8 @@ inferTypeVarBindings tvs formals actuals =
           r2 = qualType (unLocated (funcReturnType ft2))
           m' = foldl (\acc (f, a) -> unifyOne tvs' f a acc) m (zip ps1 ps2)
        in unifyOne tvs' r1 r2 m'
+    unifyOne tvs' (TypeTuple ts1) (TypeTuple ts2) m =
+      foldl (\acc (q1, q2) -> unifyOne tvs' (qualType q1) (qualType q2) acc) m (zip ts1 ts2)
     unifyOne _ _ _ m = m
 
 -- | Apply a type-variable binding map to a type, substituting TypeVar nodes.
@@ -576,6 +628,8 @@ applyBindings m (TypeArray (ArrayType qt)) =
   TypeArray (ArrayType (QualifiedType (qualConstness qt) (applyBindings m (qualType qt))))
 applyBindings m (TypeOption t) = TypeOption (applyBindings m t)
 applyBindings m (TypeDict k v) = TypeDict (applyBindings m k) (applyBindings m v)
+applyBindings m (TypeTuple ts) =
+  TypeTuple (map (\qt -> QualifiedType (qualConstness qt) (applyBindings m (qualType qt))) ts)
 applyBindings m (TypeFunction ft) =
   TypeFunction
     ft

@@ -374,6 +374,7 @@ fmtType (TypeOption t) = "option(" <> fmtType t <> ")"
 fmtType (TypeDict k v) = "dict(" <> fmtType k <> ", " <> fmtType v <> ")"
 fmtType (TypeNamed (TypeName nm)) = nm
 fmtType (TypeVar (TypeName nm)) = nm
+fmtType (TypeTuple ts) = "(" <> T.intercalate ", " (map fmtQType ts) <> ")"
 
 fmtFuncTypeText :: FunctionType -> Text
 fmtFuncTypeText (FunctionType params ret) =
@@ -441,6 +442,9 @@ fmtStmt cm opts n (Located sp stmt) = case stmt of
     [ind opts n <> "match " <> fmtExpr opts n expr <> " {"]
       ++ concatMap (fmtMatchArm cm opts n) arms
       ++ [ind opts n <> "}"]
+  StmtTupleDecl vars (Located _ qt) (Located _ e) ->
+    let names = "(" <> T.intercalate ", " [unVarName v | Located _ v <- vars] <> ")"
+     in [ind opts n <> names <> ": " <> fmtQType qt <> " = " <> fmtExpr opts n e]
 
 fmtElse :: CommentsMap -> FormatOptions -> Int -> Int -> Maybe (Block ()) -> Lines
 fmtElse _ opts n _ Nothing = [ind opts n <> "}"]
@@ -498,6 +502,8 @@ fmtMatchPat opts n (MatchLit (Located _ e)) = fmtExpr opts n e
 fmtMatchPat opts n (MatchRange (Located _ lo) (Located _ hi)) =
   fmtExpr opts n lo <> ".." <> fmtExpr opts n hi
 fmtMatchPat _ _ MatchWildcard = "_"
+fmtMatchPat _ _ (MatchTuple vars) =
+  "(" <> T.intercalate ", " [unVarName v | Located _ v <- vars] <> ")"
 
 -- ---------------------------------------------------------------------------
 -- LValues
@@ -575,6 +581,8 @@ fmtExpr opts _ (ExprLambda params ret body) =
 fmtExpr opts n (ExprParen (Located _ e)) = "(" <> fmtExpr opts n e <> ")"
 fmtExpr opts n (ExprCast (Located _ e) (Located _ t)) =
   fmtType t <> "(" <> fmtExpr opts n e <> ")"
+fmtExpr opts n (ExprTupleInit elems) =
+  "(" <> T.intercalate ", " [fmtExpr opts n (locValue e) | e <- elems] <> ")"
 
 -- ---------------------------------------------------------------------------
 -- Literals
