@@ -48,6 +48,8 @@ data Value
     VErrorVal ErrorName [(FieldName, Value)]
   | -- | reference to a named function (first-class function value)
     VFunction FuncName
+  | -- | closure: function reference paired with captured variable bindings
+    VClosure FuncName [(VarName, Value)]
   | -- | opaque C pointer stored as its raw address (runtime only)
     VPointer Word64
   | VUnit
@@ -172,7 +174,10 @@ data Instruction
     IIsErr ErrorName
   | -- | Push a VFunction (named function reference) onto the stack
     ILoadFunc FuncName
-  | -- | Call through a VFunction value: pop VFunction (below args), call it with argc args
+  | -- | Create a closure: reads named locals from the current frame, packages them
+    -- with the function reference, and pushes a VClosure onto the stack
+    IMakeClosure FuncName [VarName]
+  | -- | Call through a VFunction/VClosure value: pop callable (below args), call it with argc args
     ICallIndirect Int
   | -- | Call a C function from a shared library via libffi
     ICallFFI

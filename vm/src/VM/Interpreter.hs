@@ -614,47 +614,51 @@ execInstr = \case
       VErrorVal (ErrorName n) _ -> push (VBool (n == ename)) >> return Nothing
       _ -> push (VBool False) >> return Nothing
   ILoadFunc fname -> push (VFunction fname) >> return Nothing
+  IMakeClosure fname capVars -> do
+    locals <- gets vmLocals
+    let captured = [(v, Map.findWithDefault VUnit v locals) | v <- capVars]
+    push (VClosure fname captured)
+    return Nothing
   ICallIndirect argc -> do
     strings <- gets vmStrings
     funcs <- gets vmFunctions
     stk <- gets vmStack
-    -- Stack layout: [arg_0 (TOS), ..., arg_n-1, VFunction, rest...]
+    -- Stack layout: [arg_0 (TOS), ..., arg_n-1, callable, rest...]
     let (callArgs, rest) = splitAt argc stk
         resolvedArgs = map (resolveStringRef strings) callArgs
-    case rest of
-      (VFunction fname : remaining) ->
-        case Map.lookup fname funcs of
-          Just bc -> do
-            covM <- gets vmCoverage
-            S.liftIO $ case covM of
-              Just ref -> modifyIORef ref (Set.insert fname)
-              Nothing -> return ()
-            saveFrame
-            mapM_ (\case VArrayRef aid -> resolveArrayStrings strings aid; _ -> return ()) callArgs
-            -- Remove VFunction from stack; callee sees [arg_0..arg_n-1, remaining...]
-            modify $ \s ->
-              s
-                { vmStack = resolvedArgs ++ remaining,
-                  vmLocals = Map.empty,
-                  vmIP = 0,
-                  vmInstrs = bytecodeInstructions bc,
-                  vmStrings = bytecodeStrings bc,
-                  vmCurrentFunc = fname
-                }
-            return Nothing
-          Nothing -> do
-            -- Builtin: strip args + VFunction from stack, call, push result
-            modify $ \s -> s {vmStack = remaining}
-            result <-
-              if isHeapBuiltin (unFuncName fname)
-                then callHeapBuiltin (unFuncName fname) resolvedArgs
-                else
-                  if isBuiltin (unFuncName fname)
-                    then S.liftIO $ callBuiltin (unFuncName fname) strings resolvedArgs
-                    else throwError $ VMUndefinedFunction fname
-            push result
-            return Nothing
+    (fname, initLocals, remaining) <- case rest of
+      (VFunction fn : rest') -> return (fn, Map.empty, rest')
+      (VClosure fn caps : rest') -> return (fn, Map.fromList caps, rest')
       _ -> throwError $ VMRuntimeError "ICallIndirect: no function value on stack"
+    case Map.lookup fname funcs of
+      Just bc -> do
+        covM <- gets vmCoverage
+        S.liftIO $ case covM of
+          Just ref -> modifyIORef ref (Set.insert fname)
+          Nothing -> return ()
+        saveFrame
+        mapM_ (\case VArrayRef aid -> resolveArrayStrings strings aid; _ -> return ()) callArgs
+        modify $ \s ->
+          s
+            { vmStack = resolvedArgs ++ remaining,
+              vmLocals = initLocals,
+              vmIP = 0,
+              vmInstrs = bytecodeInstructions bc,
+              vmStrings = bytecodeStrings bc,
+              vmCurrentFunc = fname
+            }
+        return Nothing
+      Nothing -> do
+        modify $ \s -> s {vmStack = remaining}
+        result <-
+          if isHeapBuiltin (unFuncName fname)
+            then callHeapBuiltin (unFuncName fname) resolvedArgs
+            else
+              if isBuiltin (unFuncName fname)
+                then S.liftIO $ callBuiltin (unFuncName fname) strings resolvedArgs
+                else throwError $ VMUndefinedFunction fname
+        push result
+        return Nothing
   ICallFFI lib sym retTy argc -> do
     args <- popN argc
     strings <- gets vmStrings
@@ -1122,6 +1126,7 @@ showVal (VArrayRef _) = "[...]"
 showVal (VDictRef _) = "{...}"
 showVal (VStructRef _) = "struct(...)"
 showVal (VFunction f) = T.unpack (unFuncName f)
+showVal (VClosure f _) = "<closure:" ++ T.unpack (unFuncName f) ++ ">"
 showVal (VErrorVal e _) = T.unpack (unErrorName e)
 
 -- ---------------------------------------------------------------------------

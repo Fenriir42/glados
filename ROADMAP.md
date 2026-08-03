@@ -25,6 +25,7 @@ Current state of the `feat/revival` branch as of 2026-07-23.
 | Optional type | Done | `option(T)`, `some(v)`, `none` |
 | Generics | Done | Type-erased parametric polymorphism; `fn foo[T, U](...)`; call-site inference |
 | First-class functions | Done | `(T) -> R` type syntax; `ILoadFunc` + `ICallIndirect` instructions; lambdas |
+| Closures | Done | Lambdas capture enclosing locals by value; `VClosure` + `IMakeClosure` bytecode; value-capture semantics; `tests/closures.qa` |
 | Dict type | Done | `dict(K, V)`, `{}` literal, subscript get/set; `dict.*` builtins |
 | FFI | Done | `extern "lib.so" { fn … }` blocks; `dlopen`/`dlsym` + libffi; types: `int`, `float`, `bool`, `str`, `void` |
 | FFI variadics | Done | `...T` param syntax in `extern` blocks; uses `ffi_prep_cif_var`; args passed flat past fixed params |
@@ -121,7 +122,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | Feature | Notes |
 |---------|-------|
 | Tuples | `(int, str)` type syntax; `(a, b)` literal; destructuring in `let` and function params; lightweight multiple returns without a struct |
-| Closures capturing environment | Lambdas that close over locals from the enclosing scope; requires a heap-allocated capture record and an indirect call through it |
+| ~~Closures capturing environment~~ | Done — see "What's complete" table |
 | Enum types | Named variants without payload, e.g. `enum Direction { North, South, East, West }`; matchable in `match`; distinct from the error system |
 | Generic structs | `struct Pair[A, B] { first: A, second: B }`; instantiated at call sites; type-erased like generic functions |
 | Interfaces | `interface Printable { fn print(self) }` + `impl Printable for MyStruct { ... }`; enables ad-hoc polymorphism and replaces duck-typing patterns |

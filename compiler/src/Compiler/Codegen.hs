@@ -307,15 +307,15 @@ compileProgram (Program decls) =
             csOriginModules = originMods,
             csFfiFuncs = ffiFuncMap
           }
-      topLevelBcs <- mapM compileFunction funcs
+      topLevelBcs <- mapM (`compileFunction` Set.empty) funcs
       lambdaBcs <- gets csLambdaBytecodes
       return (topLevelBcs ++ lambdaBcs)
 
 -- ---------------------------------------------------------------------------
 -- Function
 
-compileFunction :: FunctionDecl ann -> Compile Bytecode
-compileFunction funcDecl = do
+compileFunction :: FunctionDecl ann -> Set VarName -> Compile Bytecode
+compileFunction funcDecl captureNames = do
   let funcName = unLocated (funcDeclName funcDecl)
   oldState <- get
   put
@@ -330,9 +330,9 @@ compileFunction funcDecl = do
         csLambdaBytecodes = csLambdaBytecodes oldState,
         csTempCount = csTempCount oldState
       }
-  -- Parameters are in scope from the start
+  -- Parameters and captured variables are in scope from the start
   let paramNames = [paramName p | Located _ p <- funcDeclParams funcDecl]
-  modify $ \s -> s {csScope = Set.fromList paramNames}
+  modify $ \s -> s {csScope = Set.fromList paramNames `Set.union` captureNames}
   mapM_ (\(Located _ p) -> void $ emitInstruction (IStore (paramName p))) (funcDeclParams funcDecl)
   compileBlock (funcDeclBody funcDecl)
   void $ emitInstruction (IPush VUnit)
@@ -608,6 +608,74 @@ compileLValueReadForWrite outerLoc inner = case unLocated inner of
     void $ emitInstruction (IFieldGet (unLocated locField))
 
 -- ---------------------------------------------------------------------------
+-- Free-variable analysis (for closure capture)
+
+freeVarsExpr :: Expr ann -> Set VarName
+freeVarsExpr = \case
+  ExprLiteral lit -> foldMap (freeVarsExpr . unLocated) lit
+  ExprVar v -> Set.singleton (unLocated v)
+  ExprBinary _ l r -> freeVarsExpr (unLocated l) <> freeVarsExpr (unLocated r)
+  ExprUnary _ e -> freeVarsExpr (unLocated e)
+  -- Also treat the callee name as a potential variable reference: when the
+  -- called name is a local (function-typed variable), it must be captured.
+  ExprCall (Located _ fname) args ->
+    Set.singleton (VarName (unFuncName fname)) <> foldMap (freeVarsExpr . unLocated) args
+  ExprIndex arr idx -> freeVarsExpr (unLocated arr) <> freeVarsExpr (unLocated idx)
+  ExprField e _ -> freeVarsExpr (unLocated e)
+  ExprStructInit _ fields -> foldMap (freeVarsExpr . unLocated . snd) fields
+  ExprArrayInit _ elems -> foldMap (freeVarsExpr . unLocated) elems
+  ExprDictLit pairs -> foldMap (\(k, v) -> freeVarsExpr (unLocated k) <> freeVarsExpr (unLocated v)) pairs
+  ExprError _ fields -> foldMap (freeVarsExpr . unLocated . snd) fields
+  ExprTry e -> freeVarsExpr (unLocated e)
+  ExprMust e -> freeVarsExpr (unLocated e)
+  ExprSome e -> freeVarsExpr (unLocated e)
+  ExprLambda _ _ b -> freeVarsBlock b
+  ExprParen e -> freeVarsExpr (unLocated e)
+  ExprCast e _ -> freeVarsExpr (unLocated e)
+  ExprNone -> Set.empty
+
+freeVarsBlock :: Block ann -> Set VarName
+freeVarsBlock (Block _ stmts) = foldMap (freeVarsStmt . unLocated) stmts
+
+freeVarsStmt :: Stmt ann -> Set VarName
+freeVarsStmt = \case
+  StmtVarDecl _ _ me -> maybe Set.empty (freeVarsExpr . unLocated) me
+  StmtAssign lv _ e -> freeVarsLVal (unLocated lv) <> freeVarsExpr (unLocated e)
+  StmtExpr e -> freeVarsExpr (unLocated e)
+  StmtIf c t me -> freeVarsExpr (unLocated c) <> freeVarsBlock t <> maybe Set.empty freeVarsBlock me
+  StmtWhile c b -> freeVarsExpr (unLocated c) <> freeVarsBlock b
+  StmtFor fi fc fs b ->
+    maybe Set.empty freeVarsForInit fi
+      <> maybe Set.empty (freeVarsExpr . unLocated) fc
+      <> maybe Set.empty (freeVarsStmt . unLocated) fs
+      <> freeVarsBlock b
+  StmtReturn me -> maybe Set.empty (freeVarsExpr . unLocated) me
+  StmtBreak -> Set.empty
+  StmtContinue -> Set.empty
+  StmtBlock b -> freeVarsBlock b
+  StmtMatch e arms -> freeVarsExpr (unLocated e) <> foldMap freeVarsMatchArm arms
+
+freeVarsLVal :: LValue ann -> Set VarName
+freeVarsLVal = \case
+  LVarRef v -> Set.singleton (unLocated v)
+  LArrayIndex lv idx -> freeVarsLVal (unLocated lv) <> freeVarsExpr (unLocated idx)
+  LFieldAccess lv _ -> freeVarsLVal (unLocated lv)
+
+freeVarsForInit :: ForInit ann -> Set VarName
+freeVarsForInit = \case
+  ForInitDecl _ _ e -> freeVarsExpr (unLocated e)
+  ForInitExpr e -> freeVarsExpr (unLocated e)
+
+freeVarsMatchArm :: MatchArm ann -> Set VarName
+freeVarsMatchArm (MatchArm pat body) = freeVarsPat pat <> freeVarsStmt (unLocated body)
+
+freeVarsPat :: MatchPattern ann -> Set VarName
+freeVarsPat = \case
+  MatchLit e -> freeVarsExpr (unLocated e)
+  MatchRange e1 e2 -> freeVarsExpr (unLocated e1) <> freeVarsExpr (unLocated e2)
+  _ -> Set.empty
+
+-- ---------------------------------------------------------------------------
 -- Expression
 
 compileExpr :: Expr ann -> Compile ()
@@ -737,6 +805,7 @@ compileExpr = \case
     n <- gets csTempCount
     modify $ \s -> s {csTempCount = n + 1}
     let lambdaName = FuncName (T.pack ("__lambda_" ++ show n))
+        paramSet = Set.fromList [paramName p | Located _ p <- params]
         lambdaDecl =
           FunctionDecl
             { funcDeclName = Located (blockSpan body) lambdaName,
@@ -751,9 +820,15 @@ compileExpr = \case
         { csKnownFunctions = Set.insert lambdaName (csKnownFunctions s),
           csFuncTypes = Map.insert lambdaName (FunctionType params retType) (csFuncTypes s)
         }
-    bc <- compileFunction lambdaDecl
+    -- Compute captures: free vars in body that are not params but are in the current scope
+    outerScope <- gets csScope
+    let referenced = freeVarsBlock body
+        captures = Set.toList (Set.intersection (Set.difference referenced paramSet) outerScope)
+    bc <- compileFunction lambdaDecl (Set.fromList captures)
     modify $ \s -> s {csLambdaBytecodes = csLambdaBytecodes s ++ [bc]}
-    void $ emitInstruction (ILoadFunc lambdaName)
+    if null captures
+      then void $ emitInstruction (ILoadFunc lambdaName)
+      else void $ emitInstruction (IMakeClosure lambdaName captures)
   ExprParen expr -> compileExpr (unLocated expr)
   ExprCast expr castType -> do
     compileExpr (unLocated expr)

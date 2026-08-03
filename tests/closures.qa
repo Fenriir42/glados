@@ -1,0 +1,65 @@
+// Closure showcase: lambdas that capture variables from their enclosing scope.
+
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x);
+}
+
+// Returns a closure that adds `n` to its argument.
+fn make_adder(n: int) -> (int) -> int {
+    return fn(x: int) -> int { return x + n; };
+}
+
+// Returns a closure that multiplies its argument by `factor`.
+fn make_multiplier(factor: int) -> (int) -> int {
+    return fn(x: int) -> int { return x * factor; };
+}
+
+// Returns a closure that composes two functions: g(f(x)).
+fn compose(f: (int) -> int, g: (int) -> int) -> (int) -> int {
+    return fn(x: int) -> int { return g(f(x)); };
+}
+
+fn main() -> void {
+    println("=== Closures ===");
+
+    // Basic capture: closure captures `n` by value
+    add5: (int) -> int = make_adder(5);
+    add10: (int) -> int = make_adder(10);
+    println(add5(3));    // 8
+    println(add10(3));   // 13
+
+    // Closures are independent: each call to make_adder creates a fresh capture
+    println(add5(20));   // 25
+    println(add10(20));  // 30
+
+    // Inline closures capture locals directly
+    base: int = 100;
+    offset: (int) -> int = fn(x: int) -> int { return base + x; };
+    println(offset(7));  // 107
+
+    // Multiple captured variables
+    a: int = 3;
+    b: int = 4;
+    hyp_sq: () -> int = fn() -> int { return a * a + b * b; };
+    println(hyp_sq());   // 25
+
+    // Passing a closure to a higher-order function
+    times3: (int) -> int = make_multiplier(3);
+    println(apply(times3, 7));   // 21
+    println(apply(add5, 100));   // 105
+
+    // Composing closures
+    add2: (int) -> int = make_adder(2);
+    times10: (int) -> int = make_multiplier(10);
+    add2_then_times10: (int) -> int = compose(add2, times10);
+    println(add2_then_times10(5));  // (5+2)*10 = 70
+
+    // Value-capture semantics: mutation of the outer variable after closure
+    // creation does NOT affect the closure's captured copy
+    n: int = 42;
+    get_n: () -> int = fn() -> int { return n; };
+    n = 999;
+    println(get_n());    // 42  (captured the original value, not the new one)
+
+    println("=== done ===");
+}
