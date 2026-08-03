@@ -392,6 +392,44 @@ fn main() -> void {
 }
 ```
 
+### Closures
+
+A lambda automatically captures variables from its enclosing scope **by value** at the point it is created. The captured copy is independent of the original, later mutations to the outer variable do not affect the closure.
+
+```quant
+fn make_adder(n: int) -> (int) -> int {
+    return fn(x: int) -> int { return x + n; };  // n is captured
+}
+
+fn main() -> void {
+    add5: (int) -> int = make_adder(5);
+    add10: (int) -> int = make_adder(10);
+    println(add5(3));    // 8
+    println(add10(3));   // 13
+
+    // Value-capture: mutating the original does not affect the closure
+    base: int = 42;
+    get: () -> int = fn() -> int { return base; };
+    base = 999;
+    println(get());      // 42
+}
+```
+
+Multiple variables can be captured, and closures can be composed:
+
+```quant
+fn compose(f: (int) -> int, g: (int) -> int) -> (int) -> int {
+    return fn(x: int) -> int { return g(f(x)); };
+}
+
+fn main() -> void {
+    add2: (int) -> int = make_adder(2);
+    times10: (int) -> int = fn(x: int) -> int { return x * 10; };
+    f: (int) -> int = compose(add2, times10);
+    println(f(5));   // (5+2)*10 = 70
+}
+```
+
 ## Generics
 
 Quant supports parametric polymorphism through type parameters declared in square brackets after the function name. A generic function works with any concrete type supplied at the call site; the type checker verifies correctness for each use.

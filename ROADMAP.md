@@ -31,7 +31,7 @@ Current state of the `feat/revival` branch as of 2026-07-23.
 | FFI variadics | Done | `...T` param syntax in `extern` blocks; uses `ffi_prep_cif_var`; args passed flat past fixed params |
 | FFI pointer type | Done | `ptr` keyword type; `VPointer Word64` runtime value; `ptr.null`, `ptr.is_null`, `ptr.to_int`, `ptr.from_int` builtins |
 | Formatter | Done | Comment-preserving; idempotent; wired as LSP `textDocument/formatting`; `quant-fmt` binary (`glados fmt` dispatches to it) |
-| LSP server | Done | 19 protocol features — see table below |
+| LSP server | Done | 19 protocol features, see table below |
 | Project manager | Done | `glados init/build/run/clean/test/doc/fmt/lint` subcommands; `quant.toml` manifest |
 | Test runner | Done | `glados test`; discovers `*_test.qa`; `assert_eq/ne/true/false/panic` builtins; TAP output; exit 1 on failure |
 | Coverage | Done | `glados test --cov`; fn + line + branch bars per file and total; `--cov-min`, `--cov-out JSON` |
@@ -59,7 +59,7 @@ Current state of the `feat/revival` branch as of 2026-07-23.
 | `socket` | Done | `connect/listen/accept/send/recv/close/peer_addr` |
 | `varargs` | Done | variadic helper utilities |
 | `regex` | Done | `match/find/find_all/replace/split` (POSIX ERE via `regex-tdfa`) |
-| `net/http` | **In progress** | `get/post/put/delete`; response struct with `status`, `body`, `headers` — colleague's work |
+| `net/http` | **In progress** | `get/post/put/delete`; response struct with `status`, `body`, `headers`, colleague's work |
 
 ### LSP feature coverage
 
@@ -68,24 +68,24 @@ Current state of the `feat/revival` branch as of 2026-07-23.
 | Diagnostics | `publishDiagnostics` | Done |
 | Hover | `textDocument/hover` | Done |
 | Completion | `textDocument/completion` | Done |
-| Go to definition | `textDocument/definition` | Done — functions and variables |
+| Go to definition | `textDocument/definition` | Done, functions and variables |
 | Signature help | `textDocument/signatureHelp` | Done |
 | Document symbols | `textDocument/documentSymbol` | Done |
-| Document highlight | `textDocument/documentHighlight` | Done — functions and variables |
-| Find references | `textDocument/references` | Done — functions and variables |
-| Rename | `textDocument/rename` + `prepareRename` | Done — functions and variables |
+| Document highlight | `textDocument/documentHighlight` | Done, functions and variables |
+| Find references | `textDocument/references` | Done, functions and variables |
+| Rename | `textDocument/rename` + `prepareRename` | Done, functions and variables |
 | Folding ranges | `textDocument/foldingRange` | Done |
 | Inlay hints | `textDocument/inlayHint` | Done |
 | Semantic tokens | `textDocument/semanticTokensFull` | Done |
-| Code lens | `textDocument/codeLens` | Done — "N references" (cross-file) + "Run" above `fn main` |
+| Code lens | `textDocument/codeLens` | Done, "N references" (cross-file) + "Run" above `fn main` |
 | Call hierarchy | `textDocument/prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls` | Done |
-| Formatting | `textDocument/formatting` | Done — comment-preserving formatter |
+| Formatting | `textDocument/formatting` | Done, comment-preserving formatter |
 | Selection range | `textDocument/selectionRange` | Done |
-| Go to type definition | `textDocument/typeDefinition` | Done — jumps to struct / error declaration |
-| Workspace symbols | `workspace/symbol` | Done — searches all indexed files |
-| Code action: add import | `textDocument/codeAction` | Done — inserts `from M import name` for undefined stdlib functions |
-| Code action: fill struct | `textDocument/codeAction` | Done — inserts missing fields with default values |
-| Variable type inlay hints | `textDocument/inlayHint` | Done — shows inferred type after `var: type` declarations |
+| Go to type definition | `textDocument/typeDefinition` | Done, jumps to struct / error declaration |
+| Workspace symbols | `workspace/symbol` | Done, searches all indexed files |
+| Code action: add import | `textDocument/codeAction` | Done, inserts `from M import name` for undefined stdlib functions |
+| Code action: fill struct | `textDocument/codeAction` | Done, inserts missing fields with default values |
+| Variable type inlay hints | `textDocument/inlayHint` | Done, shows inferred type after `var: type` declarations |
 
 ### LSP: parity with Rust Analyzer achieved
 
@@ -93,7 +93,7 @@ All planned LSP features are complete.
 
 ---
 
-## V1 Tooling — status
+## V1 Tooling, status
 
 The language core, LSP, and initial toolchain are done. Remaining V1 work is tracked below.
 
@@ -107,7 +107,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | Doc generator | `glados doc [--format html\|md] [--out DIR]` | Scans `//` comments; dark-sidebar HTML or Markdown |
 | Formatter | `glados fmt` | Dispatches to `quant-fmt` binary (comment-preserving, idempotent) |
 | Linter | `glados lint` | `wheatley` binary; 8 rules: `unused-var`, `unused-param`, `unreachable-code`, `missing-return` (error), `fn-naming`, `type-naming`, `empty-block`, `shadow`; `--deny`/`--allow`/`--rules` flags |
-| Workspace-wide LSP indexing | — | Background scan on startup; re-index on `DidChangeWatchedFiles`; cross-file references, rename, and code lens |
+| Workspace-wide LSP indexing |, | Background scan on startup; re-index on `DidChangeWatchedFiles`; cross-file references, rename, and code lens |
 | Dead code diagnostic | `publishDiagnostics` | Functions with no callers anywhere in the workspace shown greyed-out (`DiagnosticTag_Unnecessary`) |
 | On-type formatting | `textDocument/onTypeFormatting` | Auto-indent after `\n` and `}`; matches opening brace indentation |
 | Status bar indexing indicator | custom `$/quant/indexingStatus` | Shows "$(sync~spin) Quant: indexing..." in VS Code status bar while background scan runs |
@@ -115,18 +115,18 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 
 ---
 
-## V1 — upcoming
+## V1, upcoming
 
 ### Language features
 
 | Feature | Notes |
 |---------|-------|
 | Tuples | `(int, str)` type syntax; `(a, b)` literal; destructuring in `let` and function params; lightweight multiple returns without a struct |
-| ~~Closures capturing environment~~ | Done — see "What's complete" table |
+| ~~Closures capturing environment~~ | Done, see "What's complete" table |
 | Enum types | Named variants without payload, e.g. `enum Direction { North, South, East, West }`; matchable in `match`; distinct from the error system |
 | Generic structs | `struct Pair[A, B] { first: A, second: B }`; instantiated at call sites; type-erased like generic functions |
 | Interfaces | `interface Printable { fn print(self) }` + `impl Printable for MyStruct { ... }`; enables ad-hoc polymorphism and replaces duck-typing patterns |
-| Operator overloading | `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }` — at least `+`, `-`, `*`, `/`, `==`, `<` |
+| Operator overloading | `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }`, at least `+`, `-`, `*`, `/`, `==`, `<` |
 | Destructuring | `let (x, y) = point` for tuples; `let { name, age } = person` for structs in `let` bindings and `match` arms |
 | FFI callbacks | C function pointer from a Quant lambda via libffi closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`) |
 | Async / await | Cooperative concurrency; `async fn`, `await expr`; backed by a lightweight task scheduler |
@@ -134,7 +134,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 
 ### Debugger (DAP) -- done
 
-Full Debug Adapter Protocol implementation — VS Code can set breakpoints, step through Quant code, and inspect variables.
+Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step through Quant code, and inspect variables.
 
 | Component | Status | Notes |
 |-----------|--------|-------|

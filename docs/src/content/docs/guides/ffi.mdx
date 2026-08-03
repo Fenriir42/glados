@@ -18,7 +18,7 @@ extern "libname.so.N" {
 ```
 
 - The string is a library path or bare SONAME (`libm.so.6`, `/usr/lib/libpng.so`).
-- Each `fn` line declares one C symbol. No body is written — the VM resolves it at runtime.
+- Each `fn` line declares one C symbol. No body is written, the VM resolves it at runtime.
 - Multiple functions from the same library go in one block.
 
 ---
@@ -100,10 +100,10 @@ fn main() -> void {
 
 ## Runtime behaviour
 
-- Libraries are opened with `RTLD_LAZY` on the first call and cached for the lifetime of the program — `dlopen` is not called again on subsequent calls.
+- Libraries are opened with `RTLD_LAZY` on the first call and cached for the lifetime of the program, `dlopen` is not called again on subsequent calls.
 - A missing symbol or library causes a runtime error with the library path and symbol name.
 - `str` arguments are converted to a temporary `CString` for the duration of the call and freed immediately after. Passing a `str` to a function that stores the pointer beyond the call is unsafe.
-- Functions returning `str` call `peekCString` on the returned pointer immediately. The pointer must remain valid for that instant (e.g. static strings, `strerror`). Use caution with functions that return `malloc`-ed strings — there is currently no way to call `free` on them from Quant.
+- Functions returning `str` call `peekCString` on the returned pointer immediately. The pointer must remain valid for that instant (e.g. static strings, `strerror`). Use caution with functions that return `malloc`-ed strings, there is currently no way to call `free` on them from Quant.
 
 ---
 

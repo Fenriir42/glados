@@ -461,7 +461,7 @@ mkHandlers stateVar rootVar =
                     (fsVarUseSites fs)
                     (fsFilePath fs)
         responder (Right result),
-      -- Code lens ("N references" / "Run" above fn main) — cross-file reference count
+      -- Code lens ("N references" / "Run" above fn main), cross-file reference count
       requestHandler SMethod_TextDocumentCodeLens $ \req responder -> do
         let TRequestMessage _ _ _ (LSP.CodeLensParams _ _ tdId) = req
             LSP.TextDocumentIdentifier uri = tdId

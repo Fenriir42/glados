@@ -905,7 +905,7 @@ renderIndexMd projName pages =
             ++ dpModule page
             ++ "**]("
             ++ dpModule page
-            ++ ".md) — "
+            ++ ".md), "
             ++ show (length (dpEntries page))
             ++ " entries\n"
       )
