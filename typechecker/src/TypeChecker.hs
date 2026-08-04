@@ -1,17 +1,18 @@
 module TypeChecker
   ( TypeCheckResult (..),
     typeCheck,
+    tcAllCallMap,
     module TypeChecker.Error,
   )
 where
 
 import AST.Types.AST (Decl (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), InterfaceDecl (..), InterfaceMethodSig (..), Program (..), StructDecl (..), programDecls)
-import AST.Types.Common (FuncName, Located (..), SourceSpan, TypeName, VarName, locSpan, unLocated)
+import AST.Types.Common (FuncName (..), Located (..), SourceSpan, TypeName (..), VarName, locSpan, unLocated)
 import AST.Types.Type (ErrorType (..), FunctionType (..), StructType (..), Type)
 import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import TypeChecker.Env (Env, emptyEnv, envFuncs, insertError, insertFunc, insertGenericParams, insertInterface, insertStruct)
+import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertError, insertFunc, insertGenericParams, insertInterface, insertStruct)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -27,8 +28,33 @@ data TypeCheckResult = TypeCheckResult
     tcVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
     -- | Maps each ExprMethodCall span to the resolved function name (e.g. Vec2.len).
     -- Module-style calls (math.sqrt) are absent, only real method calls appear.
-    tcMethodCallMap :: Map SourceSpan FuncName
+    tcMethodCallMap :: Map SourceSpan FuncName,
+    -- | Maps LHS span of an overloaded binary/unary op to the resolved method name.
+    tcOpOverloadMap :: Map SourceSpan FuncName
   }
+
+-- | Combined map of all dispatch-through-method spans: explicit method calls
+-- and operator overloads.  Pass this to 'compileProgram'.
+tcAllCallMap :: TypeCheckResult -> Map SourceSpan FuncName
+tcAllCallMap r = Map.union (tcMethodCallMap r) (tcOpOverloadMap r)
+
+-- | Pre-defined operator trait interfaces injected into every program's env.
+builtinInterfaces :: Map TypeName [FuncName]
+builtinInterfaces =
+  Map.fromList
+    [ (TypeName "Add", [FuncName "add"]),
+      (TypeName "Sub", [FuncName "sub"]),
+      (TypeName "Mul", [FuncName "mul"]),
+      (TypeName "Div", [FuncName "div"]),
+      (TypeName "Rem", [FuncName "rem"]),
+      (TypeName "Eq", [FuncName "eq"]),
+      (TypeName "Ne", [FuncName "ne"]),
+      (TypeName "Lt", [FuncName "lt"]),
+      (TypeName "Gt", [FuncName "gt"]),
+      (TypeName "Le", [FuncName "le"]),
+      (TypeName "Ge", [FuncName "ge"]),
+      (TypeName "Neg", [FuncName "neg"])
+    ]
 
 -- | Type-check a parsed program.  Returns all diagnostics, a map from
 -- every expression span to its inferred type, and a map from every
@@ -36,7 +62,8 @@ data TypeCheckResult = TypeCheckResult
 typeCheck :: Program () -> TypeCheckResult
 typeCheck prog =
   let decls = programDecls prog
-      funcEnv = foldr collectFunc emptyEnv decls
+      baseEnv = emptyEnv {envInterfaces = builtinInterfaces}
+      funcEnv = foldr collectFunc baseEnv decls
       ffiEnv = foldr collectFFI funcEnv decls
       structEnv = foldr collectStruct ffiEnv decls
       implEnv = foldr collectImpl structEnv decls
@@ -68,6 +95,7 @@ typeCheck prog =
         (tcsVarUseSites finalState)
         (tcsVarDeclSites finalState)
         (tcsMethodCallMap finalState)
+        (tcsOpOverloadMap finalState)
   where
     collectFunc :: Located (Decl ()) -> Env -> Env
     collectFunc (Located _ (DeclFunction _ fd)) env =

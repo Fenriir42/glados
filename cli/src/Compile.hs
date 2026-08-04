@@ -46,7 +46,7 @@ import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
 import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
 import Text.Megaparsec (errorBundlePretty, many, runParser)
-import TypeChecker (TypeCheckResult (..), tcErrors, tcMethodCallMap, typeCheck)
+import TypeChecker (TypeCheckResult (..), tcAllCallMap, tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
 import VM (runFunction, runFunctionCov, runFunctionLineCov, runProgram)
 import VM.Interpreter (VMError (..))
@@ -88,7 +88,7 @@ compileSource stdlibDir filePath = do
     unless (null realErrors) $ do
       mapM_ (\e -> printErr (displayTypeError e (lines src))) realErrors
       exitFailure
-  case compileProgram (tcMethodCallMap tcResult) (Program decls) of
+  case compileProgram (tcAllCallMap tcResult) (Program decls) of
     Left err -> printErr (displayError err (lines src)) >> exitFailure
     Right bc -> return bc
 
@@ -123,7 +123,7 @@ compileSourceWith extraDirs filePath = do
     unless (null realErrors) $ do
       mapM_ (\e -> printErr (displayTypeError e (lines src))) realErrors
       exitFailure
-  case compileProgram (tcMethodCallMap tcResult) (Program decls) of
+  case compileProgram (tcAllCallMap tcResult) (Program decls) of
     Left err -> printErr (displayError err (lines src)) >> exitFailure
     Right bc -> return bc
 

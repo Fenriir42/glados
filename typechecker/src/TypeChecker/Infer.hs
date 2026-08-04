@@ -40,7 +40,7 @@ import AST.Types.Literal
     Literal (..),
   )
 import AST.Types.Operator
-  ( BinaryOp,
+  ( BinaryOp (..),
     UnaryOp (..),
     isArithmeticOp,
     isBitwiseOp,
@@ -102,11 +102,14 @@ data TCState = TCState
     tcsCallWithArgs :: Map SourceSpan (FuncName, FunctionType, [SourceSpan]),
     tcsVarUseSites :: Map SourceSpan (VarName, SourceSpan),
     tcsVarDeclSites :: Map SourceSpan (VarName, SourceSpan),
-    tcsMethodCallMap :: Map SourceSpan FuncName
+    tcsMethodCallMap :: Map SourceSpan FuncName,
+    -- | Maps LHS-expression span of an overloaded binary/unary op to the
+    -- resolved method name (e.g. Vec2.add for `a + b` where a: Vec2).
+    tcsOpOverloadMap :: Map SourceSpan FuncName
   }
 
 initialTCState :: TCState
-initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
+initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
 
 type TC = State TCState
 
@@ -141,6 +144,36 @@ recordMethodCall :: SourceSpan -> FuncName -> TC ()
 recordMethodCall sp fname =
   modify $ \s -> s {tcsMethodCallMap = Map.insert sp fname (tcsMethodCallMap s)}
 
+recordOpOverload :: SourceSpan -> FuncName -> TC ()
+recordOpOverload sp fname =
+  modify $ \s -> s {tcsOpOverloadMap = Map.insert sp fname (tcsOpOverloadMap s)}
+
+-- | Map a binary operator to its overload method name, if any.
+opMethodName :: BinaryOp -> Maybe FuncName
+opMethodName OpAdd = Just (FuncName "add")
+opMethodName OpSub = Just (FuncName "sub")
+opMethodName OpMul = Just (FuncName "mul")
+opMethodName OpDiv = Just (FuncName "div")
+opMethodName OpMod = Just (FuncName "rem")
+opMethodName OpEq = Just (FuncName "eq")
+opMethodName OpNeq = Just (FuncName "ne")
+opMethodName OpLt = Just (FuncName "lt")
+opMethodName OpGt = Just (FuncName "gt")
+opMethodName OpLte = Just (FuncName "le")
+opMethodName OpGte = Just (FuncName "ge")
+opMethodName _ = Nothing
+
+-- | Map a unary operator to its overload method name, if any.
+unaryMethodName :: UnaryOp -> Maybe FuncName
+unaryMethodName OpNeg = Just (FuncName "neg")
+unaryMethodName _ = Nothing
+
+-- | Extract the struct name from a type (for overload resolution).
+structNameOf :: Type -> Maybe TypeName
+structNameOf (TypeStruct n) = Just n
+structNameOf (TypeGenericApp n _) = Just n
+structNameOf _ = Nothing
+
 -- ---------------------------------------------------------------------------
 -- Expression inference
 
@@ -169,12 +202,33 @@ inferExpr env (Located sp expr) = do
     go (ExprBinary op lhs rhs) = do
       mL <- inferExpr env lhs
       mR <- inferExpr env rhs
-      case (mL, mR) of
-        (Just lt, Just rt) -> checkBinary sp op lt rt
-        _ -> return Nothing
+      case mL of
+        Just lt
+          | Just mname <- opMethodName op,
+            Just tname <- structNameOf lt ->
+              let qualFname = FuncName (unTypeName tname <> "." <> unFuncName mname)
+               in case lookupFunc qualFname env of
+                    Just ft -> do
+                      recordOpOverload (locSpan lhs) qualFname
+                      return (Just (qualType (unLocated (funcReturnType ft))))
+                    Nothing -> case (mL, mR) of
+                      (Just lt', Just rt) -> checkBinary sp op lt' rt
+                      _ -> return Nothing
+        _ -> case (mL, mR) of
+          (Just lt, Just rt) -> checkBinary sp op lt rt
+          _ -> return Nothing
     go (ExprUnary op operand) = do
       mT <- inferExpr env operand
       case mT of
+        Just t
+          | Just mname <- unaryMethodName op,
+            Just tname <- structNameOf t ->
+              let qualFname = FuncName (unTypeName tname <> "." <> unFuncName mname)
+               in case lookupFunc qualFname env of
+                    Just ft -> do
+                      recordOpOverload (locSpan operand) qualFname
+                      return (Just (qualType (unLocated (funcReturnType ft))))
+                    Nothing -> checkUnary sp op t
         Just t -> checkUnary sp op t
         Nothing -> return Nothing
     go (ExprCall (Located nameSpan fname) args) = do

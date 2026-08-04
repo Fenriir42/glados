@@ -9,7 +9,7 @@ import Parser.Decl (parseDecl)
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
 import Text.Megaparsec (errorBundlePretty, many, runParser)
-import TypeChecker (TypeCheckResult (..), tcErrors, tcMethodCallMap, typeCheck)
+import TypeChecker (TypeCheckResult (..), tcAllCallMap, tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError (..))
 import VM (runProgram)
 
@@ -37,7 +37,7 @@ runPipeline src =
               typeErrs = tcErrors tcResult
           if not (null typeErrs)
             then return $ TypeErrors typeErrs
-            else case compileProgram (tcMethodCallMap tcResult) (Program decls) of
+            else case compileProgram (tcAllCallMap tcResult) (Program decls) of
               Left err -> return $ CompileError (show err)
               Right bcs -> do
                 result <- runProgram bcs
@@ -66,7 +66,7 @@ runPipelineWithImports src =
                   typeErrs = tcErrors tcResult
               if not (null typeErrs)
                 then return $ TypeErrors typeErrs
-                else case compileProgram (tcMethodCallMap tcResult) (Program decls) of
+                else case compileProgram (tcAllCallMap tcResult) (Program decls) of
                   Left err -> return $ CompileError (show err)
                   Right bcs -> do
                     result <- runProgram bcs
@@ -94,7 +94,7 @@ runPipelineWithModule modName modSrc mainSrc =
                     typeErrs = tcErrors tcResult
                 if not (null typeErrs)
                   then return $ TypeErrors typeErrs
-                  else case compileProgram (tcMethodCallMap tcResult) (Program decls) of
+                  else case compileProgram (tcAllCallMap tcResult) (Program decls) of
                     Left err -> return $ CompileError (show err)
                     Right bcs -> do
                       result <- runProgram bcs

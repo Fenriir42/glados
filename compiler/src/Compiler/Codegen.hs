@@ -735,15 +735,28 @@ compileExpr = \case
           then void $ emitInstruction (ILoadFunc fname)
           else throwError $ UndefinedVariable (locSpan var) vname
   ExprBinary binOp left right -> do
-    compileExpr (unLocated left)
-    compileExpr (unLocated right)
-    void $ emitInstruction (IBinary (astBinaryOpToBytecode binOp))
+    methodMap <- gets csMethodCallMap
+    case Map.lookup (locSpan left) methodMap of
+      Just qualFname -> do
+        compileExpr (unLocated right)
+        compileExpr (unLocated left)
+        void $ emitInstruction (ICall (FunctionRef qualFname) 2)
+      Nothing -> do
+        compileExpr (unLocated left)
+        compileExpr (unLocated right)
+        void $ emitInstruction (IBinary (astBinaryOpToBytecode binOp))
   ExprUnary unaryOp expr ->
     case unaryOp of
       Op.OpPos -> compileExpr (unLocated expr)
       _ -> do
-        compileExpr (unLocated expr)
-        void $ emitInstruction (IUnary (astUnaryOpToBytecode unaryOp))
+        methodMap <- gets csMethodCallMap
+        case Map.lookup (locSpan expr) methodMap of
+          Just qualFname -> do
+            compileExpr (unLocated expr)
+            void $ emitInstruction (ICall (FunctionRef qualFname) 1)
+          Nothing -> do
+            compileExpr (unLocated expr)
+            void $ emitInstruction (IUnary (astUnaryOpToBytecode unaryOp))
   ExprCall funcName args -> do
     knownFns <- gets csKnownFunctions
     funcTypes <- gets csFuncTypes

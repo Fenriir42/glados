@@ -129,7 +129,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~Generic structs~~ | Done, see "What's complete" table |
 | ~~Inherent impl blocks~~ | Done — `impl MyStruct { fn method(self, ...) -> R { ... } }` with `v.method(args)` call syntax; methods compile as regular functions (`TypeName.method`); see `tests/impl_methods.qa` |
 | ~~Interfaces~~ | Done — `interface Printable { fn print(self) -> void; }` + `impl Printable for MyStruct { ... }`; type checker validates all required methods are provided; see `tests/interfaces.qa` |
-| Operator overloading | `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }`, at least `+`, `-`, `*`, `/`, `==`, `<` |
+| ~~Operator overloading~~ | Done -- `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }` desugars `a + b` to `a.add(b)`; traits: `Add Sub Mul Div Rem Eq Ne Lt Gt Le Ge Neg`; see `tests/operator_overload.qa` |
 | Destructuring | `let (x, y) = point` for tuples; `let { name, age } = person` for structs in `let` bindings and `match` arms |
 | FFI callbacks | C function pointer from a Quant lambda via libffi closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`) |
 | Async / await | Cooperative concurrency; `async fn`, `await expr`; backed by a lightweight task scheduler |
