@@ -23,7 +23,8 @@ import AST.Types.AST
     Visibility (..),
   )
 import AST.Types.Common
-  ( FuncName (..),
+  ( FieldName (..),
+    FuncName (..),
     Located (..),
     ModuleName (..),
     VarName (..),
@@ -240,7 +241,17 @@ exprHasCall prefix = \case
   ExprCast e _ -> exprHasCall prefix (unLocated e)
   ExprTupleInit elems -> any (exprHasCall prefix . unLocated) elems
   ExprMethodCall recv _ args ->
-    exprHasCall prefix (unLocated recv) || any (exprHasCall prefix . unLocated) args
+    -- Detect module-qualified calls written as method syntax: sys.exit(code) parses
+    -- as ExprMethodCall (ExprVar "sys") "exit" [code].  Expand the receiver to its
+    -- dotted prefix and check whether it starts with the module prefix.
+    let recvPrefix = expandReceiverPrefix (unLocated recv)
+     in prefix `T.isPrefixOf` (recvPrefix <> "x")
+          || any (exprHasCall prefix . unLocated) args
+  where
+    expandReceiverPrefix (ExprVar (Located _ v)) = unVarName v <> "."
+    expandReceiverPrefix (ExprField (Located _ e) (Located _ f)) =
+      expandReceiverPrefix e <> unFieldName f <> "."
+    expandReceiverPrefix _ = ""
 
 -- ---------------------------------------------------------------------------
 -- Prefix renaming (for real implementation modules)

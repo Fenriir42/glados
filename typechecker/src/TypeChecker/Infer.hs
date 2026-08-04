@@ -315,16 +315,26 @@ inferExpr env (Located sp expr) = do
         then return (Just (TypeTuple types))
         else return Nothing
     go (ExprMethodCall receiver (Located methodSp methodFuncName) args) = do
-      mReceiverType <- inferExpr env receiver
+      let qualFname = FuncName (receiverPrefix (unLocated receiver) <> unFuncName methodFuncName)
+      -- For a plain ExprVar receiver that doesn't name a known var/func/enum, treat
+      -- it as a module-namespace prefix (e.g. sys.exit, math.pi) and skip receiver
+      -- inference entirely to avoid a spurious "undefined variable" error.  The
+      -- qualified call handles known builtins (isKnownBuiltin) and imported functions.
+      mReceiverType <- case unLocated receiver of
+        ExprVar (Located _ name)
+          | Nothing <- lookupVar name env,
+            Nothing <- lookupFunc (FuncName (unVarName name)) env,
+            Nothing <- lookupEnum (TypeName (unVarName name)) env ->
+              return Nothing
+        _ -> inferExpr env receiver
       case mStructNameOf mReceiverType of
         Just tname -> do
           -- Real method call: Vec2.len(receiver, args)
-          let qualFname = FuncName (unTypeName tname <> "." <> unFuncName methodFuncName)
-          recordMethodCall methodSp qualFname
-          inferCall sp methodSp qualFname (receiver : args)
-        Nothing -> do
-          -- Module/qualified call fallback: reconstruct "module.method" from receiver expr
-          let qualFname = FuncName (receiverPrefix (unLocated receiver) <> unFuncName methodFuncName)
+          let qualFname' = FuncName (unTypeName tname <> "." <> unFuncName methodFuncName)
+          recordMethodCall methodSp qualFname'
+          inferCall sp methodSp qualFname' (receiver : args)
+        Nothing ->
+          -- Module/qualified call fallback: sys.exit, math.sqrt, imported funcs, etc.
           inferCall sp methodSp qualFname args
       where
         mStructNameOf (Just (TypeStruct n)) = Just n
