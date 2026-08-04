@@ -29,6 +29,7 @@ module AST.Types.Type
     ErrorSet (..),
     ErrorSetMember (..),
     ResultType (..),
+    EnumType (..),
     Constness (..),
     QualifiedType (..),
     isNumericType,
@@ -286,6 +287,15 @@ data ResultType = ResultType
   }
   deriving stock (Eq, Ord, Generic)
 
+-- | Static descriptor for an enum type: the type name and its variant names.
+data EnumType = EnumType
+  { enumTypeName :: TypeName,
+    enumTypeVariants :: [TypeName]
+  }
+  deriving stock (Show, Eq, Ord, Generic)
+
+instance Hashable EnumType
+
 instance Hashable ResultType
 
 instance Show ResultType where
@@ -338,6 +348,8 @@ data Type
     TypeTuple [QualifiedType]
   | -- | Generic struct instantiation: @Pair[int, str]@
     TypeGenericApp TypeName [QualifiedType]
+  | -- | Enum type: named variants without payload
+    TypeEnum TypeName
   deriving stock (Eq, Ord, Generic)
 
 instance Hashable Type
@@ -355,6 +367,7 @@ instance Show Type where
   show (TypeTuple types) = "(" ++ intercalate ", " (map show types) ++ ")"
   show (TypeGenericApp name args) =
     T.unpack (unTypeName name) ++ "[" ++ intercalate ", " (map show args) ++ "]"
+  show (TypeEnum name) = T.unpack (unTypeName name)
 
 isNumericType :: Type -> Bool
 isNumericType (TypePrimitive (PrimInt _)) = True

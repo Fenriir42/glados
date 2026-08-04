@@ -34,9 +34,11 @@ import AST.Types.Common
     Located (..),
     SourcePos (..),
     SourceSpan (..),
+    TypeName (..),
     VarName (..),
     locSpan,
     unLocated,
+    unTypeName,
   )
 import AST.Types.Literal
   ( ArrayLiteral (..),
@@ -185,7 +187,9 @@ data CompileState = CompileState
     -- Bytecodes for lambda functions compiled inline (collected, emitted at end)
     csLambdaBytecodes :: [Bytecode],
     -- Maps method-name span to the resolved function name (from the type checker)
-    csMethodCallMap :: Map SourceSpan FuncName
+    csMethodCallMap :: Map SourceSpan FuncName,
+    -- Receiver spans of enum-variant accesses (Direction.North); emit INewError
+    csEnumVariantSpans :: Set SourceSpan
   }
   deriving stock (Show)
 
@@ -209,7 +213,8 @@ initialState =
       csOriginModules = Map.empty,
       csFfiFuncs = Map.empty,
       csLambdaBytecodes = [],
-      csMethodCallMap = Map.empty
+      csMethodCallMap = Map.empty,
+      csEnumVariantSpans = Set.empty
     }
 
 type Compile a = ExceptT CompileError (State CompileState) a
@@ -250,9 +255,9 @@ patchAll addrs target instrs = foldr (\a is -> patchJump is a target) instrs add
 -- ---------------------------------------------------------------------------
 -- Program entry
 
-compileProgram :: Map SourceSpan FuncName -> Program ann -> Either CompileError [Bytecode]
-compileProgram methodCallMap (Program decls) =
-  evalState (runExceptT go) (initialState {csMethodCallMap = methodCallMap})
+compileProgram :: Map SourceSpan FuncName -> Set SourceSpan -> Program ann -> Either CompileError [Bytecode]
+compileProgram methodCallMap enumVariantSpans (Program decls) =
+  evalState (runExceptT go) (initialState {csMethodCallMap = methodCallMap, csEnumVariantSpans = enumVariantSpans})
   where
     go :: Compile [Bytecode]
     go = do
@@ -350,7 +355,9 @@ compileFunction funcDecl captureNames = do
         csLambdaBytecodes = csLambdaBytecodes oldState,
         csTempCount = csTempCount oldState,
         -- Thread the method call map through so ExprMethodCall can resolve names
-        csMethodCallMap = csMethodCallMap oldState
+        csMethodCallMap = csMethodCallMap oldState,
+        -- Thread the enum variant span set through so ExprField can detect enum accesses
+        csEnumVariantSpans = csEnumVariantSpans oldState
       }
   -- Parameters and captured variables are in scope from the start
   let paramNames = [paramName p | Located _ p <- funcDeclParams funcDecl]
@@ -830,8 +837,12 @@ compileExpr = \case
     compileExpr (unLocated indexExpr)
     void $ emitInstruction IArrayGet
   ExprField structExpr locField -> do
-    compileExpr (unLocated structExpr)
-    void $ emitInstruction (IFieldGet (unLocated locField))
+    enumSpans <- gets csEnumVariantSpans
+    if Set.member (locSpan structExpr) enumSpans
+      then void $ emitInstruction (INewError (ErrorName (unFieldName (unLocated locField))) [])
+      else do
+        compileExpr (unLocated structExpr)
+        void $ emitInstruction (IFieldGet (unLocated locField))
   ExprStructInit _ fieldExprs -> do
     void $ emitInstruction INewStruct
     forM_ fieldExprs $ \(locFname, locExpr) -> do
@@ -1053,6 +1064,15 @@ compileMatchArm subjVar (MatchArm pat body) = case pat of
       addToScope v
     compileLocatedStmt body
     exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    return [exitJmp]
+  MatchEnumVariant _ (Located _ vname) -> do
+    void $ emitInstruction (ILoad subjVar)
+    void $ emitInstruction (IIsErr (ErrorName (unTypeName vname)))
+    falseJmp <- emitInstruction (IJumpFalse (InstructionPointer 0))
+    compileLocatedStmt body
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    nextArm <- gets (InstructionPointer . csInstructionCounter)
+    modify $ \s -> s {csInstructions = patchJump (csInstructions s) falseJmp nextArm}
     return [exitJmp]
 
 -- ---------------------------------------------------------------------------

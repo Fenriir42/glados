@@ -832,6 +832,65 @@ fn print_point(p: Point) -> void {
 A struct pattern always matches (the type is known statically) and binds all
 listed fields as variables scoped to the arm body.
 
+## Enum Types
+
+An `enum` declares a named set of variants. Each variant is a simple tag with no payload. Enums are accessed with dot notation and can appear in `match` arms as patterns.
+
+### Declaration
+
+```quant
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+};
+```
+
+Trailing commas are allowed. No semicolons inside the braces; the final `};` closes the declaration.
+
+### Using enum values
+
+Variant access uses `EnumName.Variant` syntax:
+
+```quant
+d: Direction = Direction.North;
+```
+
+### Matching on enums
+
+Enum variants are valid patterns in `match` arms:
+
+```quant
+fn describe(d: Direction) -> str {
+    match d {
+        Direction.North => return "north";
+        Direction.South => return "south";
+        Direction.East  => return "east";
+        Direction.West  => return "west";
+        _ => return "unknown";
+    };
+}
+```
+
+The wildcard arm (`_`) handles any unmatched variant, which is useful when adding new variants later.
+
+### Full example
+
+```quant
+enum Color { Red, Green, Blue };
+
+fn main() -> void {
+    c: Color = Color.Green;
+    match c {
+        Color.Red   => println("red");
+        Color.Green => println("green");
+        Color.Blue  => println("blue");
+        _ => println("other");
+    };
+}
+```
+
 ## Generics
 
 Quant supports parametric polymorphism through type parameters declared in square brackets after the function name. A generic function works with any concrete type supplied at the call site; the type checker verifies correctness for each use.

@@ -1,0 +1,28 @@
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+};
+
+fn describe(d: Direction) -> str {
+    match d {
+    Direction.North => return "north";
+    Direction.South => return "south";
+    Direction.East => return "east";
+    Direction.West => return "west";
+    _ => return "unknown";
+    };
+}
+
+fn main() -> void {
+    d: Direction = Direction.North;
+    println(describe(d));
+    println(describe(Direction.South));
+    println(describe(Direction.East));
+    println(describe(Direction.West));
+    match Direction.North {
+    Direction.North => println("matched north");
+    _ => println("no match");
+    };
+}

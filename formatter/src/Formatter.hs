@@ -3,6 +3,8 @@ module Formatter (formatProgram) where
 import AST.Types.AST
   ( Block (..),
     Decl (..),
+    EnumDecl (..),
+    EnumVariant (..),
     ErrorDecl (..),
     ErrorSetDecl (..),
     Expr (..),
@@ -271,6 +273,7 @@ fmtDecl _ _ _ (Located _ (DeclImport _)) = []
 fmtDecl _ opts n (Located _ (DeclError vis ed)) = fmtErrorDecl opts n vis ed
 fmtDecl _ opts n (Located _ (DeclErrorSet vis esd)) = fmtErrorSetDecl opts n vis esd
 fmtDecl _ opts n (Located _ (DeclFFI ffi)) = fmtFFIDecl opts n ffi
+fmtDecl _ opts n (Located _ (DeclEnum vis ed)) = fmtEnumDecl opts n vis ed
 
 fmtVis :: Visibility -> Text
 fmtVis Public = ""
@@ -393,6 +396,16 @@ fmtErrorSetDecl opts n vis esd =
   where
     showMem (ErrorMemberSingle (ErrorName nm)) = nm
     showMem (ErrorMemberSet (ErrorName nm)) = nm
+
+fmtEnumDecl :: FormatOptions -> Int -> Visibility -> EnumDecl -> Lines
+fmtEnumDecl opts n vis ed =
+  let nameStr = unTypeName (locValue (enumDeclName ed))
+      header = ind opts n <> fmtVis vis <> "enum " <> nameStr <> " {"
+      rawVars =
+        [ ind opts (n + 1) <> unTypeName (enumVariantName (locValue v)) <> ","
+          | v <- enumDeclVariants ed
+        ]
+   in [header] ++ dropTrailingComma opts rawVars ++ [ind opts n <> "};"]
 
 fmtFFIDecl :: FormatOptions -> Int -> FFIDecl -> Lines
 fmtFFIDecl opts n (FFIDecl lib funcs) =
@@ -561,6 +574,8 @@ fmtMatchPat _ _ (MatchTuple vars) =
   "(" <> T.intercalate ", " [unVarName v | Located _ v <- vars] <> ")"
 fmtMatchPat _ _ (MatchStruct fields) =
   "{ " <> T.intercalate ", " [unFieldName f | Located _ f <- fields] <> " }"
+fmtMatchPat _ _ (MatchEnumVariant (Located _ tname) (Located _ vname)) =
+  unTypeName tname <> "." <> unTypeName vname
 
 -- ---------------------------------------------------------------------------
 -- LValues

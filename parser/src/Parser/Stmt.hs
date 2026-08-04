@@ -8,7 +8,7 @@ import AST.Types.AST
     MatchPattern (..),
     Stmt (..),
   )
-import AST.Types.Common (ErrorName (..), FieldName (..), Located (..), SourceSpan (..), VarName (..), getSpan)
+import AST.Types.Common (ErrorName (..), FieldName (..), Located (..), SourceSpan (..), TypeName (..), VarName (..), getSpan)
 import AST.Types.Literal (IntBase (..), IntLiteral (..), Literal (..))
 import AST.Types.Operator (AssignOp (AssignAdd, AssignSub))
 import Parser.Expr (parseExpr)
@@ -255,6 +255,12 @@ parseMatchPattern =
             (matchSymbol ",")
         _ <- matchSymbol "}"
         return (MatchStruct fields),
+      -- enum variant pattern: Direction.North
+      MP.try $ do
+        Located tspan (TokIdentifier tname) <- MP.satisfy isIdentifier
+        _ <- matchSymbol "."
+        Located vspan (TokIdentifier vname) <- MP.satisfy isIdentifier
+        return (MatchEnumVariant (Located tspan (TypeName tname)) (Located vspan (TypeName vname))),
       -- literal / expression
       MatchLit <$> parseExpr
     ]

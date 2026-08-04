@@ -5,6 +5,7 @@ import Compiler.Bytecode (Bytecode (..), Instruction (..))
 import Compiler.Codegen (compileProgram)
 import Control.Monad (forM_)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Lib (lexFile)
 import Parser.Decl (parseDecl)
 import Test.Hspec
@@ -22,7 +23,7 @@ compileFile filePath = do
         Left parseErr ->
           return $ Left $ "Parse error: " ++ errorBundlePretty parseErr
         Right decls ->
-          case compileProgram Map.empty (Program decls) of
+          case compileProgram Map.empty Set.empty (Program decls) of
             Left compileErr -> return $ Left $ "Compile error: " ++ show compileErr
             Right bytecodes -> return $ Right bytecodes
 

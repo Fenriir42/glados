@@ -6,6 +6,7 @@ module TypeChecker.Env
     lookupFunc,
     lookupStruct,
     lookupError,
+    lookupEnum,
     lookupInterface,
     lookupGenericParams,
     insertVar,
@@ -13,6 +14,7 @@ module TypeChecker.Env
     insertFunc,
     insertStruct,
     insertError,
+    insertEnum,
     insertInterface,
     insertGenericParams,
     withVars,
@@ -22,7 +24,7 @@ module TypeChecker.Env
 where
 
 import AST.Types.Common (ErrorName, FuncName, SourceSpan, TypeName, VarName)
-import AST.Types.Type (ErrorType, FunctionType, QualifiedType, StructType)
+import AST.Types.Type (EnumType, ErrorType, FunctionType, QualifiedType, StructType)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -34,6 +36,8 @@ data Env = Env
     envFuncs :: Map FuncName FunctionType,
     envStructs :: Map TypeName StructType,
     envErrors :: Map ErrorName ErrorType,
+    -- | Enum name -> descriptor (variant names)
+    envEnums :: Map TypeName EnumType,
     envReturnType :: Maybe QualifiedType,
     -- | Type variable names in scope inside a generic function body
     envTypeVars :: Set TypeName,
@@ -44,7 +48,7 @@ data Env = Env
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty Map.empty
+emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty Map.empty
 
 lookupVar :: VarName -> Env -> Maybe QualifiedType
 lookupVar v = Map.lookup v . envVars
@@ -60,6 +64,9 @@ lookupStruct t = Map.lookup t . envStructs
 
 lookupError :: ErrorName -> Env -> Maybe ErrorType
 lookupError e = Map.lookup e . envErrors
+
+lookupEnum :: TypeName -> Env -> Maybe EnumType
+lookupEnum t = Map.lookup t . envEnums
 
 insertVar :: VarName -> QualifiedType -> Env -> Env
 insertVar v qt env = env {envVars = Map.insert v qt (envVars env)}
@@ -79,6 +86,9 @@ insertStruct t st env = env {envStructs = Map.insert t st (envStructs env)}
 
 insertError :: ErrorName -> ErrorType -> Env -> Env
 insertError e et env = env {envErrors = Map.insert e et (envErrors env)}
+
+insertEnum :: TypeName -> EnumType -> Env -> Env
+insertEnum t et env = env {envEnums = Map.insert t et (envEnums env)}
 
 withVars :: [(VarName, QualifiedType)] -> Env -> Env
 withVars pairs env = foldr (\(v, qt) e -> insertVar v qt e) env pairs

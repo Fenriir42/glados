@@ -32,7 +32,7 @@ import System.Console.Haskeline
     simpleCompletion,
   )
 import Text.Megaparsec (errorBundlePretty, many, runParser)
-import TypeChecker (TypeCheckResult (..), tcMethodCallMap, typeCheck)
+import TypeChecker (TypeCheckResult (..), tcAllCallMap, typeCheck)
 import TypeChecker.Error (TypeCheckError, tcErrMessage, tcErrSpan)
 import VM (runProgram)
 import VM.Interpreter (VMError (..))
@@ -179,7 +179,7 @@ tryCompile config src existing = do
               case typeErrs of
                 errs@(_ : _) -> return (Left (concatMap formatTypeErr errs))
                 [] ->
-                  return $ case compileProgram (tcMethodCallMap tcResult) (Program decls) of
+                  return $ case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
                     Left err -> Left (displayError err (lines src))
                     Right bcs -> Right (existing ++ bcs)
 

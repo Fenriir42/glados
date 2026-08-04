@@ -6,13 +6,15 @@ module TypeChecker
   )
 where
 
-import AST.Types.AST (Decl (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), InterfaceDecl (..), InterfaceMethodSig (..), Program (..), StructDecl (..), programDecls)
+import AST.Types.AST (Decl (..), EnumDecl (..), EnumVariant (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), InterfaceDecl (..), InterfaceMethodSig (..), Program (..), StructDecl (..), programDecls)
 import AST.Types.Common (FuncName (..), Located (..), SourceSpan, TypeName (..), VarName, locSpan, unLocated)
-import AST.Types.Type (ErrorType (..), FunctionType (..), StructType (..), Type)
+import AST.Types.Type (EnumType (..), ErrorType (..), FunctionType (..), StructType (..), Type)
 import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertError, insertFunc, insertGenericParams, insertInterface, insertStruct)
+import Data.Set (Set)
+import qualified Data.Set as Set
+import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertEnum, insertError, insertFunc, insertGenericParams, insertInterface, insertStruct)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -30,7 +32,10 @@ data TypeCheckResult = TypeCheckResult
     -- Module-style calls (math.sqrt) are absent, only real method calls appear.
     tcMethodCallMap :: Map SourceSpan FuncName,
     -- | Maps LHS span of an overloaded binary/unary op to the resolved method name.
-    tcOpOverloadMap :: Map SourceSpan FuncName
+    tcOpOverloadMap :: Map SourceSpan FuncName,
+    -- | Receiver spans of enum-variant field-access expressions (Direction.North).
+    -- Codegen checks this set to emit INewError instead of IFieldGet.
+    tcEnumVariantSpans :: Set SourceSpan
   }
 
 -- | Combined map of all dispatch-through-method spans: explicit method calls
@@ -69,7 +74,8 @@ typeCheck prog =
       implEnv = foldr collectImpl structEnv decls
       implForEnv = foldr collectImplFor implEnv decls
       ifaceEnv = foldr collectInterface implForEnv decls
-      fullEnv = foldr collectError ifaceEnv decls
+      enumEnv = foldr collectEnum ifaceEnv decls
+      fullEnv = foldr collectError enumEnv decls
       finalState = execState (mapM_ (checkDecl fullEnv) decls) initialTCState
       defSites =
         Map.fromList $
@@ -96,6 +102,7 @@ typeCheck prog =
         (tcsVarDeclSites finalState)
         (tcsMethodCallMap finalState)
         (tcsOpOverloadMap finalState)
+        (tcsEnumVariantSpans finalState)
   where
     collectFunc :: Located (Decl ()) -> Env -> Env
     collectFunc (Located _ (DeclFunction _ fd)) env =
@@ -161,6 +168,13 @@ typeCheck prog =
           fields = map unLocated (errorDeclFields ed)
        in insertError ename (ErrorType ename fields) env
     collectError _ env = env
+
+    collectEnum :: Located (Decl ()) -> Env -> Env
+    collectEnum (Located _ (DeclEnum _ ed)) env =
+      let tname = unLocated (enumDeclName ed)
+          variants = [enumVariantName (unLocated v) | v <- enumDeclVariants ed]
+       in insertEnum tname (EnumType tname variants) env
+    collectEnum _ env = env
 
     mkFuncType :: FunctionDecl () -> FunctionType
     mkFuncType fd = FunctionType (funcDeclParams fd) (funcDeclReturnType fd)

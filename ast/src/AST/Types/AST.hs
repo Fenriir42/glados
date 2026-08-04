@@ -17,6 +17,8 @@ module AST.Types.AST
     ImportDecl (..),
     ErrorDecl (..),
     ErrorSetDecl (..),
+    EnumVariant (..),
+    EnumDecl (..),
     FFIFuncDecl (..),
     FFIDecl (..),
     Stmt (..),
@@ -90,6 +92,7 @@ data Decl ann
   | DeclImport ImportDecl
   | DeclError Visibility ErrorDecl
   | DeclErrorSet Visibility ErrorSetDecl
+  | DeclEnum Visibility EnumDecl
   | DeclFFI FFIDecl
   deriving stock (Show, Eq, Generic)
 
@@ -183,6 +186,18 @@ data ErrorSetDecl = ErrorSetDecl
   }
   deriving stock (Show, Eq, Generic)
 
+-- | A single variant of an enum (no payload).
+newtype EnumVariant = EnumVariant
+  { enumVariantName :: TypeName
+  }
+  deriving stock (Show, Eq, Generic)
+
+data EnumDecl = EnumDecl
+  { enumDeclName :: Located TypeName,
+    enumDeclVariants :: [Located EnumVariant]
+  }
+  deriving stock (Show, Eq, Generic)
+
 data Block ann = Block
   { -- | Span of entire block including braces
     blockSpan :: SourceSpan,
@@ -253,6 +268,8 @@ data MatchPattern ann
     MatchTuple [Located VarName]
   | -- | Struct destructure pattern: @{ x, y }@
     MatchStruct [Located FieldName]
+  | -- | Enum variant pattern: @Direction.North@
+    MatchEnumVariant (Located TypeName) (Located TypeName)
   deriving stock (Show, Eq, Generic)
 
 -- | One arm of a match statement.

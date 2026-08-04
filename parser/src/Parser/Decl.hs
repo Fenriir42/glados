@@ -1,7 +1,9 @@
 module Parser.Decl where
 
 import AST.Types.AST
-  ( Decl (DeclError, DeclErrorSet, DeclFFI, DeclFunction, DeclImpl, DeclImplFor, DeclImport, DeclInterface, DeclStruct),
+  ( Decl (DeclEnum, DeclError, DeclErrorSet, DeclFFI, DeclFunction, DeclImpl, DeclImplFor, DeclImport, DeclInterface, DeclStruct),
+    EnumDecl (..),
+    EnumVariant (..),
     ErrorDecl (..),
     ErrorSetDecl (..),
     FFIDecl (..),
@@ -185,6 +187,27 @@ parseDeclError = do
         Public -> errSpan <> nameSpan <> lastSpan
       ed = ErrorDecl (Located nameSpan (ErrorName name)) fields
   return $ Located combinedSpan (DeclError visibility ed)
+
+parseDeclEnum :: TokenParser (Located (Decl ann))
+parseDeclEnum = do
+  Located visSpan visibility <- parseVisibility
+  Located enumSpan _ <- MP.satisfy isEnumKw
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  _ <- matchSymbol "{"
+  variants <- MP.sepEndBy parseEnumVariant (matchSymbol ",")
+  Located endSpan _ <- matchSymbol "}"
+  Located semiSpan _ <- matchSymbol ";"
+  let combinedSpan = case visibility of
+        Static -> visSpan <> enumSpan <> nameSpan <> endSpan <> semiSpan
+        Public -> enumSpan <> nameSpan <> endSpan <> semiSpan
+      ed = EnumDecl (Located nameSpan (TypeName name)) variants
+  return $ Located combinedSpan (DeclEnum visibility ed)
+  where
+    isEnumKw (Located _ (TokIdentifier "enum")) = True
+    isEnumKw _ = False
+    parseEnumVariant = do
+      Located vspan (TokIdentifier vname) <- MP.satisfy isIdentifier
+      return $ Located vspan (EnumVariant (TypeName vname))
 
 parseErrorSetMember :: TokenParser (Located ErrorSetMember)
 parseErrorSetMember = do
@@ -372,6 +395,9 @@ parseDecl =
         _ <- MP.lookAhead (MP.try errorsetStart)
         parseDeclErrorSet,
       do
+        _ <- MP.lookAhead (MP.try enumStart)
+        parseDeclEnum,
+      do
         _ <- MP.lookAhead (matchKeyword "extern")
         parseDeclFFI,
       do
@@ -390,6 +416,9 @@ parseDecl =
     implStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "impl"
     errorStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "error"
     errorsetStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isErrorsetKw
+    enumStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isEnumKw
+    isEnumKw (Located _ (TokIdentifier "enum")) = True
+    isEnumKw _ = False
     isStaticId (Located _ (TokIdentifier "static")) = True
     isStaticId _ = False
     isStructKw (Located _ (TokIdentifier "struct")) = True

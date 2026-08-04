@@ -62,7 +62,7 @@ import System.IO
   )
 import System.Posix.IO (createPipe, fdToHandle)
 import Text.Megaparsec (many, runParser)
-import TypeChecker (tcErrors, tcMethodCallMap, typeCheck)
+import TypeChecker (TypeCheckResult (..), tcAllCallMap, tcErrors, typeCheck)
 import VM.Interpreter
   ( Frame (..),
     VMError (..),
@@ -642,7 +642,7 @@ doCompile stdlibDir fp = do
       typeErrs = tcErrors tcResult
   unless (null typeErrs) $
     ioError (userError ("type check failed with " ++ show (length typeErrs) ++ " error(s)"))
-  case compileProgram (tcMethodCallMap tcResult) (Program decls) of
+  case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
     Left err -> ioError (userError (show err))
     Right bc -> return bc
 

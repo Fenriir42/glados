@@ -29,6 +29,10 @@ data TypeCheckError
   | TCMissingStructFields SourceSpan TypeName [FieldName]
   | TCUndefinedInterface SourceSpan TypeName
   | TCMissingInterfaceMethod SourceSpan TypeName TypeName FuncName
+  | -- | Enum type name used but not declared
+    TCUndefinedEnum SourceSpan TypeName
+  | -- | Variant not present in the enum
+    TCUnknownEnumVariant SourceSpan TypeName TypeName
   deriving stock (Show, Eq)
 
 tcErrSpan :: TypeCheckError -> SourceSpan
@@ -46,6 +50,8 @@ tcErrSpan (TCUnknownError s _) = s
 tcErrSpan (TCMissingStructFields s _ _) = s
 tcErrSpan (TCUndefinedInterface s _) = s
 tcErrSpan (TCMissingInterfaceMethod s _ _ _) = s
+tcErrSpan (TCUndefinedEnum s _) = s
+tcErrSpan (TCUnknownEnumVariant s _ _) = s
 
 tcErrMessage :: TypeCheckError -> String
 tcErrMessage (TCUndefinedVar _ v) =
@@ -89,4 +95,12 @@ tcErrMessage (TCMissingInterfaceMethod _ iname tname mname) =
     ++ T.unpack (unTypeName tname)
     ++ "` is missing method `"
     ++ T.unpack (unFuncName mname)
+    ++ "`"
+tcErrMessage (TCUndefinedEnum _ ename) =
+  "undefined enum `" ++ T.unpack (unTypeName ename) ++ "`"
+tcErrMessage (TCUnknownEnumVariant _ ename vname) =
+  "enum `"
+    ++ T.unpack (unTypeName ename)
+    ++ "` has no variant `"
+    ++ T.unpack (unTypeName vname)
     ++ "`"

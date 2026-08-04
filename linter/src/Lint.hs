@@ -479,6 +479,7 @@ usedVarsExpr = \case
   ExprParen e -> go e
   ExprCast e _ -> go e
   ExprTupleInit elems -> foldMap go elems
+  ExprMethodCall recv _ args -> foldMap go (recv : args)
   where
     go = usedVarsExpr . locValue
 

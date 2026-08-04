@@ -50,6 +50,7 @@ import AST.Types.Operator
 import AST.Types.Type
   ( ArrayType (..),
     Constness (..),
+    EnumType (..),
     ErrorField (..),
     ErrorType (..),
     FunctionType (..),
@@ -76,12 +77,15 @@ import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import TypeChecker.Builtins (builtinReturnType, isKnownBuiltin)
 import TypeChecker.Env
   ( Env (..),
     insertVar,
     insertVarWithSpan,
+    lookupEnum,
     lookupError,
     lookupFunc,
     lookupGenericParams,
@@ -105,11 +109,14 @@ data TCState = TCState
     tcsMethodCallMap :: Map SourceSpan FuncName,
     -- | Maps LHS-expression span of an overloaded binary/unary op to the
     -- resolved method name (e.g. Vec2.add for `a + b` where a: Vec2).
-    tcsOpOverloadMap :: Map SourceSpan FuncName
+    tcsOpOverloadMap :: Map SourceSpan FuncName,
+    -- | Receiver spans of enum-variant field-access expressions.
+    -- Codegen checks this set to emit INewError instead of IFieldGet.
+    tcsEnumVariantSpans :: Set SourceSpan
   }
 
 initialTCState :: TCState
-initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty
+initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Set.empty
 
 type TC = State TCState
 
@@ -147,6 +154,10 @@ recordMethodCall sp fname =
 recordOpOverload :: SourceSpan -> FuncName -> TC ()
 recordOpOverload sp fname =
   modify $ \s -> s {tcsOpOverloadMap = Map.insert sp fname (tcsOpOverloadMap s)}
+
+recordEnumVariant :: SourceSpan -> TC ()
+recordEnumVariant sp =
+  modify $ \s -> s {tcsEnumVariantSpans = Set.insert sp (tcsEnumVariantSpans s)}
 
 -- | Map a binary operator to its overload method name, if any.
 opMethodName :: BinaryOp -> Maybe FuncName
@@ -198,7 +209,11 @@ inferExpr env (Located sp expr) = do
           -- Fallback: a function name used as a first-class value
           case lookupFunc (FuncName (unVarName name)) env of
             Just ft -> return (Just (TypeFunction ft))
-            Nothing -> recordError (TCUndefinedVar vspan name) >> return Nothing
+            Nothing ->
+              -- Fallback: an enum type name used as a namespace (e.g. Direction.North)
+              case lookupEnum (TypeName (unVarName name)) env of
+                Just _ -> return (Just (TypeStruct (TypeName (unVarName name))))
+                Nothing -> recordError (TCUndefinedVar vspan name) >> return Nothing
     go (ExprBinary op lhs rhs) = do
       mL <- inferExpr env lhs
       mR <- inferExpr env rhs
@@ -247,40 +262,52 @@ inferExpr env (Located sp expr) = do
         Just (TypeDict _ valType) -> return (Just valType)
         Just t -> recordError (TCIndexNonArray (locSpan arrExpr) t) >> return Nothing
         Nothing -> return Nothing
-    go (ExprField structExpr locField) = do
-      mStructType <- inferExpr env structExpr
-      case mStructType of
-        Just (TypeStruct tname) ->
-          case lookupStruct tname env of
-            Nothing -> return Nothing
-            Just st ->
-              let fname = unLocated locField
-                  mSf = find (\f -> fieldName f == fname) (structFields st)
-               in return (fmap (qualType . fieldType) mSf)
-        Just (TypeGenericApp tname typeArgs) ->
-          case lookupStruct tname env of
-            Nothing -> return Nothing
-            Just st ->
-              let fname = unLocated locField
-                  mSf = find (\f -> fieldName f == fname) (structFields st)
-                  binding = Map.fromList (zip (structTypeParams st) (map qualType typeArgs))
-               in return (fmap (applyBindings binding . qualType . fieldType) mSf)
-        -- TypeNamed is used for error-bound variables in err(E v) match arms
-        Just (TypeNamed tname) ->
-          case lookupError (ErrorName (unTypeName tname)) env of
-            Just et ->
-              let fname = unLocated locField
-                  mEf = find (\f -> errorFieldName f == fname) (errorTypeFields et)
-               in return (fmap errorFieldType mEf)
-            Nothing -> return Nothing
-        Just (TypeTuple elemTypes) ->
-          let fname = unFieldName (unLocated locField)
-           in case reads (drop 1 (T.unpack fname)) of
-                [(idx, "")]
-                  | idx >= 0 && idx < length elemTypes ->
-                      return (Just (qualType (elemTypes !! idx)))
-                _ -> return Nothing
-        _ -> return Nothing
+    go (ExprField structExpr locField) = goFieldAccess
+      where
+        goFieldAccess = do
+          mStructType <- inferExpr env structExpr
+          case mStructType of
+            Just (TypeStruct tname) ->
+              case lookupEnum tname env of
+                Just et ->
+                  let vname = TypeName (unFieldName (unLocated locField))
+                   in if vname `elem` enumTypeVariants et
+                        then do
+                          recordEnumVariant (locSpan structExpr)
+                          return (Just (TypeStruct (enumTypeName et)))
+                        else do
+                          recordError (TCUnknownEnumVariant (locSpan locField) (enumTypeName et) vname)
+                          return Nothing
+                Nothing ->
+                  case lookupStruct tname env of
+                    Nothing -> return Nothing
+                    Just st ->
+                      let fname = unLocated locField
+                          mSf = find (\f -> fieldName f == fname) (structFields st)
+                       in return (fmap (qualType . fieldType) mSf)
+            Just (TypeGenericApp tname typeArgs) ->
+              case lookupStruct tname env of
+                Nothing -> return Nothing
+                Just st ->
+                  let fname = unLocated locField
+                      mSf = find (\f -> fieldName f == fname) (structFields st)
+                      binding = Map.fromList (zip (structTypeParams st) (map qualType typeArgs))
+                   in return (fmap (applyBindings binding . qualType . fieldType) mSf)
+            Just (TypeNamed tname) ->
+              case lookupError (ErrorName (unTypeName tname)) env of
+                Just et ->
+                  let fname = unLocated locField
+                      mEf = find (\f -> errorFieldName f == fname) (errorTypeFields et)
+                   in return (fmap errorFieldType mEf)
+                Nothing -> return Nothing
+            Just (TypeTuple elemTypes) ->
+              let fname = unFieldName (unLocated locField)
+               in case reads (drop 1 (T.unpack fname)) of
+                    [(idx, "")]
+                      | idx >= 0 && idx < length elemTypes ->
+                          return (Just (qualType (elemTypes !! idx)))
+                    _ -> return Nothing
+            _ -> return Nothing
     go (ExprTupleInit elems) = do
       mTypes <- mapM (inferExpr env) elems
       let types = [QualifiedType Mutable t | Just t <- mTypes]
@@ -670,6 +697,9 @@ checkMatchArm env mSubjType (MatchArm pat body) = do
         )
         env
         pairs
+    MatchEnumVariant (Located _ ename) (Located vsp _) -> do
+      recordType vsp (TypeStruct ename)
+      return env
     MatchStruct fields -> do
       let tname = case mSubjType of
             Just (TypeStruct n) -> Just n

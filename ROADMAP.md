@@ -125,10 +125,10 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 |---------|-------|
 | ~~Tuples~~ | Done, see "What's complete" table |
 | ~~Closures capturing environment~~ | Done, see "What's complete" table |
-| Enum types | Named variants without payload, e.g. `enum Direction { North, South, East, West }`; matchable in `match`; distinct from the error system |
+| ~~Enum types~~ | Done -- `enum Direction { North, South, East, West }` with `Direction.North` access and `match` arm patterns; see `tests/enums.qa` |
 | ~~Generic structs~~ | Done, see "What's complete" table |
-| ~~Inherent impl blocks~~ | Done — `impl MyStruct { fn method(self, ...) -> R { ... } }` with `v.method(args)` call syntax; methods compile as regular functions (`TypeName.method`); see `tests/impl_methods.qa` |
-| ~~Interfaces~~ | Done — `interface Printable { fn print(self) -> void; }` + `impl Printable for MyStruct { ... }`; type checker validates all required methods are provided; see `tests/interfaces.qa` |
+| ~~Inherent impl blocks~~ | Done -- `impl MyStruct { fn method(self, ...) -> R { ... } }` with `v.method(args)` call syntax; methods compile as regular functions (`TypeName.method`); see `tests/impl_methods.qa` |
+| ~~Interfaces~~ | Done -- `interface Printable { fn print(self) -> void; }` + `impl Printable for MyStruct { ... }`; type checker validates all required methods are provided; see `tests/interfaces.qa` |
 | ~~Operator overloading~~ | Done -- `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }` desugars `a + b` to `a.add(b)`; traits: `Add Sub Mul Div Rem Eq Ne Lt Gt Le Ge Neg`; see `tests/operator_overload.qa` |
 | ~~Destructuring~~ | Done -- `{ x, y }: Point = p` in `let` bindings; `{ x, y } =>` in `match` arms; see `tests/struct_destructuring.qa` |
 | FFI callbacks | C function pointer from a Quant lambda via libffi closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`) |
