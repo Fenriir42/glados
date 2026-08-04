@@ -613,6 +613,19 @@ compileStmt = \case
       void $ emitInstruction (IFieldGet fn)
       void $ emitInstruction (IStore v)
       addToScope v
+  StmtStructDecl fields _qt initExpr -> do
+    n <- gets csTempCount
+    modify $ \s -> s {csTempCount = n + 1}
+    let tmpVar = VarName (T.pack ("__struct_" ++ show n))
+    compileExpr (unLocated initExpr)
+    void $ emitInstruction (IStore tmpVar)
+    addToScope tmpVar
+    forM_ fields $ \(Located _ fn) -> do
+      let v = VarName (unFieldName fn)
+      void $ emitInstruction (ILoad tmpVar)
+      void $ emitInstruction (IFieldGet fn)
+      void $ emitInstruction (IStore v)
+      addToScope v
 
 -- ---------------------------------------------------------------------------
 -- For-loop init
@@ -694,6 +707,7 @@ freeVarsStmt = \case
   StmtBlock b -> freeVarsBlock b
   StmtMatch e arms -> freeVarsExpr (unLocated e) <> foldMap freeVarsMatchArm arms
   StmtTupleDecl _ _ e -> freeVarsExpr (unLocated e)
+  StmtStructDecl _ _ e -> freeVarsExpr (unLocated e)
 
 freeVarsLVal :: LValue ann -> Set VarName
 freeVarsLVal = \case
@@ -714,6 +728,7 @@ freeVarsPat = \case
   MatchLit e -> freeVarsExpr (unLocated e)
   MatchRange e1 e2 -> freeVarsExpr (unLocated e1) <> freeVarsExpr (unLocated e2)
   MatchTuple _ -> Set.empty
+  MatchStruct _ -> Set.empty
   _ -> Set.empty
 
 -- ---------------------------------------------------------------------------
@@ -1021,6 +1036,17 @@ compileMatchArm subjVar (MatchArm pat body) = case pat of
     forM_ (zip [0 ..] vars) $ \(i, locVar) -> do
       let v = unLocated locVar
           fn = FieldName (T.pack ("_" ++ show (i :: Int)))
+      void $ emitInstruction (ILoad subjVar)
+      void $ emitInstruction (IFieldGet fn)
+      void $ emitInstruction (IStore v)
+      addToScope v
+    compileLocatedStmt body
+    exitJmp <- emitInstruction (IJump (InstructionPointer 0))
+    return [exitJmp]
+  MatchStruct fields -> do
+    -- Struct patterns always match; bind each named field as a variable
+    forM_ fields $ \(Located _ fn) -> do
+      let v = VarName (unFieldName fn)
       void $ emitInstruction (ILoad subjVar)
       void $ emitInstruction (IFieldGet fn)
       void $ emitInstruction (IStore v)

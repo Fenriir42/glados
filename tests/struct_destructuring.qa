@@ -1,0 +1,40 @@
+struct Point {
+    x: int,
+    y: int,
+}
+
+struct Person {
+    name: str,
+    age: int,
+}
+
+fn make_point(x: int, y: int) -> Point {
+    return Point { x: x, y: y };
+}
+
+fn describe(p: Person) -> str {
+    { name, age }: Person = p;
+    return `{name} is {age}`;
+}
+
+fn main() -> void {
+    p: Point = make_point(3, 4);
+
+    { x, y }: Point = p;
+    println(x);
+    println(y);
+
+    person: Person = Person { name: "Alice", age: 30 };
+    { name, age }: Person = person;
+    println(name);
+    println(age);
+
+    println(describe(Person { name: "Bob", age: 25 }));
+
+    match p {
+        { x, y } => {
+            println(x);
+            println(y);
+        };
+    };
+}

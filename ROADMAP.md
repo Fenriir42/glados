@@ -130,7 +130,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~Inherent impl blocks~~ | Done — `impl MyStruct { fn method(self, ...) -> R { ... } }` with `v.method(args)` call syntax; methods compile as regular functions (`TypeName.method`); see `tests/impl_methods.qa` |
 | ~~Interfaces~~ | Done — `interface Printable { fn print(self) -> void; }` + `impl Printable for MyStruct { ... }`; type checker validates all required methods are provided; see `tests/interfaces.qa` |
 | ~~Operator overloading~~ | Done -- `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }` desugars `a + b` to `a.add(b)`; traits: `Add Sub Mul Div Rem Eq Ne Lt Gt Le Ge Neg`; see `tests/operator_overload.qa` |
-| Destructuring | `let (x, y) = point` for tuples; `let { name, age } = person` for structs in `let` bindings and `match` arms |
+| ~~Destructuring~~ | Done -- `{ x, y }: Point = p` in `let` bindings; `{ x, y } =>` in `match` arms; see `tests/struct_destructuring.qa` |
 | FFI callbacks | C function pointer from a Quant lambda via libffi closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`) |
 | Async / await | Cooperative concurrency; `async fn`, `await expr`; backed by a lightweight task scheduler |
 | Multi-target codegen | LLVM IR or C emission as an alternative backend to the bytecode VM; enables AOT compilation and better performance |

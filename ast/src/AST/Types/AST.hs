@@ -226,6 +226,11 @@ data Stmt ann
       [Located VarName]
       (Located QualifiedType)
       (Located (Expr ann))
+  | -- | Struct destructuring: @{ x, y }: Point = expr@
+    StmtStructDecl
+      [Located FieldName]
+      (Located QualifiedType)
+      (Located (Expr ann))
   deriving stock (Show, Eq, Generic)
 
 -- | A single pattern in a match arm.
@@ -246,6 +251,8 @@ data MatchPattern ann
     MatchWildcard
   | -- | Tuple destructure pattern: @(x, y)@
     MatchTuple [Located VarName]
+  | -- | Struct destructure pattern: @{ x, y }@
+    MatchStruct [Located FieldName]
   deriving stock (Show, Eq, Generic)
 
 -- | One arm of a match statement.

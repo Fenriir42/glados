@@ -31,6 +31,7 @@ import AST.Types.AST
 import AST.Types.Common
   ( Column (..),
     ErrorName (..),
+    FieldName (..),
     FuncName (..),
     Line (..),
     Located (..),
@@ -41,6 +42,7 @@ import AST.Types.Common
     locSpan,
     locValue,
     unErrorName,
+    unFieldName,
     unFuncName,
     unTypeName,
     unVarName,
@@ -257,6 +259,8 @@ allDeclsStmt (StmtFor mInit _ _ body) =
 allDeclsStmt (StmtBlock b) = allDeclsBlock b
 allDeclsStmt (StmtMatch _ arms) = concatMap (allDeclsStmt . locValue . matchArmBody) arms
 allDeclsStmt (StmtTupleDecl vars _ _) = vars
+allDeclsStmt (StmtStructDecl fields _ _) =
+  [Located sp (VarName (unFieldName fn)) | Located sp fn <- fields]
 allDeclsStmt _ = []
 
 -- ---------------------------------------------------------------------------
@@ -366,6 +370,8 @@ lintStmt fp scopes sp stmt = case stmt of
      in (scopes, exprDiags ++ armDiags)
   StmtTupleDecl _ _ e ->
     (scopes, lintExprDiags fp (locValue e))
+  StmtStructDecl _ _ e ->
+    (scopes, lintExprDiags fp (locValue e))
   StmtBreak -> (scopes, [])
   StmtContinue -> (scopes, [])
 
@@ -439,6 +445,7 @@ usedVarsStmt = \case
     usedVarsExpr (locValue expr)
       <> foldMap (usedVarsStmt . locValue . matchArmBody) arms
   StmtTupleDecl _ _ e -> usedVarsExpr (locValue e)
+  StmtStructDecl _ _ e -> usedVarsExpr (locValue e)
   StmtBreak -> Set.empty
   StmtContinue -> Set.empty
 

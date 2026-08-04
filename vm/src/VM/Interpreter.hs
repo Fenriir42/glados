@@ -564,10 +564,12 @@ execInstr = \case
   IFieldSet (FieldName fname) -> do
     val <- pop "IFieldSet (value)"
     ref <- pop "IFieldSet (ref)"
+    strings <- gets vmStrings
+    let resolvedVal = resolveStringRef strings val
     case ref of
       VStructRef sid -> do
         modify $ \s ->
-          s {vmStructHeap = Map.adjust (Map.insert fname val) sid (vmStructHeap s)}
+          s {vmStructHeap = Map.adjust (Map.insert fname resolvedVal) sid (vmStructHeap s)}
         return Nothing
       _ -> throwError $ VMTypeMismatch $ "IFieldSet: expected struct ref, got " ++ show ref
   INewError (ErrorName ename) fnames -> do

@@ -781,6 +781,57 @@ fn main() -> void {
 }
 ```
 
+## Struct Destructuring
+
+You can unpack multiple struct fields into local variables in a single binding
+using `{ field, ... }: Type = expr` syntax, and match against struct shapes in
+`match` arms with `{ field, ... }` patterns.
+
+### Let-binding destructuring
+
+```quant
+struct Point { x: int, y: int }
+
+fn main() -> void {
+    p: Point = Point { x: 3, y: 4 };
+
+    { x, y }: Point = p;
+    println(x);   // 3
+    println(y);   // 4
+}
+```
+
+Each listed field name is bound as a local variable with the same name.  The
+type annotation (`: Point`) tells the type checker which struct the fields come
+from.
+
+### Destructuring in function bodies
+
+```quant
+struct Person { name: str, age: int }
+
+fn greet(p: Person) -> str {
+    { name, age }: Person = p;
+    return `{name} is {age} years old`;
+}
+```
+
+### Match arm patterns
+
+```quant
+fn print_point(p: Point) -> void {
+    match p {
+        { x, y } => {
+            println(x);
+            println(y);
+        };
+    };
+}
+```
+
+A struct pattern always matches (the type is known statically) and binds all
+listed fields as variables scoped to the arm body.
+
 ## Generics
 
 Quant supports parametric polymorphism through type parameters declared in square brackets after the function name. A generic function works with any concrete type supplied at the call site; the type checker verifies correctness for each use.

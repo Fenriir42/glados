@@ -289,7 +289,7 @@ inferExpr env (Located sp expr) = do
         else return Nothing
     go (ExprMethodCall receiver (Located methodSp methodFuncName) args) = do
       mReceiverType <- inferExpr env receiver
-      case structNameOf mReceiverType of
+      case mStructNameOf mReceiverType of
         Just tname -> do
           -- Real method call: Vec2.len(receiver, args)
           let qualFname = FuncName (unTypeName tname <> "." <> unFuncName methodFuncName)
@@ -300,9 +300,9 @@ inferExpr env (Located sp expr) = do
           let qualFname = FuncName (receiverPrefix (unLocated receiver) <> unFuncName methodFuncName)
           inferCall sp methodSp qualFname args
       where
-        structNameOf (Just (TypeStruct n)) = Just n
-        structNameOf (Just (TypeGenericApp n _)) = Just n
-        structNameOf _ = Nothing
+        mStructNameOf (Just (TypeStruct n)) = Just n
+        mStructNameOf (Just (TypeGenericApp n _)) = Just n
+        mStructNameOf _ = Nothing
         receiverPrefix (ExprVar (Located _ v)) = unVarName v <> "."
         receiverPrefix (ExprField (Located _ e) (Located _ f)) =
           receiverPrefix e <> unFieldName f <> "."
@@ -558,6 +558,32 @@ checkStmt env (Located stmtSpan stmt) = case stmt of
       )
       env
       pairs
+  StmtStructDecl fields (Located _ structQt) initExpr -> do
+    mT <- inferExpr env initExpr
+    let tname = case mT of
+          Just (TypeStruct n) -> Just n
+          Just (TypeGenericApp n _) -> Just n
+          _ -> case qualType structQt of
+            TypeStruct n -> Just n
+            TypeGenericApp n _ -> Just n
+            _ -> Nothing
+    let fieldTypeOf fn = case tname >>= (`lookupStruct` env) of
+          Just st ->
+            case find (\f -> fieldName f == fn) (structFields st) of
+              Just sf -> fieldType sf
+              Nothing -> QualifiedType Mutable (TypePrimitive PrimNone)
+          Nothing -> QualifiedType Mutable (TypePrimitive PrimNone)
+    foldM
+      ( \e (Located fsp fn) -> do
+          let qt = fieldTypeOf fn
+              v = VarName (unFieldName fn)
+          recordVarDecl fsp v stmtSpan
+          recordVarUse fsp v fsp
+          recordType fsp (qualType qt)
+          return (insertVarWithSpan v qt fsp e)
+      )
+      env
+      fields
 
 -- ---------------------------------------------------------------------------
 -- Declaration checking
@@ -644,6 +670,28 @@ checkMatchArm env mSubjType (MatchArm pat body) = do
         )
         env
         pairs
+    MatchStruct fields -> do
+      let tname = case mSubjType of
+            Just (TypeStruct n) -> Just n
+            Just (TypeGenericApp n _) -> Just n
+            _ -> Nothing
+          fieldTypeOf fn = case tname >>= (`lookupStruct` env) of
+            Just st ->
+              case find (\f -> fieldName f == fn) (structFields st) of
+                Just sf -> fieldType sf
+                Nothing -> QualifiedType Mutable (TypePrimitive PrimNone)
+            Nothing -> QualifiedType Mutable (TypePrimitive PrimNone)
+      foldM
+        ( \e (Located fsp fn) -> do
+            let qt = fieldTypeOf fn
+                v = VarName (unFieldName fn)
+            recordVarDecl fsp v fsp
+            recordVarUse fsp v fsp
+            recordType fsp (qualType qt)
+            return (insertVarWithSpan v qt fsp e)
+        )
+        env
+        fields
   void (checkStmt armEnv body)
 
 -- ---------------------------------------------------------------------------

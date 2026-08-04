@@ -497,6 +497,9 @@ fmtStmt cm opts n (Located sp stmt) = case stmt of
   StmtTupleDecl vars (Located _ qt) (Located _ e) ->
     let names = "(" <> T.intercalate ", " [unVarName v | Located _ v <- vars] <> ")"
      in [ind opts n <> names <> ": " <> fmtQType qt <> " = " <> fmtExpr opts n e]
+  StmtStructDecl fields (Located _ qt) (Located _ e) ->
+    let names = "{ " <> T.intercalate ", " [unFieldName f | Located _ f <- fields] <> " }"
+     in [ind opts n <> names <> ": " <> fmtQType qt <> " = " <> fmtExpr opts n e]
 
 fmtElse :: CommentsMap -> FormatOptions -> Int -> Int -> Maybe (Block ()) -> Lines
 fmtElse _ opts n _ Nothing = [ind opts n <> "}"]
@@ -556,6 +559,8 @@ fmtMatchPat opts n (MatchRange (Located _ lo) (Located _ hi)) =
 fmtMatchPat _ _ MatchWildcard = "_"
 fmtMatchPat _ _ (MatchTuple vars) =
   "(" <> T.intercalate ", " [unVarName v | Located _ v <- vars] <> ")"
+fmtMatchPat _ _ (MatchStruct fields) =
+  "{ " <> T.intercalate ", " [unFieldName f | Located _ f <- fields] <> " }"
 
 -- ---------------------------------------------------------------------------
 -- LValues

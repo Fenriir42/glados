@@ -8,7 +8,7 @@ import AST.Types.AST
     MatchPattern (..),
     Stmt (..),
   )
-import AST.Types.Common (ErrorName (..), Located (..), SourceSpan (..), VarName (..), getSpan)
+import AST.Types.Common (ErrorName (..), FieldName (..), Located (..), SourceSpan (..), VarName (..), getSpan)
 import AST.Types.Literal (IntBase (..), IntLiteral (..), Literal (..))
 import AST.Types.Operator (AssignOp (AssignAdd, AssignSub))
 import Parser.Expr (parseExpr)
@@ -243,6 +243,18 @@ parseMatchPattern =
         case vars of
           [_] -> fail "single-variable tuple pattern not supported"
           _ -> return (MatchTuple vars),
+      -- struct destructure: { x, y }
+      MP.try $ do
+        _ <- matchSymbol "{"
+        fields <-
+          MP.sepBy1
+            ( do
+                Located fspan (TokIdentifier f) <- MP.satisfy isIdentifier
+                return (Located fspan (FieldName f))
+            )
+            (matchSymbol ",")
+        _ <- matchSymbol "}"
+        return (MatchStruct fields),
       -- literal / expression
       MatchLit <$> parseExpr
     ]
@@ -262,6 +274,28 @@ parseStmtMatch = do
   Located endSpan _ <- matchSymbol "}"
   let combinedSpan = matchSpan <> endSpan
   return $ Located combinedSpan (StmtMatch subj arms)
+
+-- | Parse a struct destructuring declaration: @{ x, y }: Point = expr@
+parseStmtStructDecl :: TokenParser (Located (Stmt ann))
+parseStmtStructDecl = MP.try $ do
+  Located startSpan _ <- matchSymbol "{"
+  fields <-
+    MP.sepBy1
+      ( do
+          Located fspan (TokIdentifier f) <- MP.satisfy isIdentifier
+          return (Located fspan (FieldName f))
+      )
+      (matchSymbol ",")
+  _ <- matchSymbol "}"
+  _ <- matchSymbol ":"
+  Located qtSpan qt <- parseQualifiedType
+  _ <- matchSymbol "="
+  Located exprSpan initExpr <- parseExpr
+  let combinedSpan = startSpan <> qtSpan <> exprSpan
+  return $
+    Located
+      combinedSpan
+      (StmtStructDecl fields (Located qtSpan qt) (Located exprSpan initExpr))
 
 -- | Parse a tuple destructuring declaration: @(x, y): (int, str) = expr@
 parseStmtTupleDecl :: TokenParser (Located (Stmt ann))
@@ -291,7 +325,8 @@ parseStmtTupleDecl = MP.try $ do
 parseStmt :: TokenParser (Located (Stmt ann))
 parseStmt =
   MP.choice
-    [ MP.try parseStmtTupleDecl,
+    [ MP.try parseStmtStructDecl,
+      MP.try parseStmtTupleDecl,
       MP.try parseStmtVarDecl,
       MP.try parseStmtAssign,
       MP.try $ do
