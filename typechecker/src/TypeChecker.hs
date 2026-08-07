@@ -8,12 +8,11 @@ where
 
 import AST.Types.AST (Decl (..), EnumDecl (..), EnumVariant (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), InterfaceDecl (..), InterfaceMethodSig (..), Program (..), StructDecl (..), programDecls)
 import AST.Types.Common (FuncName (..), Located (..), SourceSpan, TypeName (..), VarName, initialPos, locSpan, spanSingle, unLocated)
-import AST.Types.Type (Constness (..), EnumType (..), ErrorType (..), FunctionType (..), PrimitiveType (..), QualifiedType (..), StructField (..), StructType (..), Type (..))
+import AST.Types.Type (Constness (..), EnumType (..), ErrorType (..), FunctionType (..), PrimitiveType (..), QualifiedType (..), StructType (..), Type (..))
 import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
-import qualified Data.Set as Set
 import qualified Data.Text as T
 import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertEnum, insertError, insertFunc, insertGenericBounds, insertGenericParams, insertInterface, insertStruct)
 import TypeChecker.Error

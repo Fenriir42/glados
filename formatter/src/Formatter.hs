@@ -431,6 +431,7 @@ fmtType (TypePrimitive p) = T.pack (show p)
 fmtType (TypeArray (ArrayType qt)) = "[" <> fmtQType qt <> "]"
 fmtType (TypeFunction ft) = fmtFuncTypeText ft
 fmtType (TypeStruct (TypeName nm)) = nm
+fmtType (TypeEnum (TypeName nm)) = nm
 fmtType (TypeResult (ResultType s e)) =
   "orerror(" <> fmtType s <> ", " <> unErrorName e <> ")"
 fmtType (TypeOption t) = "option(" <> fmtType t <> ")"

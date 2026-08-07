@@ -10,7 +10,6 @@ where
 import AST.Types.AST
   ( Block (..),
     Decl (..),
-    EnumVariant (..),
     Expr (..),
     ForInit (..),
     FunctionDecl (..),

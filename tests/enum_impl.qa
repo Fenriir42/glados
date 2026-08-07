@@ -1,0 +1,86 @@
+// Methods on enum types via impl blocks.
+// Demonstrates:
+//   1. impl EnumName { ... } with self receivers.
+//   2. Methods on payloadless enums (match on self).
+//   3. Methods on data-carrying enums (field destructuring in methods).
+//   4. Methods calling other methods on self.
+
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+};
+
+impl Direction {
+    fn is_horizontal(self) -> bool {
+        match self {
+            Direction.East => { return True; };
+            Direction.West => { return True; };
+            _ => { return False; };
+        };
+    }
+
+    fn name(self) -> str {
+        match self {
+            Direction.North => { return "north"; };
+            Direction.South => { return "south"; };
+            Direction.East  => { return "east"; };
+            Direction.West  => { return "west"; };
+            _ => { return "?"; };
+        };
+    }
+
+    fn describe(self) -> str {
+        axis: str = "vertical";
+        if (self.is_horizontal()) {
+            axis = "horizontal";
+        };
+        n: str = self.name();
+        return `{n} ({axis})`;
+    }
+}
+
+enum Shape {
+    Circle { radius: float },
+    Rect { width: float, height: float },
+};
+
+impl Shape {
+    fn area(self) -> float {
+        match self {
+            Shape.Circle { radius: r } => { return 3.14159 * r * r; };
+            Shape.Rect { width: w, height: h } => { return w * h; };
+            _ => { return 0.0; };
+        };
+    }
+}
+
+fn main() -> void {
+    d: Direction = Direction.East;
+    io.println(d.describe());
+
+    n: Direction = Direction.North;
+    io.println(n.describe());
+
+    c: Shape = Shape.Circle { radius: 2.0 };
+    r: Shape = Shape.Rect { width: 3.0, height: 4.0 };
+
+    ca: str = string.to_str(c.area());
+    ra: str = string.to_str(r.area());
+    io.println(`circle area: {ca}`);
+    io.println(`rect area:   {ra}`);
+
+    d.print_me();
+}
+
+// Interfaces on enums also work through the same machinery.
+interface Printable {
+    fn print_me(self) -> void;
+}
+
+impl Printable for Direction {
+    fn print_me(self) -> void {
+        io.println(self.name());
+    }
+}

@@ -101,6 +101,43 @@ fn area(s: Shape) -> float {
 
 Field names are listed explicitly so you can rename them at the binding site (`radius: r` binds the `radius` field to a local variable `r`). You can also use the shorthand where field name equals binding name: `{ radius }` instead of `{ radius: radius }`.
 
+## Methods on enums
+
+Enums support `impl` blocks exactly like structs. A method receives the enum value as `self` and typically matches on it:
+
+```quant
+impl Direction {
+    fn is_horizontal(self) -> bool {
+        match self {
+            Direction.East => { return True; };
+            Direction.West => { return True; };
+            _ => { return False; };
+        };
+    }
+}
+
+fn main() -> void {
+    d: Direction = Direction.East;
+    println(d.is_horizontal());   // True
+}
+```
+
+Methods work on data-carrying enums too, destructuring the payload inside the method body:
+
+```quant
+impl Shape {
+    fn area(self) -> float {
+        match self {
+            Shape.Circle { radius: r } => { return 3.14159 * r * r; };
+            Shape.Rect   { width: w, height: h } => { return w * h; };
+            _ => { return 0.0; };
+        };
+    }
+}
+```
+
+Enums can also implement interfaces with `impl InterfaceName for EnumName`, using the same syntax as [interfaces on structs](/language/interfaces/).
+
 ## See Also
 
 - [Control Flow](/language/control-flow/#match-statement) -- the `match` statement in full

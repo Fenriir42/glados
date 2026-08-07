@@ -133,7 +133,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~Destructuring~~ | Done -- `{ x, y }: Point = p` in `let` bindings; `{ x, y } =>` in `match` arms; see `tests/struct_destructuring.qa` |
 | ~~Generic bounds~~ | Done -- `fn foo[T: Iface](x: T)` syntax; type checker verifies concrete type implements the interface at every call site; `IDynMethodCall` for runtime dispatch; see `tests/generic_bounds.qa` |
 | ~~Data-carrying enum variants~~ | Done -- `enum Shape { Circle { radius: float }, Rect { w: float, h: float }, Point }` with `Shape.Circle { radius: 5.0 }` construction and `Shape.Circle { radius: r } =>` pattern matching with field destructuring; see `tests/data_enum.qa` |
-| `impl` on enums | Methods on enum types: `impl Direction { fn is_horizontal(self) -> bool { ... } }` |
+| ~~`impl` on enums~~ | Done -- `impl Direction { fn is_horizontal(self) -> bool { ... } }` with `d.method()` call syntax; `impl Interface for Enum` also supported; see `tests/enum_impl.qa` |
 | Interface inheritance | `interface ReadWrite extends Read, Write { }` -- compose interfaces without duplicating method lists |
 | Default interface methods | `interface Printable { fn print(self) -> void { io.puts(self.to_str()); } }` -- optional default impl in an interface body; concrete type may override |
 | Associated types on interfaces | `interface Iterator { type Item; fn next(self) -> option(Item); }` -- type members on interfaces for more expressive abstractions |
