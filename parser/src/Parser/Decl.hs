@@ -333,6 +333,9 @@ parseDeclInterface = do
   Located visSpan visibility <- parseVisibility
   Located ifaceSpan _ <- MP.satisfy isInterfaceKw
   Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  mExtends <- MP.optional $ do
+    _ <- MP.satisfy isExtendsKw
+    MP.sepBy1 parseParentIface (matchSymbol ",")
   _ <- matchSymbol "{"
   methods <- MP.many parseInterfaceMethodSig
   Located endSpan _ <- matchSymbol "}"
@@ -342,12 +345,18 @@ parseDeclInterface = do
       idecl =
         InterfaceDecl
           { ifaceDeclName = Located nameSpan (TypeName name),
+            ifaceDeclExtends = fromMaybe [] mExtends,
             ifaceDeclMethods = methods
           }
   return $ Located combinedSpan (DeclInterface visibility idecl)
   where
     isInterfaceKw (Located _ (TokIdentifier "interface")) = True
     isInterfaceKw _ = False
+    isExtendsKw (Located _ (TokIdentifier "extends")) = True
+    isExtendsKw _ = False
+    parseParentIface = do
+      Located pspan (TokIdentifier pname) <- MP.satisfy isIdentifier
+      return $ Located pspan (TypeName pname)
 
 -- | Parse @impl InterfaceName for TypeName { fn method(...) -> R { ... } ... }@.
 -- Each method's @self@ parameter is replaced with @TypeName@ at parse time (same as inherent impl).

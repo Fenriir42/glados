@@ -15,6 +15,7 @@ import AST.Types.AST
     FunctionDecl (..),
     ImplDecl (..),
     ImplForDecl (..),
+    InterfaceDecl (..),
     InterfaceMethodSig (..),
     LValue (..),
     MatchArm (..),
@@ -699,6 +700,11 @@ checkDecl env (Located declSpan decl) = case decl of
             Nothing -> recordError (TCMissingInterfaceMethod declSpan ifaceName typeName mname)
             Just _ -> return ()
     mapM_ (checkFunction env . unLocated) (implForMethods ifdecl)
+  DeclInterface _ idecl ->
+    forM_ (ifaceDeclExtends idecl) $ \(Located psp pname) ->
+      case lookupInterface pname env of
+        Nothing -> recordError (TCUndefinedInterface psp pname)
+        Just _ -> return ()
   _ -> return ()
 
 checkFunction :: Env -> FunctionDecl () -> TC ()

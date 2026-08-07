@@ -1,0 +1,55 @@
+// Interface inheritance showcase.
+// Demonstrates:
+//   1. interface Child extends Parent { ... } composes method lists.
+//   2. Multiple parents: extends Read, Write.
+//   3. impl Child for T must provide inherited methods too.
+//   4. A bound T: Child grants access to inherited methods.
+//   5. A type implementing Child structurally satisfies a T: Parent bound.
+
+interface Read {
+    fn read(self) -> str;
+}
+
+interface Write {
+    fn write(self, data: str) -> str;
+}
+
+interface ReadWrite extends Read, Write {
+    fn flush(self) -> str;
+}
+
+struct File {
+    name: str,
+}
+
+impl ReadWrite for File {
+    fn read(self) -> str {
+        return `read from {self.name}`;
+    }
+
+    fn write(self, data: str) -> str {
+        return `wrote "{data}" to {self.name}`;
+    }
+
+    fn flush(self) -> str {
+        return `flushed {self.name}`;
+    }
+}
+
+// Bound on the child interface: all three methods are callable.
+fn roundtrip[T: ReadWrite](rw: T) -> void {
+    io.println(rw.write("hello"));
+    io.println(rw.read());
+    io.println(rw.flush());
+}
+
+// Bound on a parent: satisfied by a type that only has impl ReadWrite.
+fn just_read[T: Read](r: T) -> void {
+    io.println(r.read());
+}
+
+fn main() -> void {
+    f: File = File { name: "data.txt" };
+    roundtrip(f);
+    just_read(f);
+}

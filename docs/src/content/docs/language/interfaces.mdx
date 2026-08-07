@@ -69,6 +69,52 @@ impl Describable for Circle {
 }
 ```
 
+## Interface Inheritance
+
+An interface can extend one or more parent interfaces with `extends`. The child's method set is its own methods plus everything inherited (transitively):
+
+```quant
+interface Read {
+    fn read(self) -> str;
+}
+
+interface Write {
+    fn write(self, data: str) -> str;
+}
+
+interface ReadWrite extends Read, Write {
+    fn flush(self) -> str;
+}
+```
+
+An `impl ReadWrite for T` must provide **all** methods -- inherited ones included:
+
+```quant
+impl ReadWrite for File {
+    fn read(self) -> str { return "..."; }
+    fn write(self, data: str) -> str { return "..."; }
+    fn flush(self) -> str { return "..."; }
+}
+```
+
+Inheritance composes with [generic bounds](/language/generics/#generic-bounds) in both directions:
+
+```quant
+// T: ReadWrite grants read/write/flush.
+fn roundtrip[T: ReadWrite](rw: T) -> void {
+    rw.write("hello");
+    rw.read();
+    rw.flush();
+}
+
+// A type with impl ReadWrite also satisfies a parent bound.
+fn just_read[T: Read](r: T) -> void {
+    r.read();
+}
+```
+
+If a child re-declares a method that a parent also declares, the child's signature wins. Extending an undeclared interface is a compile-time error.
+
 ## Operator Overloading
 
 Quant lets you define arithmetic and comparison semantics for your own types by

@@ -146,6 +146,8 @@ data InterfaceMethodSig = InterfaceMethodSig
 
 data InterfaceDecl = InterfaceDecl
   { ifaceDeclName :: Located TypeName,
+    -- | Parent interfaces: @interface ReadWrite extends Read, Write@
+    ifaceDeclExtends :: [Located TypeName],
     ifaceDeclMethods :: [InterfaceMethodSig]
   }
   deriving stock (Show, Eq, Generic)

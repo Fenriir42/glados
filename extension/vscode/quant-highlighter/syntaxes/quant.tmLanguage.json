@@ -138,7 +138,7 @@
         },
         {
           "name": "keyword.declaration.quant",
-          "match": "\\b(fn|const|static|pub|impl|interface|enum|struct|async)\\b"
+          "match": "\\b(fn|const|static|pub|impl|interface|enum|struct|async|extends)\\b"
         },
         {
           "name": "keyword.other.import.quant",

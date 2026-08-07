@@ -345,7 +345,10 @@ fmtImplDecl cm opts n vis idecl =
 fmtInterfaceDecl :: FormatOptions -> Int -> Visibility -> InterfaceDecl -> Lines
 fmtInterfaceDecl opts n vis idecl =
   let tname = unTypeName (locValue (ifaceDeclName idecl))
-      header = [ind opts n <> fmtVis vis <> "interface " <> tname <> " {"]
+      ext = case ifaceDeclExtends idecl of
+        [] -> ""
+        ps -> " extends " <> T.intercalate ", " (map (unTypeName . locValue) ps)
+      header = [ind opts n <> fmtVis vis <> "interface " <> tname <> ext <> " {"]
       sigs = concatMap (fmtInterfaceMethodSig opts (n + 1)) (ifaceDeclMethods idecl)
       footer = [ind opts n <> "}"]
    in header ++ sigs ++ footer

@@ -13,8 +13,9 @@ import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Text as T
-import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertEnum, insertError, insertFunc, insertGenericBounds, insertGenericParams, insertInterface, insertStruct)
+import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertEnum, insertError, insertFunc, insertGenericBounds, insertGenericParams, insertInterface, insertStruct, lookupInterface)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -85,7 +86,7 @@ typeCheck prog =
       structEnv = foldr collectStruct ffiEnv decls
       implEnv = foldr collectImpl structEnv decls
       implForEnv = foldr collectImplFor implEnv decls
-      ifaceEnv = foldr collectInterface implForEnv decls
+      ifaceEnv = collectInterfaces implForEnv decls
       enumEnv = foldr collectEnum ifaceEnv decls
       fullEnv = foldr collectError enumEnv decls
       finalState = execState (mapM_ (checkDecl fullEnv) decls) initialTCState
@@ -173,13 +174,39 @@ typeCheck prog =
         (implForMethods ifdecl)
     collectImplFor _ env = env
 
-    collectInterface :: Located (Decl ()) -> Env -> Env
-    collectInterface (Located _ (DeclInterface _ idecl)) env =
-      insertInterface
-        (unLocated (ifaceDeclName idecl))
-        (ifaceDeclMethods idecl)
-        env
-    collectInterface _ env = env
+    -- Interfaces are stored with their method lists already flattened through
+    -- `extends` chains, so impl-for checking, bound satisfaction, and dynamic
+    -- dispatch all see inherited methods without knowing about inheritance.
+    collectInterfaces :: Env -> [Located (Decl ())] -> Env
+    collectInterfaces env0 ds =
+      let raw =
+            Map.fromList
+              [ ( unLocated (ifaceDeclName idecl),
+                  (map unLocated (ifaceDeclExtends idecl), ifaceDeclMethods idecl)
+                )
+                | Located _ (DeclInterface _ idecl) <- ds
+              ]
+          -- Own methods first (a child re-declaration shadows the inherited
+          -- one); the visited set breaks extends cycles; unknown parents are
+          -- resolved against env0 so builtin operator traits can be extended.
+          flatten visited n
+            | n `Set.member` visited = []
+            | otherwise = case Map.lookup n raw of
+                Just (parents, own) ->
+                  own ++ concatMap (flatten (Set.insert n visited)) parents
+                Nothing -> concat (lookupInterface n env0)
+          dedupByName = go Set.empty
+            where
+              go _ [] = []
+              go seen (sig : rest)
+                | nm `Set.member` seen = go seen rest
+                | otherwise = sig : go (Set.insert nm seen) rest
+                where
+                  nm = unLocated (ifaceMethodName sig)
+       in Map.foldrWithKey
+            (\n _ e -> insertInterface n (dedupByName (flatten Set.empty n)) e)
+            env0
+            raw
 
     collectError :: Located (Decl ()) -> Env -> Env
     collectError (Located _ (DeclError _ ed)) env =

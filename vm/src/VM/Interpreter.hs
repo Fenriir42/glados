@@ -683,7 +683,8 @@ execInstr = \case
     return Nothing
   IDynMethodCall methodName argc -> do
     stk <- gets vmStack
-    let receiver = stk !! max 0 (argc - 1)
+    -- The receiver (self, first parameter) is pushed last and sits on top.
+    receiver <- peek "IDynMethodCall"
     resolvedName <- case receiver of
       VStructRef sid -> do
         types <- gets vmStructTypes
@@ -1351,6 +1352,7 @@ showVal (VStructRef _) = "struct(...)"
 showVal (VFunction f) = T.unpack (unFuncName f)
 showVal (VClosure f _) = "<closure:" ++ T.unpack (unFuncName f) ++ ">"
 showVal (VErrorVal e _) = T.unpack (unErrorName e)
+showVal (VTask tid) = "<task:" ++ show tid ++ ">"
 
 -- ---------------------------------------------------------------------------
 -- Regex helpers
