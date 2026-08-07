@@ -201,4 +201,9 @@ typeCheck prog =
     collectEnum _ env = env
 
     mkFuncType :: FunctionDecl () -> FunctionType
-    mkFuncType fd = FunctionType (funcDeclParams fd) (funcDeclReturnType fd)
+    mkFuncType fd
+      | funcDeclAsync fd =
+          FunctionType
+            (funcDeclParams fd)
+            (fmap (\qt -> qt {qualType = TypeTask (qualType qt)}) (funcDeclReturnType fd))
+      | otherwise = FunctionType (funcDeclParams fd) (funcDeclReturnType fd)

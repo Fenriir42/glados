@@ -15,7 +15,7 @@ import AST.Types.Type
     QualifiedType (QualifiedType),
     ResultType (ResultType),
     Signedness (..),
-    Type (TypeArray, TypeDict, TypeFunction, TypeGenericApp, TypeOption, TypePrimitive, TypeResult, TypeStruct, TypeTuple),
+    Type (TypeArray, TypeDict, TypeFunction, TypeGenericApp, TypeOption, TypePrimitive, TypeResult, TypeStruct, TypeTask, TypeTuple),
     defaultFloatType,
     defaultIntType,
   )
@@ -196,6 +196,18 @@ parseOptionType = MP.try $ do
   Located endSpan _ <- matchSymbol ")"
   return $ Located (startSpan <> endSpan) (TypeOption innerType)
 
+isTaskIdent :: Located TokenContent -> Bool
+isTaskIdent (Located _ (TokIdentifier "task")) = True
+isTaskIdent _ = False
+
+parseTaskType :: TokenParser (Located Type)
+parseTaskType = MP.try $ do
+  Located startSpan _ <- MP.satisfy isTaskIdent
+  _ <- matchSymbol "("
+  Located _ innerType <- parseType
+  Located endSpan _ <- matchSymbol ")"
+  return $ Located (startSpan <> endSpan) (TypeTask innerType)
+
 isDictIdent :: Located TokenContent -> Bool
 isDictIdent (Located _ (TokIdentifier "dict")) = True
 isDictIdent _ = False
@@ -215,6 +227,7 @@ parseType =
   MP.choice
     [ parseErrorOrType,
       parseOptionType,
+      parseTaskType,
       parseDictType,
       fmap TypePrimitive <$> parsePrimitiveType,
       fmap TypeArray <$> parseArrayType,

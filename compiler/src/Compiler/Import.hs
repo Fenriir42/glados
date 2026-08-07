@@ -211,6 +211,7 @@ stmtHasCall prefix = \case
         exprHasCall prefix (unLocated lo) || exprHasCall prefix (unLocated hi)
       patHasCall _ = False
   StmtTupleDecl _ _ e -> exprHasCall prefix (unLocated e)
+  StmtStructDecl _ _ e -> exprHasCall prefix (unLocated e)
 
 forInitHasCall :: Text -> ForInit () -> Bool
 forInitHasCall prefix = \case
@@ -234,6 +235,7 @@ exprHasCall prefix = \case
     any (\(k, v) -> exprHasCall prefix (unLocated k) || exprHasCall prefix (unLocated v)) pairs
   ExprTry e -> exprHasCall prefix (unLocated e)
   ExprMust e -> exprHasCall prefix (unLocated e)
+  ExprAwait e -> exprHasCall prefix (unLocated e)
   ExprSome e -> exprHasCall prefix (unLocated e)
   ExprNone -> False
   ExprError _ fields -> any (exprHasCall prefix . unLocated . snd) fields
@@ -317,6 +319,7 @@ renameStmt names prefix = \case
       renamePat (MatchRange lo hi) = MatchRange (fmap rE lo) (fmap rE hi)
       renamePat p = p
   StmtTupleDecl vars qt e -> StmtTupleDecl vars qt (fmap rE e)
+  StmtStructDecl fields qt e -> StmtStructDecl fields qt (fmap rE e)
   where
     rE = renameExpr names prefix
     rB = renameBlock names prefix
@@ -358,6 +361,7 @@ renameExpr names prefix = \case
   ExprDictLit pairs -> ExprDictLit [(fmap rE k, fmap rE v) | (k, v) <- pairs]
   ExprTry e -> ExprTry (fmap rE e)
   ExprMust e -> ExprMust (fmap rE e)
+  ExprAwait e -> ExprAwait (fmap rE e)
   ExprSome e -> ExprSome (fmap rE e)
   ExprNone -> ExprNone
   ExprError ename fields -> ExprError ename [(f, fmap rE e) | (f, e) <- fields]

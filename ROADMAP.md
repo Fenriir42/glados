@@ -138,7 +138,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | Default interface methods | `interface Printable { fn print(self) -> void { io.puts(self.to_str()); } }` -- optional default impl in an interface body; concrete type may override |
 | Associated types on interfaces | `interface Iterator { type Item; fn next(self) -> option(Item); }` -- type members on interfaces for more expressive abstractions |
 | FFI callbacks | C function pointer from a Quant lambda via libffi closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`) |
-| Async / await | Cooperative concurrency; `async fn`, `await expr`; backed by a lightweight task scheduler |
+| ~~Async / await~~ | Done -- `async fn f() -> T` returns `task(T)` at the call site; `await expr` unwraps it; cooperative green-task scheduler in the VM (`ISpawn`/`IAwait`); tasks advance only at await points; see `tests/async.qa` |
 | Multi-target codegen | LLVM IR or C emission as an alternative backend to the bytecode VM; enables AOT compilation and better performance |
 
 ### Debugger (DAP) -- done

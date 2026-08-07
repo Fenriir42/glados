@@ -91,6 +91,26 @@ data Frame = Frame
     fFunc :: FuncName
   }
 
+-- | A task's full execution context, saved while it is not the running task.
+data TaskCtx = TaskCtx
+  { tStack :: [Value],
+    tLocals :: Map VarName Value,
+    tIP :: Int,
+    tInstrs :: [Instruction],
+    tStrings :: [Text],
+    tCallStack :: [Frame],
+    tFunc :: FuncName
+  }
+
+-- | Scheduler entry for a task that is not currently running.
+data TaskEntry
+  = -- | Runnable, waiting for a scheduler slot
+    TaskReady TaskCtx
+  | -- | Suspended until the given task id completes
+    TaskWaiting Int TaskCtx
+  | -- | Finished with this (string-resolved) result
+    TaskDone Value
+
 data VMState = VMState
   { vmStack :: [Value],
     vmLocals :: Map VarName Value,
@@ -114,7 +134,15 @@ data VMState = VMState
     -- | Per-branch outcome tracking: (funcName, sourceLine) -> outcomes seen.
     vmBranchCov :: Maybe (IORef (Map.Map (FuncName, Int) (Set.Set Bool))),
     -- | Optional debug hook called at each ICovMark (pauses VM for DAP).
-    vmDebugHook :: Maybe (VMState -> IO ())
+    vmDebugHook :: Maybe (VMState -> IO ()),
+    -- | Suspended/finished tasks by id (the running task has no entry).
+    vmTasks :: Map Int TaskEntry,
+    -- | Ids of TaskReady tasks in FIFO scheduling order.
+    vmReadyQueue :: [Int],
+    -- | Id of the running task; 0 is the main task.
+    vmCurrentTask :: Int,
+    -- | Next fresh task id (task 0 is main and is never allocated).
+    vmNextTaskId :: Int
   }
 
 type VM a = ExceptT VMError (StateT VMState IO) a
@@ -149,7 +177,11 @@ runProgram bytecodes = do
                 vmCoverage = Nothing,
                 vmLineCov = Nothing,
                 vmBranchCov = Nothing,
-                vmDebugHook = Nothing
+                vmDebugHook = Nothing,
+                vmTasks = Map.empty,
+                vmReadyQueue = [],
+                vmCurrentTask = 0,
+                vmNextTaskId = 1
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -181,7 +213,11 @@ runFunction fname bytecodes = do
                 vmCoverage = Nothing,
                 vmLineCov = Nothing,
                 vmBranchCov = Nothing,
-                vmDebugHook = Nothing
+                vmDebugHook = Nothing,
+                vmTasks = Map.empty,
+                vmReadyQueue = [],
+                vmCurrentTask = 0,
+                vmNextTaskId = 1
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -213,7 +249,11 @@ runFunctionCov covRef fname bytecodes = do
                 vmCoverage = Just covRef,
                 vmLineCov = Nothing,
                 vmBranchCov = Nothing,
-                vmDebugHook = Nothing
+                vmDebugHook = Nothing,
+                vmTasks = Map.empty,
+                vmReadyQueue = [],
+                vmCurrentTask = 0,
+                vmNextTaskId = 1
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -252,7 +292,11 @@ runFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes = do
                 vmCoverage = Just covRef,
                 vmLineCov = Just lineCovRef,
                 vmBranchCov = Just branchCovRef,
-                vmDebugHook = Nothing
+                vmDebugHook = Nothing,
+                vmTasks = Map.empty,
+                vmReadyQueue = [],
+                vmCurrentTask = 0,
+                vmNextTaskId = 1
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
@@ -285,10 +329,88 @@ runDebugProgram hook bytecodes = do
                 vmCoverage = Nothing,
                 vmLineCov = Nothing,
                 vmBranchCov = Nothing,
-                vmDebugHook = Just hook
+                vmDebugHook = Just hook,
+                vmTasks = Map.empty,
+                vmReadyQueue = [],
+                vmCurrentTask = 0,
+                vmNextTaskId = 1
               }
       (result, _) <- runStateT (runExceptT execLoop) initState
       return result
+
+-- ---------------------------------------------------------------------------
+-- Task scheduler
+
+-- | Snapshot the running task's execution context.
+saveTaskCtx :: VM TaskCtx
+saveTaskCtx = do
+  s <- S.get
+  return
+    TaskCtx
+      { tStack = vmStack s,
+        tLocals = vmLocals s,
+        tIP = vmIP s,
+        tInstrs = vmInstrs s,
+        tStrings = vmStrings s,
+        tCallStack = vmCallStack s,
+        tFunc = vmCurrentFunc s
+      }
+
+-- | Install a saved execution context as the running one.
+restoreTaskCtx :: TaskCtx -> VM ()
+restoreTaskCtx c = modify $ \s ->
+  s
+    { vmStack = tStack c,
+      vmLocals = tLocals c,
+      vmIP = tIP c,
+      vmInstrs = tInstrs c,
+      vmStrings = tStrings c,
+      vmCallStack = tCallStack c,
+      vmCurrentFunc = tFunc c
+    }
+
+-- | Switch to the next ready task; a task must be ready or every task is
+-- blocked on an await that can never complete.
+scheduleNext :: VM ()
+scheduleNext = do
+  q <- gets vmReadyQueue
+  case q of
+    [] -> throwError $ VMRuntimeError "async deadlock: every task is awaiting a task that cannot complete"
+    (tid : rest) -> do
+      tasks <- gets vmTasks
+      case Map.lookup tid tasks of
+        Just (TaskReady ctx) -> do
+          modify $ \s ->
+            s
+              { vmReadyQueue = rest,
+                vmCurrentTask = tid,
+                vmTasks = Map.delete tid (vmTasks s)
+              }
+          restoreTaskCtx ctx
+        _ -> do
+          modify $ \s -> s {vmReadyQueue = rest}
+          scheduleNext
+
+-- | Finish the running task with the given (string-resolved) result.
+-- For the main task the whole program is done; otherwise record the result,
+-- wake every task awaiting this one, and switch to the next ready task.
+completeTask :: Value -> VM (Maybe Value)
+completeTask v = do
+  cur <- gets vmCurrentTask
+  if cur == 0
+    then return (Just v)
+    else do
+      tasks <- gets vmTasks
+      let wake (TaskWaiting w ctx) | w == cur = TaskReady ctx {tStack = v : tStack ctx}
+          wake e = e
+          woken = [tid | (tid, TaskWaiting w _) <- Map.toList tasks, w == cur]
+      modify $ \s ->
+        s
+          { vmTasks = Map.insert cur (TaskDone v) (Map.map wake tasks),
+            vmReadyQueue = vmReadyQueue s ++ woken
+          }
+      scheduleNext
+      return Nothing
 
 -- ---------------------------------------------------------------------------
 -- Execution loop
@@ -298,7 +420,13 @@ execLoop = do
   ip <- gets vmIP
   instrs <- gets vmInstrs
   if ip >= length instrs
-    then return VUnit
+    then do
+      frames <- gets vmCallStack
+      case frames of
+        [] -> do
+          mv <- completeTask VUnit
+          maybe execLoop return mv
+        _ -> return VUnit
     else do
       let instr = instrs !! ip
       modify $ \s -> s {vmIP = ip + 1}
@@ -415,7 +543,7 @@ execInstr = \case
     let resolvedRetVal = resolveStringRef calleeStrings retVal
     frames <- gets vmCallStack
     case frames of
-      [] -> return (Just resolvedRetVal)
+      [] -> completeTask resolvedRetVal
       (frame : rest) -> do
         modify $ \s ->
           s
@@ -581,6 +709,59 @@ execInstr = \case
             }
         return Nothing
       Nothing -> throwError $ VMUndefinedFunction resolvedName
+  ISpawn (FunctionRef fname) argc -> do
+    funcs <- gets vmFunctions
+    case Map.lookup fname funcs of
+      Nothing -> throwError $ VMUndefinedFunction fname
+      Just bc -> do
+        covM <- gets vmCoverage
+        S.liftIO $ case covM of
+          Just ref -> modifyIORef ref (Set.insert fname)
+          Nothing -> return ()
+        -- Resolve string refs against the spawner's pool: the new task starts
+        -- with its own (the callee's) pool where the indices would be invalid.
+        stk <- gets vmStack
+        pool <- gets vmStrings
+        let (callArgs, rest) = splitAt argc stk
+            resolvedArgs = map (resolveStringRef pool) callArgs
+        mapM_ (\case VArrayRef aid -> resolveArrayStrings pool aid; _ -> return ()) callArgs
+        tid <- gets vmNextTaskId
+        let ctx =
+              TaskCtx
+                { tStack = resolvedArgs,
+                  tLocals = Map.empty,
+                  tIP = 0,
+                  tInstrs = bytecodeInstructions bc,
+                  tStrings = bytecodeStrings bc,
+                  tCallStack = [],
+                  tFunc = fname
+                }
+        modify $ \s ->
+          s
+            { vmNextTaskId = tid + 1,
+              vmStack = VTask tid : rest,
+              vmTasks = Map.insert tid (TaskReady ctx) (vmTasks s),
+              vmReadyQueue = vmReadyQueue s ++ [tid]
+            }
+        return Nothing
+  IAwait -> do
+    v <- pop "IAwait"
+    case v of
+      VTask tid -> do
+        tasks <- gets vmTasks
+        case Map.lookup tid tasks of
+          Just (TaskDone val) -> push val >> return Nothing
+          Just _ -> do
+            -- The awaited task has not finished: park the current task and
+            -- hand control to the scheduler.  On wake-up the awaited value is
+            -- already on our (saved) stack and the ip is past this IAwait.
+            ctx <- saveTaskCtx
+            cur <- gets vmCurrentTask
+            modify $ \s -> s {vmTasks = Map.insert cur (TaskWaiting tid ctx) (vmTasks s)}
+            scheduleNext
+            return Nothing
+          Nothing -> throwError $ VMRuntimeError $ "IAwait: unknown task #" ++ show tid
+      other -> throwError $ VMTypeMismatch $ "IAwait: expected a task handle, got " ++ show other
   IFieldGet (FieldName fname) -> do
     ref <- pop "IFieldGet"
     case ref of

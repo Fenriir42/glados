@@ -1,0 +1,96 @@
+---
+title: Async & Await
+description: Cooperative concurrency with async fn, task(T), and await
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Quant supports cooperative concurrency through `async` functions and the `await` operator, backed by a lightweight green-task scheduler inside the VM. There are no OS threads: tasks interleave at `await` points, so execution stays deterministic.
+
+## Declaring an async function
+
+Prefix a function with `async`. The body is written exactly like a normal function returning `T`:
+
+```quant
+async fn compute(n: int) -> int {
+    total: int = 0;
+    i: int = 1;
+    while (i <= n) {
+        total = total + i;
+        i = i + 1;
+    };
+    return total;
+}
+```
+
+## Calling: task(T)
+
+Calling an async function does **not** run it. It creates a task and immediately returns a handle of type `task(T)`:
+
+```quant
+t: task(int) = compute(10);   // nothing has executed yet
+```
+
+## Awaiting
+
+`await` takes a `task(T)` and produces the `T`. If the task has not finished, the current task is suspended and the scheduler runs other ready tasks until the result is available:
+
+```quant
+r: int = await t;
+```
+
+Awaiting a task that already completed returns its cached result without re-running it. You can also await inline:
+
+```quant
+x: int = await compute(5);
+```
+
+## Cooperative interleaving
+
+Spawned tasks only advance when the running task reaches an `await`. This makes concurrency observable and deterministic:
+
+```quant
+fn main() -> void {
+    t1: task(int) = compute(10);
+    t2: task(int) = compute(100);
+    io.println("both spawned, nothing ran yet");
+
+    a: int = await t1;   // t1 runs to completion here
+    b: int = await t2;   // then t2
+}
+```
+
+## Tasks spawning tasks
+
+An async function can spawn and await its own children:
+
+```quant
+async fn sum_both(a: int, b: int) -> int {
+    ta: task(int) = compute(a);
+    tb: task(int) = compute(b);
+    return await ta + await tb;
+}
+
+fn main() -> void {
+    total: int = await sum_both(3, 4);
+}
+```
+
+## Semantics summary
+
+- `async fn f(...) -> T` -- declares an async function; the body returns `T` as usual.
+- `f(args)` -- spawns a task, returns `task(T)` immediately.
+- `await expr` -- unwraps a `task(T)` to `T`, suspending the caller until the task completes.
+- `await` is allowed anywhere, including in `main` -- the main function is itself the root task.
+- Awaiting a finished task again returns the same value.
+- If `main` returns while spawned tasks are still pending, those tasks are dropped.
+- If every task is blocked on an `await` that can never complete, the VM reports an async deadlock error.
+
+<Aside>
+  Applying `await` to a non-task value is a compile-time error: `await` expects `task(T)`.
+</Aside>
+
+## See Also
+
+- [Functions](/language/functions/) -- regular and first-class functions
+- [Error Handling](/language/error-handling/) -- `orerror`, `try`, and `must`

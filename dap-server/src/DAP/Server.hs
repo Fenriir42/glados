@@ -560,6 +560,8 @@ displayValue _ _ BC.VUnit = "void"
 displayValue _ _ (BC.VFunction fn) = unFuncName fn
 displayValue _ _ (BC.VErrorVal e _) = unErrorName e
 displayValue _ _ (BC.VPointer addr) = "0x" <> T.pack (show addr)
+displayValue _ _ (BC.VClosure fn _) = unFuncName fn
+displayValue _ _ (BC.VTask tid) = "task#" <> T.pack (show tid)
 displayValue vmst _ (BC.VArrayRef aid) =
   case Map.lookup aid (vmHeap vmst) of
     Nothing -> "[...]"
@@ -586,6 +588,8 @@ valueType (BC.VStructRef _) = "struct"
 valueType (BC.VFunction _) = "fn"
 valueType (BC.VErrorVal _ _) = "error"
 valueType (BC.VPointer _) = "ptr"
+valueType (BC.VClosure _ _) = "fn"
+valueType (BC.VTask _) = "task"
 
 handleResume :: DAPSession -> Int -> Text -> ResumeCmd -> IO ()
 handleResume session seq' cmd resumeCmd = do

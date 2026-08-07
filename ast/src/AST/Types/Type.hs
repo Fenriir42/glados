@@ -352,6 +352,8 @@ data Type
     TypeGenericApp TypeName [QualifiedType]
   | -- | Enum type: named variants without payload
     TypeEnum TypeName
+  | -- | Task handle from an @async fn@ call: @task(T)@
+    TypeTask Type
   deriving stock (Eq, Ord, Generic)
 
 instance Hashable Type
@@ -370,6 +372,7 @@ instance Show Type where
   show (TypeGenericApp name args) =
     T.unpack (unTypeName name) ++ "[" ++ intercalate ", " (map show args) ++ "]"
   show (TypeEnum name) = T.unpack (unTypeName name)
+  show (TypeTask t) = "task(" ++ show t ++ ")"
 
 isNumericType :: Type -> Bool
 isNumericType (TypePrimitive (PrimInt _)) = True

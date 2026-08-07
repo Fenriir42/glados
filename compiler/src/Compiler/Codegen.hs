@@ -191,7 +191,9 @@ data CompileState = CompileState
     -- Receiver spans of enum-variant accesses (Direction.North); emit INewError
     csEnumVariantSpans :: Set SourceSpan,
     -- Maps method-name span to the unqualified method name for dynamic dispatch
-    csDynMethodCallMap :: Map SourceSpan Text
+    csDynMethodCallMap :: Map SourceSpan Text,
+    -- Names of async functions: direct calls compile to ISpawn instead of ICall
+    csAsyncFns :: Set FuncName
   }
   deriving stock (Show)
 
@@ -217,7 +219,8 @@ initialState =
       csLambdaBytecodes = [],
       csMethodCallMap = Map.empty,
       csEnumVariantSpans = Set.empty,
-      csDynMethodCallMap = Map.empty
+      csDynMethodCallMap = Map.empty,
+      csAsyncFns = Set.empty
     }
 
 type Compile a = ExceptT CompileError (State CompileState) a
@@ -327,13 +330,15 @@ compileProgram methodCallMap enumVariantSpans dynMethodMap (Program decls) =
                   ffd <- ffiFuncs fd
               ]
           ffiNames = Map.keysSet ffiFuncMap
+      let asyncNames = Set.fromList [unLocated (funcDeclName fd) | fd <- funcs, funcDeclAsync fd]
       modify $ \s ->
         s
           { csKnownFunctions = userNames <> ffiNames,
             csFuncTypes = funcTypes,
             csPrivateFunctions = privateFuncs,
             csOriginModules = originMods,
-            csFfiFuncs = ffiFuncMap
+            csFfiFuncs = ffiFuncMap,
+            csAsyncFns = asyncNames
           }
       topLevelBcs <- mapM (`compileFunction` Set.empty) funcs
       lambdaBcs <- gets csLambdaBytecodes
@@ -362,7 +367,8 @@ compileFunction funcDecl captureNames = do
         -- Thread the enum variant span set through so ExprField can detect enum accesses
         csEnumVariantSpans = csEnumVariantSpans oldState,
         -- Thread dynamic dispatch map through
-        csDynMethodCallMap = csDynMethodCallMap oldState
+        csDynMethodCallMap = csDynMethodCallMap oldState,
+        csAsyncFns = csAsyncFns oldState
       }
   -- Parameters and captured variables are in scope from the start
   let paramNames = [paramName p | Located _ p <- funcDeclParams funcDecl]
@@ -690,6 +696,7 @@ freeVarsExpr = \case
   ExprError _ fields -> foldMap (freeVarsExpr . unLocated . snd) fields
   ExprTry e -> freeVarsExpr (unLocated e)
   ExprMust e -> freeVarsExpr (unLocated e)
+  ExprAwait e -> freeVarsExpr (unLocated e)
   ExprSome e -> freeVarsExpr (unLocated e)
   ExprLambda _ _ b -> freeVarsBlock b
   ExprTupleInit elems -> foldMap (freeVarsExpr . unLocated) elems
@@ -820,10 +827,13 @@ compileExpr = \case
             when (callerMod /= calleeMod) $
               throwError $
                 PrivateFunction (locSpan funcName) fname
+          asyncFns <- gets csAsyncFns
           case Map.lookup fname funcTypes >>= find (paramVariadic . unLocated) . funcParams of
             Nothing -> do
               mapM_ (compileExpr . unLocated) (reverse args)
-              void $ emitInstruction (ICall (FunctionRef fname) (length args))
+              if Set.member fname asyncFns
+                then void $ emitInstruction (ISpawn (FunctionRef fname) (length args))
+                else void $ emitInstruction (ICall (FunctionRef fname) (length args))
             Just _ -> do
               let ft = funcTypes Map.! fname
                   regularParams = filter (not . paramVariadic . unLocated) (funcParams ft)
@@ -889,6 +899,9 @@ compileExpr = \case
   ExprMust innerExpr -> do
     compileExpr (unLocated innerExpr)
     void $ emitInstruction IMustOp
+  ExprAwait innerExpr -> do
+    compileExpr (unLocated innerExpr)
+    void $ emitInstruction IAwait
   ExprSome innerExpr -> compileExpr (unLocated innerExpr)
   ExprNone -> void $ emitInstruction (INewError (ErrorName "None") [])
   ExprLambda params retType body -> do
@@ -903,7 +916,8 @@ compileExpr = \case
               funcDeclTypeBounds = [],
               funcDeclParams = params,
               funcDeclReturnType = retType,
-              funcDeclBody = body
+              funcDeclBody = body,
+              funcDeclAsync = False
             }
     -- Register the lambda so it can be called
     modify $ \s ->

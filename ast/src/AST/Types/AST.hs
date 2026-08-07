@@ -118,7 +118,9 @@ data FunctionDecl ann = FunctionDecl
     funcDeclTypeBounds :: [(TypeName, [TypeName])],
     funcDeclParams :: [Located Parameter],
     funcDeclReturnType :: Located QualifiedType,
-    funcDeclBody :: Block ann
+    funcDeclBody :: Block ann,
+    -- | True for @async fn@: calling it spawns a task and returns @task(T)@.
+    funcDeclAsync :: Bool
   }
   deriving stock (Show, Eq, Generic)
 
@@ -350,6 +352,8 @@ data Expr ann
       (Located (Expr ann))
       (Located FuncName)
       [Located (Expr ann)]
+  | -- | Await a task: @await expr@ where expr has type @task(T)@
+    ExprAwait (Located (Expr ann))
   deriving stock (Show, Eq, Generic)
 
 data LValue ann

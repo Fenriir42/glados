@@ -10,6 +10,7 @@ import AST.Types.AST
     FFIFuncDecl (..),
     FunctionDecl
       ( FunctionDecl,
+        funcDeclAsync,
         funcDeclBody,
         funcDeclName,
         funcDeclParams,
@@ -36,7 +37,7 @@ import AST.Types.Type
     StructField (..),
     Type (..),
   )
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Parser.Import (parseImportDecl)
@@ -111,6 +112,7 @@ subParam tvs p = p {paramType = subQType tvs (paramType p)}
 parseDeclFunction :: TokenParser (Located (Decl ann))
 parseDeclFunction = do
   Located visSpan visibility <- parseVisibility
+  mAsync <- MP.optional (matchKeyword "async")
   Located fnSpan _ <- matchKeyword "fn"
   Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
   -- Optional generic type parameters: fn foo[T, U: Iface](...)
@@ -136,7 +138,8 @@ parseDeclFunction = do
             funcDeclTypeBounds = typeBounds,
             funcDeclParams = map (fmap (subParam tvSet)) (funcParams funcType),
             funcDeclReturnType = fmap (subQType tvSet) (funcReturnType funcType),
-            funcDeclBody = block
+            funcDeclBody = block,
+            funcDeclAsync = isJust mAsync
           }
   return $ Located combinedSpan (DeclFunction visibility functionDecl)
 
@@ -305,7 +308,8 @@ parseImplMethod selfType = do
             funcDeclTypeBounds = [],
             funcDeclParams = params,
             funcDeclReturnType = fmap (subQType tvSet) (funcReturnType funcType),
-            funcDeclBody = block
+            funcDeclBody = block,
+            funcDeclAsync = False
           }
   return $ Located (fnSpan <> bodySpan) fd
 
@@ -432,7 +436,7 @@ parseDecl =
         return $ Located span (DeclImport importDecl)
     ]
   where
-    functionStart = MP.optional (MP.satisfy isStaticId) >> matchKeyword "fn"
+    functionStart = MP.optional (MP.satisfy isStaticId) >> MP.optional (matchKeyword "async") >> matchKeyword "fn"
     structStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isStructKw
     interfaceStart = MP.optional (MP.satisfy isStaticId) >> MP.satisfy isInterfaceKw
     implForStart =

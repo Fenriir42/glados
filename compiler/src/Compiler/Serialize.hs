@@ -190,6 +190,8 @@ instance Binary Instruction where
     ICovMark n -> tag 30 >> put (n :: Int)
     ICovBranch n -> tag 31 >> put (n :: Int)
     IDynMethodCall mname argc -> tag 32 >> put mname >> put (argc :: Int)
+    ISpawn ref argc -> tag 33 >> put ref >> put (argc :: Int)
+    IAwait -> tag 34
     where
       tag n = put (n :: Word8)
 
@@ -228,6 +230,8 @@ instance Binary Instruction where
       30 -> ICovMark <$> (get :: Get Int)
       31 -> ICovBranch <$> (get :: Get Int)
       32 -> IDynMethodCall <$> get <*> (get :: Get Int)
+      33 -> ISpawn <$> get <*> (get :: Get Int)
+      34 -> pure IAwait
       t -> fail $ "Unknown Instruction tag: " ++ show t
 
 instance Binary Bytecode where

@@ -408,6 +408,7 @@ lintExprDiags fp = \case
   ExprError _ fields -> concatMap (go . snd) fields
   ExprTry e -> go e
   ExprMust e -> go e
+  ExprAwait e -> go e
   ExprSome e -> go e
   ExprParen e -> go e
   ExprCast e _ -> go e
@@ -475,6 +476,7 @@ usedVarsExpr = \case
   ExprError _ fields -> foldMap (go . snd) fields
   ExprTry e -> go e
   ExprMust e -> go e
+  ExprAwait e -> go e
   ExprSome e -> go e
   ExprNone -> Set.empty
   ExprLambda _ _ body -> usedVarsBlock body

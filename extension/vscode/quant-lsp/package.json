@@ -2,7 +2,7 @@
   "name": "quant-lsp",
   "displayName": "Quant Language Server",
   "description": "LSP support for Quant: diagnostics, hover types, and improved syntax highlighting",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "quant-team",
   "author": {
     "name": "Quant team"

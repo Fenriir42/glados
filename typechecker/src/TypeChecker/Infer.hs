@@ -430,6 +430,14 @@ inferExpr env (Located sp expr) = do
         Just (TypeResult (ResultType successType _)) -> return (Just successType)
         Just (TypeOption innerType) -> return (Just innerType)
         other -> return other
+    go (ExprAwait inner) = do
+      mInner <- inferExpr env inner
+      case mInner of
+        Just (TypeTask t) -> return (Just t)
+        Just other -> do
+          recordError (TCAwaitNonTask (locSpan inner) other)
+          return Nothing
+        Nothing -> return Nothing
     go (ExprSome inner) = do
       mT <- inferExpr env inner
       return (fmap TypeOption mT)

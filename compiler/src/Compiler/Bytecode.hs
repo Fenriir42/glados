@@ -53,6 +53,8 @@ data Value
     VClosure FuncName [(VarName, Value)]
   | -- | opaque C pointer stored as its raw address (runtime only)
     VPointer Word64
+  | -- | handle to a spawned task (runtime only, never serialised)
+    VTask Int
   | VUnit
   deriving stock (Show, Eq, Ord, Generic)
 
@@ -200,6 +202,12 @@ data Instruction
   | -- | Dynamic method dispatch: TOS is the receiver (self); resolves the
     -- concrete function as @structName.methodName@ at runtime and calls it.
     IDynMethodCall Text Int
+  | -- | Spawn a task running the given async function with argc stack args;
+    -- pushes a VTask handle without transferring control.
+    ISpawn FunctionRef Int
+  | -- | Pop a VTask; push its result if done, else suspend the current task
+    -- until the awaited task completes.
+    IAwait
   deriving stock (Show, Eq, Generic)
 
 instance Hashable Instruction

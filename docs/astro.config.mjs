@@ -47,6 +47,7 @@ export default defineConfig({
 						{ label: 'Interfaces', slug: 'language/interfaces' },
 						{ label: 'Generics', slug: 'language/generics' },
 						{ label: 'Error Handling', slug: 'language/error-handling' },
+						{ label: 'Async & Await', slug: 'language/async' },
 					],
 				},
 				{

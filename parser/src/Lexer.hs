@@ -115,7 +115,9 @@ reservedNames =
     "match",
     "extern",
     "ptr",
-    "impl"
+    "impl",
+    "async",
+    "await"
   ]
 
 tokInt :: Parser Token

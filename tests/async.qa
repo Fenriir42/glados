@@ -1,0 +1,56 @@
+// Async / await showcase.
+// Demonstrates:
+//   1. async fn declaration; calling one returns task(T) immediately.
+//   2. await unwraps a task's result, running other tasks while blocked.
+//   3. Cooperative interleaving: spawned tasks only advance at await points.
+//   4. Tasks awaiting other tasks.
+//   5. Awaiting an already-completed task returns its cached result.
+
+async fn compute(label: str, n: int) -> int {
+    io.println(`  [{label}] start`);
+    total: int = 0;
+    i: int = 1;
+    while (i <= n) {
+        total = total + i;
+        i = i + 1;
+    };
+    io.println(`  [{label}] done`);
+    return total;
+}
+
+// An async fn can itself spawn and await other tasks.
+async fn sum_both(a: int, b: int) -> int {
+    ta: task(int) = compute("left", a);
+    tb: task(int) = compute("right", b);
+    return await ta + await tb;
+}
+
+fn main() -> void {
+    io.println("spawning two tasks");
+    t1: task(int) = compute("A", 10);
+    t2: task(int) = compute("B", 100);
+    io.println("both spawned, nothing ran yet");
+
+    r1: int = await t1;
+    r2: int = await t2;
+    s1: str = string.to_str(r1);
+    s2: str = string.to_str(r2);
+    io.println(`A = {s1}`);
+    io.println(`B = {s2}`);
+
+    // Await the same finished task again: cached result, no re-run.
+    again: int = await t1;
+    sa: str = string.to_str(again);
+    io.println(`A again = {sa}`);
+
+    // Nested: a task that spawns and awaits its own children.
+    nested: task(int) = sum_both(3, 4);
+    total: int = await nested;
+    st: str = string.to_str(total);
+    io.println(`nested total = {st}`);
+
+    // Await inline without a variable.
+    direct: int = await compute("inline", 5);
+    sd: str = string.to_str(direct);
+    io.println(`inline = {sd}`);
+}

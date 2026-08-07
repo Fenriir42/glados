@@ -246,6 +246,12 @@ parseExprTry = do
   expr <- parseExpr
   return $ Located (startSpan <> getSpan expr) (ExprTry expr)
 
+parseExprAwait :: TokenParser (Located (Expr ann))
+parseExprAwait = do
+  Located startSpan _ <- matchKeyword "await"
+  expr <- parseUnary
+  return $ Located (startSpan <> getSpan expr) (ExprAwait expr)
+
 isSomeIdent :: Located TokenContent -> Bool
 isSomeIdent (Located _ (TokIdentifier "some")) = True
 isSomeIdent _ = False
@@ -335,6 +341,7 @@ parseUnary =
   MP.choice
     [ parseExprMust,
       parseExprTry,
+      parseExprAwait,
       parseExprError,
       parseExprSome,
       parseExprNone,

@@ -42,6 +42,8 @@ data TypeCheckError
     TCEnumVariantUnknownField SourceSpan TypeName TypeName FieldName
   | -- | Field referenced in match binding not present in the variant
     TCEnumBindingUnknownField SourceSpan TypeName TypeName FieldName
+  | -- | @await@ applied to an expression that is not a @task(T)@
+    TCAwaitNonTask SourceSpan Type
   deriving stock (Show, Eq)
 
 tcErrSpan :: TypeCheckError -> SourceSpan
@@ -65,6 +67,7 @@ tcErrSpan (TCBoundViolation s _ _ _) = s
 tcErrSpan (TCEnumVariantRequiresFields s _ _) = s
 tcErrSpan (TCEnumVariantUnknownField s _ _ _) = s
 tcErrSpan (TCEnumBindingUnknownField s _ _ _) = s
+tcErrSpan (TCAwaitNonTask s _) = s
 
 tcErrMessage :: TypeCheckError -> String
 tcErrMessage (TCUndefinedVar _ v) =
@@ -147,3 +150,5 @@ tcErrMessage (TCEnumBindingUnknownField _ ename vname fname) =
     ++ "` has no field `"
     ++ T.unpack (unFieldName fname)
     ++ "` to bind"
+tcErrMessage (TCAwaitNonTask _ t) =
+  "`await` expects a `task(T)` value, got `" ++ show t ++ "`"

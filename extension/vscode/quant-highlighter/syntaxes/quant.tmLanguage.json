@@ -134,11 +134,11 @@
       "patterns": [
         {
           "name": "keyword.control.quant",
-          "match": "\\b(return|if|else|for|while|break|continue|match)\\b"
+          "match": "\\b(return|if|else|for|while|break|continue|match|await)\\b"
         },
         {
           "name": "keyword.declaration.quant",
-          "match": "\\b(fn|const|static|pub|impl|interface|enum|struct)\\b"
+          "match": "\\b(fn|const|static|pub|impl|interface|enum|struct|async)\\b"
         },
         {
           "name": "keyword.other.import.quant",
@@ -161,6 +161,11 @@
         {
           "name": "storage.type.quant",
           "match": "\\b(bool|str|void)\\b"
+        },
+        {
+          "comment": "task(T) handle type from async fn calls",
+          "name": "storage.type.quant",
+          "match": "\\btask(?=\\s*\\()"
         }
       ]
     },

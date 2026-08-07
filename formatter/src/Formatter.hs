@@ -289,6 +289,7 @@ fmtFuncDecl cm opts n openLine vis fd =
       sig =
         ind opts n
           <> fmtVis vis
+          <> (if funcDeclAsync fd then "async " else "")
           <> "fn "
           <> unFuncName (locValue (funcDeclName fd))
           <> tparams
@@ -432,6 +433,7 @@ fmtType (TypeArray (ArrayType qt)) = "[" <> fmtQType qt <> "]"
 fmtType (TypeFunction ft) = fmtFuncTypeText ft
 fmtType (TypeStruct (TypeName nm)) = nm
 fmtType (TypeEnum (TypeName nm)) = nm
+fmtType (TypeTask t) = "task(" <> fmtType t <> ")"
 fmtType (TypeResult (ResultType s e)) =
   "orerror(" <> fmtType s <> ", " <> unErrorName e <> ")"
 fmtType (TypeOption t) = "option(" <> fmtType t <> ")"
@@ -665,6 +667,7 @@ fmtExpr opts n (ExprError (Located _ ename) fields) =
             [unFieldName (locValue fn) <> ": " <> fmtExpr opts n (locValue e) | (fn, e) <- fields]
           <> " }"
 fmtExpr opts n (ExprTry (Located _ e)) = "try " <> fmtExpr opts n e
+fmtExpr opts n (ExprAwait (Located _ e)) = "await " <> fmtExpr opts n e
 fmtExpr opts n (ExprMust (Located _ e)) = "must " <> fmtExpr opts n e
 fmtExpr opts n (ExprSome (Located _ e)) = "some(" <> fmtExpr opts n e <> ")"
 fmtExpr _ _ ExprNone = "none"
