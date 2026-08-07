@@ -2,7 +2,7 @@
   "name": "quant-lsp",
   "displayName": "Quant Language Server",
   "description": "LSP support for Quant: diagnostics, hover types, and improved syntax highlighting",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "quant-team",
   "author": {
     "name": "Quant team"
@@ -16,23 +16,39 @@
   "bugs": {
     "url": "https://github.com/Sigmapitech/glados/issues"
   },
-  "keywords": ["quant", "lsp", "language-server", "diagnostics"],
+  "keywords": [
+    "quant",
+    "lsp",
+    "language-server",
+    "diagnostics"
+  ],
   "engines": {
     "vscode": "^1.82.0"
   },
-  "categories": ["Programming Languages", "Linters", "Debuggers"],
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Debuggers"
+  ],
   "galleryBanner": {
     "color": "#1e1e1e",
     "theme": "dark"
   },
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "quant",
-        "aliases": ["Quant", "quant"],
-        "extensions": [".qa"],
+        "aliases": [
+          "Quant",
+          "quant"
+        ],
+        "extensions": [
+          ".qa"
+        ],
         "configuration": "./language-configuration.json",
         "icon": {
           "light": "./assets/quant-icon.png",
@@ -80,7 +96,11 @@
         },
         "quant-lsp.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "enumDescriptions": [
             "No tracing",
             "Log request/response messages",
@@ -105,10 +125,14 @@
       {
         "type": "quant",
         "label": "Quant Debug",
-        "languages": ["quant"],
+        "languages": [
+          "quant"
+        ],
         "configurationAttributes": {
           "launch": {
-            "required": ["program"],
+            "required": [
+              "program"
+            ],
             "properties": {
               "program": {
                 "type": "string",

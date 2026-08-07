@@ -3,139 +3,220 @@
   "name": "Quant",
   "scopeName": "source.quant",
   "patterns": [
-    {
-      "comment": "Comments",
+    { "include": "#comments" },
+    { "include": "#backtick-strings" },
+    { "include": "#strings" },
+    { "include": "#error-declaration" },
+    { "include": "#error-handling" },
+    { "include": "#orerror-type" },
+    { "include": "#function-definition" },
+    { "include": "#interface-definition" },
+    { "include": "#enum-definition" },
+    { "include": "#impl-for-definition" },
+    { "include": "#impl-definition" },
+    { "include": "#struct-definition" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#boolean-literals" },
+    { "include": "#module-call" },
+    { "include": "#function-call" },
+    { "include": "#variable-declaration" },
+    { "include": "#numbers" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
       "patterns": [
         {
-          "match": "//.*$",
-          "name": "comment.line.double-slash"
+          "name": "comment.line.double-slash.quant",
+          "match": "//.*$"
         },
         {
-          "match": "#.*$",
-          "name": "comment.line.number-sign"
+          "name": "comment.line.number-sign.quant",
+          "match": "#.*$"
         },
         {
+          "name": "comment.block.quant",
           "begin": "/\\*",
-          "end": "\\*/",
-          "name": "comment.block"
+          "end": "\\*/"
         }
       ]
     },
-    {
-      "comment": "Backtick string interpolation",
+    "backtick-strings": {
+      "name": "string.template.quant",
       "begin": "`",
       "end": "`",
-      "name": "string.template",
       "patterns": [
         {
-          "match": "\\{[^}]*\\}",
-          "name": "variable.other.readwrite"
+          "name": "variable.other.readwrite.quant",
+          "match": "\\{[^}]*\\}"
         }
       ]
     },
-    {
-      "comment": "Strings",
+    "strings": {
+      "name": "string.quoted.double.quant",
+      "begin": "\"",
+      "end": "\"",
       "patterns": [
         {
-          "begin": "\"",
-          "end": "\"",
-          "name": "string.quoted.double"
+          "name": "constant.character.escape.quant",
+          "match": "\\\\[nrt\\\\\"0]"
+        }
+      ]
+    },
+    "error-declaration": {
+      "comment": "error ErrorName; or error ErrorName { ... }",
+      "match": "\\b(error)\\s+([A-Z][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.control.error.quant" },
+        "2": { "name": "entity.name.type.error.quant" }
+      }
+    },
+    "error-handling": {
+      "name": "keyword.control.error-handling.quant",
+      "match": "\\b(try|must)\\b"
+    },
+    "orerror-type": {
+      "name": "keyword.control.orerror.quant",
+      "match": "\\b(orerror)\\b"
+    },
+    "function-definition": {
+      "comment": "fn name[ or fn name(",
+      "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*[\\[(])",
+      "captures": {
+        "1": { "name": "keyword.declaration.function.quant" },
+        "2": { "name": "entity.name.function.quant" }
+      }
+    },
+    "interface-definition": {
+      "comment": "interface Name",
+      "match": "\\b(interface)\\s+([A-Z][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.interface.quant" },
+        "2": { "name": "entity.name.type.interface.quant" }
+      }
+    },
+    "enum-definition": {
+      "comment": "enum Name",
+      "match": "\\b(enum)\\s+([A-Z][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.quant" },
+        "2": { "name": "entity.name.type.quant" }
+      }
+    },
+    "impl-for-definition": {
+      "comment": "impl Interface for Struct",
+      "match": "\\b(impl)\\s+([A-Z][a-zA-Z0-9_]*)\\s+(for)\\s+([A-Z][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.quant" },
+        "2": { "name": "entity.name.type.quant" },
+        "3": { "name": "keyword.declaration.quant" },
+        "4": { "name": "entity.name.type.quant" }
+      }
+    },
+    "impl-definition": {
+      "comment": "impl Struct { ... }",
+      "match": "\\b(impl)\\s+([A-Z][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.quant" },
+        "2": { "name": "entity.name.type.quant" }
+      }
+    },
+    "struct-definition": {
+      "comment": "struct Name",
+      "match": "\\b(struct)\\s+([A-Z][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.quant" },
+        "2": { "name": "entity.name.type.quant" }
+      }
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.quant",
+          "match": "\\b(return|if|else|for|while|break|continue|match)\\b"
         },
         {
-          "begin": "'",
-          "end": "'",
-          "name": "string.quoted.single"
+          "name": "keyword.declaration.quant",
+          "match": "\\b(fn|const|static|pub|impl|interface|enum|struct)\\b"
+        },
+        {
+          "name": "keyword.other.import.quant",
+          "match": "\\b(import|from)\\b"
         }
       ]
     },
-    {
-      "comment": "Error declaration (error Name)",
-      "match": "\\b(error)\\s+([A-Z][a-zA-Z_]\\w*)",
+    "types": {
+      "patterns": [
+        {
+          "comment": "int or int<32> or int<32, u> — trailing \\b prevents matching inside 'interface'",
+          "name": "storage.type.quant",
+          "match": "\\bint(?:\\s*<\\s*\\d+(?:\\s*,\\s*[su])?\\s*>)?\\b"
+        },
+        {
+          "comment": "float or float<32> or float<64>",
+          "name": "storage.type.quant",
+          "match": "\\bfloat(?:\\s*<\\s*(?:32|64)\\s*>)?\\b"
+        },
+        {
+          "name": "storage.type.quant",
+          "match": "\\b(bool|str|void)\\b"
+        }
+      ]
+    },
+    "boolean-literals": {
+      "name": "constant.language.boolean.quant",
+      "match": "\\b(true|false|True|False)\\b"
+    },
+    "module-call": {
+      "comment": "module.function(",
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()",
       "captures": {
-        "1": { "name": "keyword.control.error" },
-        "2": { "name": "entity.name.type.error" }
+        "1": { "name": "entity.name.namespace.quant" },
+        "2": { "name": "entity.name.function.quant" }
       }
     },
-    {
-      "comment": "orerror type constructor",
-      "match": "\\b(orerror)\\b",
-      "name": "keyword.control.orerror"
-    },
-    {
-      "comment": "Error handling operators",
-      "match": "\\b(try|must)\\b",
-      "name": "keyword.control.error-handling"
-    },
-    {
-      "comment": "Function Definition (fn name)",
-      "match": "\\b(fn)\\s+([a-zA-Z_]\\w*)",
+    "function-call": {
+      "comment": "identifier followed by (",
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()",
       "captures": {
-        "1": { "name": "keyword.control" },
-        "2": { "name": "entity.name.function" }
+        "1": { "name": "entity.name.function.quant" }
       }
     },
-    {
-      "comment": "Struct Definition (struct Name)",
-      "match": "\\b(struct)\\s+([A-Z][a-zA-Z_]\\w*)",
+    "variable-declaration": {
+      "comment": "identifier before : in a declaration context",
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*:)",
       "captures": {
-        "1": { "name": "keyword.control" },
-        "2": { "name": "entity.name.type" }
+        "1": { "name": "variable.other.quant" }
       }
     },
-    {
-      "comment": "Control keywords",
-      "match": "\\b(fn|return|if|else|for|while|continue|break|import|from|const|static)\\b",
-      "name": "keyword.control"
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.quant",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.quant",
+          "match": "\\b0[oO][0-7]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.quant",
+          "match": "\\b0[bB][01]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.quant",
+          "match": "\\b\\d+\\.\\d+(?:[eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.quant",
+          "match": "\\b\\d+\\b"
+        }
+      ]
     },
-    {
-      "comment": "Built-in Types",
-      "match": "\\b(int|float|bool|str|void)\\b",
-      "name": "storage.type"
-    },
-    {
-      "comment": "Error type names (PascalCase identifiers after orerror or error)",
-      "match": "(?<=orerror\\([^,]+,\\s*)([A-Z][a-zA-Z_]\\w*)",
-      "name": "entity.name.type.error"
-    },
-    {
-      "comment": "Booleans",
-      "match": "\\b(true|false|True|False)\\b",
-      "name": "constant.language.boolean"
-    },
-    {
-      "comment": "Function Calls (identifiers followed by '(')",
-      "match": "\\b([a-zA-Z_]\\w*)\\s*(?=\\()",
-      "name": "entity.name.function"
-    },
-    {
-      "comment": "Variable Declaration (identifier before ':')",
-      "match": "\\b([a-zA-Z_]\\w*)\\s*(?=:)",
-      "name": "variable.other.readwrite"
-    },
-    {
-      "comment": "Numbers - Hexadecimal",
-      "match": "\\b0[xX][0-9a-fA-F]+\\b",
-      "name": "constant.numeric.hex"
-    },
-    {
-      "comment": "Numbers - Octal",
-      "match": "\\b0[oO][0-7]+\\b",
-      "name": "constant.numeric.octal"
-    },
-    {
-      "comment": "Numbers - Binary",
-      "match": "\\b0[bB][01]+\\b",
-      "name": "constant.numeric.binary"
-    },
-    {
-      "comment": "Numbers - Decimal and Float",
-      "match": "\\b\\d+(\\.\\d+)?\\b",
-      "name": "constant.numeric"
-    },
-    {
-      "comment": "Operators",
-      "match": "(\\.\\.\\.)|(<<=)|(>>=)|(->)|(<<)|(>>)|(<=)|(>=)|(==)|(!=)|(&&)|(\\|\\|)|(\\+=)|(-=)|(\\*=)|(/=)|(%=)|(&=)|(\\|=)|(\\^=)|[-+*/%<>=!&|^~]",
-      "name": "keyword.operator"
+    "operators": {
+      "name": "keyword.operator.quant",
+      "match": "(\\.\\.\\.)|(<<=)|(>>=)|(->)|(<<)|(>>)|(<=)|(>=)|(==)|(!=)|(&&)|(\\|\\|)|(\\+=)|(-=)|(\\*=)|(/=)|(%=)|(&=)|(\\|=)|(\\^=)|[-+*/%<>=!&|^~]"
     }
-  ]
+  }
 }

@@ -2,7 +2,7 @@
   "name": "quant",
   "displayName": "Quant Language",
   "description": "Syntax highlighting for Quant",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "quant-team",
   "author": {
     "name": "Quant team"
@@ -36,8 +36,14 @@
     "languages": [
       {
         "id": "quant",
-        "aliases": ["Quant", "quant"],
-        "extensions": [".quant", ".qa"],
+        "aliases": [
+          "Quant",
+          "quant"
+        ],
+        "extensions": [
+          ".quant",
+          ".qa"
+        ],
         "configuration": "./language-configuration.json",
         "icon": {
           "light": "./assets/quant-icon.png",
