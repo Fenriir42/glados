@@ -402,6 +402,7 @@ lintExprDiags fp = \case
   ExprIndex arr idx -> go arr ++ go idx
   ExprField e _ -> go e
   ExprStructInit _ fields -> concatMap (go . snd) fields
+  ExprEnumVariantInit _ _ fields -> concatMap (go . snd) fields
   ExprArrayInit _ elems -> concatMap go elems
   ExprDictLit pairs -> concatMap (\(k, v) -> go k ++ go v) pairs
   ExprError _ fields -> concatMap (go . snd) fields
@@ -468,6 +469,7 @@ usedVarsExpr = \case
   ExprIndex arr idx -> go arr <> go idx
   ExprField e _ -> go e
   ExprStructInit _ fields -> foldMap (go . snd) fields
+  ExprEnumVariantInit _ _ fields -> foldMap (go . snd) fields
   ExprArrayInit _ elems -> foldMap go elems
   ExprDictLit pairs -> foldMap (\(k, v) -> go k <> go v) pairs
   ExprError _ fields -> foldMap (go . snd) fields

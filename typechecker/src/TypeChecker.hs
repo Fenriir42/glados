@@ -8,7 +8,7 @@ where
 
 import AST.Types.AST (Decl (..), EnumDecl (..), EnumVariant (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), InterfaceDecl (..), InterfaceMethodSig (..), Program (..), StructDecl (..), programDecls)
 import AST.Types.Common (FuncName (..), Located (..), SourceSpan, TypeName (..), VarName, initialPos, locSpan, spanSingle, unLocated)
-import AST.Types.Type (Constness (..), EnumType (..), ErrorType (..), FunctionType (..), PrimitiveType (..), QualifiedType (..), StructType (..), Type (..))
+import AST.Types.Type (Constness (..), EnumType (..), ErrorType (..), FunctionType (..), PrimitiveType (..), QualifiedType (..), StructField (..), StructType (..), Type (..))
 import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -192,8 +192,13 @@ typeCheck prog =
     collectEnum :: Located (Decl ()) -> Env -> Env
     collectEnum (Located _ (DeclEnum _ ed)) env =
       let tname = unLocated (enumDeclName ed)
-          variants = [enumVariantName (unLocated v) | v <- enumDeclVariants ed]
-       in insertEnum tname (EnumType tname variants) env
+          evs = [unLocated v | v <- enumDeclVariants ed]
+          variants = map enumVariantName evs
+          variantFields =
+            [ (enumVariantName ev, map unLocated (enumVariantFields ev))
+              | ev <- evs
+            ]
+       in insertEnum tname (EnumType tname variants variantFields) env
     collectEnum _ env = env
 
     mkFuncType :: FunctionDecl () -> FunctionType

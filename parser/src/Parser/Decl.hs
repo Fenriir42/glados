@@ -224,7 +224,16 @@ parseDeclEnum = do
     isEnumKw _ = False
     parseEnumVariant = do
       Located vspan (TokIdentifier vname) <- MP.satisfy isIdentifier
-      return $ Located vspan (EnumVariant (TypeName vname))
+      fields <- MP.option [] $ do
+        _ <- matchSymbol "{"
+        fs <- MP.sepEndBy parseVariantField (matchSymbol ",")
+        _ <- matchSymbol "}"
+        return fs
+      return $ Located vspan (EnumVariant (TypeName vname) fields)
+    parseVariantField = do
+      Located fspan (TokIdentifier fname) <- MP.satisfy isIdentifier
+      _ <- matchSymbol ":"
+      Located fspan . StructField (FieldName fname) . unLocated <$> parseQualifiedType
 
 parseErrorSetMember :: TokenParser (Located ErrorSetMember)
 parseErrorSetMember = do

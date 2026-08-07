@@ -834,7 +834,7 @@ listed fields as variables scoped to the arm body.
 
 ## Enum Types
 
-An `enum` declares a named set of variants. Each variant is a simple tag with no payload. Enums are accessed with dot notation and can appear in `match` arms as patterns.
+An `enum` declares a named set of variants. Variants may be simple tags (no payload) or carry named fields (data-carrying variants). Enums are accessed with dot notation and can appear in `match` arms as patterns.
 
 ### Declaration
 
@@ -890,6 +890,47 @@ fn main() -> void {
     };
 }
 ```
+
+### Data-carrying variants
+
+Variants can carry named fields declared inside `{ }`:
+
+```quant
+enum Shape {
+    Circle { radius: float },
+    Rect   { width: float, height: float },
+    Point,
+};
+```
+
+Payloadless variants (`Point`) and field-carrying variants can coexist in the same `enum`.
+
+#### Construction
+
+Use `EnumName.Variant { field: value, ... }` to create a data-carrying value:
+
+```quant
+c: Shape = Shape.Circle { radius: 5.0 };
+r: Shape = Shape.Rect { width: 4.0, height: 6.0 };
+p: Shape = Shape.Point;
+```
+
+#### Pattern matching with field destructuring
+
+Use `EnumName.Variant { field: binding, ... }` in `match` arms to bind fields to local variables:
+
+```quant
+fn area(s: Shape) -> float {
+    match s {
+        Shape.Circle { radius: r } => { return 3.14159 * r * r; };
+        Shape.Rect   { width: w, height: h } => { return w * h; };
+        Shape.Point  => { return 0.0; };
+        _ => { return 0.0; };
+    };
+}
+```
+
+Field names are listed explicitly so you can rename them at the binding site (`radius: r` binds the `radius` field to a local variable `r`). You can also use the shorthand where field name equals binding name: `{ radius }` instead of `{ radius: radius }`.
 
 ## Generics
 

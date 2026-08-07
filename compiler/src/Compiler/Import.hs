@@ -228,6 +228,7 @@ exprHasCall prefix = \case
   ExprIndex arr idx -> exprHasCall prefix (unLocated arr) || exprHasCall prefix (unLocated idx)
   ExprField e _ -> exprHasCall prefix (unLocated e)
   ExprStructInit _ fields -> any (exprHasCall prefix . unLocated . snd) fields
+  ExprEnumVariantInit _ _ fields -> any (exprHasCall prefix . unLocated . snd) fields
   ExprArrayInit _ elems -> any (exprHasCall prefix . unLocated) elems
   ExprDictLit pairs ->
     any (\(k, v) -> exprHasCall prefix (unLocated k) || exprHasCall prefix (unLocated v)) pairs
@@ -352,6 +353,7 @@ renameExpr names prefix = \case
   ExprIndex arr idx -> ExprIndex (fmap rE arr) (fmap rE idx)
   ExprField e f -> ExprField (fmap rE e) f
   ExprStructInit t fields -> ExprStructInit t [(f, fmap rE e) | (f, e) <- fields]
+  ExprEnumVariantInit en vn fields -> ExprEnumVariantInit en vn [(f, fmap rE e) | (f, e) <- fields]
   ExprArrayInit t elems -> ExprArrayInit t (map (fmap rE) elems)
   ExprDictLit pairs -> ExprDictLit [(fmap rE k, fmap rE v) | (k, v) <- pairs]
   ExprTry e -> ExprTry (fmap rE e)

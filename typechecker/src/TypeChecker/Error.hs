@@ -36,6 +36,12 @@ data TypeCheckError
   | -- | Concrete type bound to a type parameter does not implement the required interface
     -- | TCBoundViolation span typeParamName concreteType interfaceName
     TCBoundViolation SourceSpan TypeName Type TypeName
+  | -- | Data-carrying variant used with bare ExprField instead of ExprEnumVariantInit
+    TCEnumVariantRequiresFields SourceSpan TypeName TypeName
+  | -- | Unknown field in an enum variant init expression
+    TCEnumVariantUnknownField SourceSpan TypeName TypeName FieldName
+  | -- | Field referenced in match binding not present in the variant
+    TCEnumBindingUnknownField SourceSpan TypeName TypeName FieldName
   deriving stock (Show, Eq)
 
 tcErrSpan :: TypeCheckError -> SourceSpan
@@ -56,6 +62,9 @@ tcErrSpan (TCMissingInterfaceMethod s _ _ _) = s
 tcErrSpan (TCUndefinedEnum s _) = s
 tcErrSpan (TCUnknownEnumVariant s _ _) = s
 tcErrSpan (TCBoundViolation s _ _ _) = s
+tcErrSpan (TCEnumVariantRequiresFields s _ _) = s
+tcErrSpan (TCEnumVariantUnknownField s _ _ _) = s
+tcErrSpan (TCEnumBindingUnknownField s _ _ _) = s
 
 tcErrMessage :: TypeCheckError -> String
 tcErrMessage (TCUndefinedVar _ v) =
@@ -116,3 +125,25 @@ tcErrMessage (TCBoundViolation _ tv concreteType iface) =
     ++ "`, but `"
     ++ show concreteType
     ++ "` does not implement it"
+tcErrMessage (TCEnumVariantRequiresFields _ ename vname) =
+  "enum variant `"
+    ++ T.unpack (unTypeName ename)
+    ++ "."
+    ++ T.unpack (unTypeName vname)
+    ++ "` carries fields -- use `{ field: expr }` initialiser syntax"
+tcErrMessage (TCEnumVariantUnknownField _ ename vname fname) =
+  "enum variant `"
+    ++ T.unpack (unTypeName ename)
+    ++ "."
+    ++ T.unpack (unTypeName vname)
+    ++ "` has no field `"
+    ++ T.unpack (unFieldName fname)
+    ++ "`"
+tcErrMessage (TCEnumBindingUnknownField _ ename vname fname) =
+  "enum variant `"
+    ++ T.unpack (unTypeName ename)
+    ++ "."
+    ++ T.unpack (unTypeName vname)
+    ++ "` has no field `"
+    ++ T.unpack (unFieldName fname)
+    ++ "` to bind"

@@ -287,10 +287,12 @@ data ResultType = ResultType
   }
   deriving stock (Eq, Ord, Generic)
 
--- | Static descriptor for an enum type: the type name and its variant names.
+-- | Static descriptor for an enum type: the type name, its variant names,
+-- and per-variant field lists (empty list = payloadless variant).
 data EnumType = EnumType
   { enumTypeName :: TypeName,
-    enumTypeVariants :: [TypeName]
+    enumTypeVariants :: [TypeName],
+    enumTypeVariantFields :: [(TypeName, [StructField])]
   }
   deriving stock (Show, Eq, Ord, Generic)
 

@@ -188,9 +188,10 @@ data ErrorSetDecl = ErrorSetDecl
   }
   deriving stock (Show, Eq, Generic)
 
--- | A single variant of an enum (no payload).
-newtype EnumVariant = EnumVariant
-  { enumVariantName :: TypeName
+-- | A single variant of an enum, optionally carrying named fields.
+data EnumVariant = EnumVariant
+  { enumVariantName :: TypeName,
+    enumVariantFields :: [Located StructField]
   }
   deriving stock (Show, Eq, Generic)
 
@@ -270,8 +271,8 @@ data MatchPattern ann
     MatchTuple [Located VarName]
   | -- | Struct destructure pattern: @{ x, y }@
     MatchStruct [Located FieldName]
-  | -- | Enum variant pattern: @Direction.North@
-    MatchEnumVariant (Located TypeName) (Located TypeName)
+  | -- | Enum variant pattern: @Direction.North@ or @Shape.Circle { radius: r }@
+    MatchEnumVariant (Located TypeName) (Located TypeName) [(Located FieldName, Located VarName)]
   deriving stock (Show, Eq, Generic)
 
 -- | One arm of a match statement.
@@ -309,6 +310,11 @@ data Expr ann
       (Located (Expr ann))
       (Located FieldName)
   | ExprStructInit
+      (Located TypeName)
+      [(Located FieldName, Located (Expr ann))]
+  | -- | Enum variant construction with payload: @Shape.Circle { radius: 5.0 }@
+    ExprEnumVariantInit
+      (Located TypeName)
       (Located TypeName)
       [(Located FieldName, Located (Expr ann))]
   | ExprArrayInit

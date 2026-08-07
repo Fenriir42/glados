@@ -131,8 +131,8 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~Interfaces~~ | Done -- `interface Printable { fn print(self) -> void; }` + `impl Printable for MyStruct { ... }`; type checker validates all required methods are provided; see `tests/interfaces.qa` |
 | ~~Operator overloading~~ | Done -- `impl Add for Vec2 { fn add(self, other: Vec2) -> Vec2 }` desugars `a + b` to `a.add(b)`; traits: `Add Sub Mul Div Rem Eq Ne Lt Gt Le Ge Neg`; see `tests/operator_overload.qa` |
 | ~~Destructuring~~ | Done -- `{ x, y }: Point = p` in `let` bindings; `{ x, y } =>` in `match` arms; see `tests/struct_destructuring.qa` |
-| Generic bounds | `fn sort[T: Comparable](items: [T])` -- interface constraints on type parameters; type checker verifies concrete type implements all required interfaces at call site |
-| Data-carrying enum variants | `enum Shape { Circle { radius: float }, Rect { w: float, h: float } }` -- algebraic data types; pattern matching on payload fields; unlocks `Option[T]` / `Result[T, E]` in user code |
+| ~~Generic bounds~~ | Done -- `fn foo[T: Iface](x: T)` syntax; type checker verifies concrete type implements the interface at every call site; `IDynMethodCall` for runtime dispatch; see `tests/generic_bounds.qa` |
+| ~~Data-carrying enum variants~~ | Done -- `enum Shape { Circle { radius: float }, Rect { w: float, h: float }, Point }` with `Shape.Circle { radius: 5.0 }` construction and `Shape.Circle { radius: r } =>` pattern matching with field destructuring; see `tests/data_enum.qa` |
 | `impl` on enums | Methods on enum types: `impl Direction { fn is_horizontal(self) -> bool { ... } }` |
 | Interface inheritance | `interface ReadWrite extends Read, Write { }` -- compose interfaces without duplicating method lists |
 | Default interface methods | `interface Printable { fn print(self) -> void { io.puts(self.to_str()); } }` -- optional default impl in an interface body; concrete type may override |

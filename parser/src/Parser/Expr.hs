@@ -102,13 +102,41 @@ parseExprDottedCall = do
 parseExprStructInit :: TokenParser (Located (Expr ann))
 parseExprStructInit = do
   Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
-  _ <- matchSymbol "{"
-  fields <- MP.sepEndBy parseFieldInit (matchSymbol ",")
-  Located endSpan _ <- matchSymbol "}"
-  return $
-    Located
-      (nameSpan <> endSpan)
-      (ExprStructInit (Located nameSpan (TypeName name)) fields)
+  -- Reject dotted names (those are enum variant inits, not struct inits)
+  case T.find (== '.') name of
+    Just _ -> MP.empty
+    Nothing -> do
+      _ <- matchSymbol "{"
+      fields <- MP.sepEndBy parseFieldInit (matchSymbol ",")
+      Located endSpan _ <- matchSymbol "}"
+      return $
+        Located
+          (nameSpan <> endSpan)
+          (ExprStructInit (Located nameSpan (TypeName name)) fields)
+  where
+    parseFieldInit = do
+      Located fnSpan (TokIdentifier fname) <- MP.satisfy isIdentifier
+      _ <- matchSymbol ":"
+      expr <- parseExpr
+      return (Located fnSpan (FieldName fname), expr)
+
+-- | Parse an enum variant init: @Enum.Variant { field: expr, ... }@
+parseExprEnumVariantInit :: TokenParser (Located (Expr ann))
+parseExprEnumVariantInit = do
+  Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
+  case T.breakOnEnd "." name of
+    ("", _) -> MP.empty
+    (_, "") -> MP.empty
+    (prefixWithDot, variantStr) -> do
+      _ <- matchSymbol "{"
+      fields <- MP.sepEndBy parseFieldInit (matchSymbol ",")
+      Located endSpan _ <- matchSymbol "}"
+      let enumName = TypeName (T.dropEnd 1 prefixWithDot)
+          variantName = TypeName variantStr
+      return $
+        Located
+          (nameSpan <> endSpan)
+          (ExprEnumVariantInit (Located nameSpan enumName) (Located nameSpan variantName) fields)
   where
     parseFieldInit = do
       Located fnSpan (TokIdentifier fname) <- MP.satisfy isIdentifier
@@ -297,6 +325,7 @@ parsePrimary =
       parseExprCast,
       parseExprParen,
       parseExprDictLit,
+      MP.try parseExprEnumVariantInit,
       MP.try parseExprStructInit,
       parseExprAccessChain
     ]

@@ -10,6 +10,7 @@ where
 import AST.Types.AST
   ( Block (..),
     Decl (..),
+    EnumVariant (..),
     Expr (..),
     ForInit (..),
     FunctionDecl (..),
@@ -282,9 +283,13 @@ inferExpr env (Located sp expr) = do
                 Just et ->
                   let vname = TypeName (unFieldName (unLocated locField))
                    in if vname `elem` enumTypeVariants et
-                        then do
-                          recordEnumVariant (locSpan structExpr)
-                          return (Just (TypeStruct (enumTypeName et)))
+                        then case lookup vname (enumTypeVariantFields et) of
+                          Just (_ : _) -> do
+                            recordError (TCEnumVariantRequiresFields (locSpan locField) tname vname)
+                            return Nothing
+                          _ -> do
+                            recordEnumVariant (locSpan structExpr)
+                            return (Just (TypeStruct (enumTypeName et)))
                         else do
                           recordError (TCUnknownEnumVariant (locSpan locField) (enumTypeName et) vname)
                           return Nothing
@@ -389,6 +394,22 @@ inferExpr env (Located sp expr) = do
                     ]
               return (Just (TypeGenericApp tname typeArgs))
         Nothing -> return (Just (TypeStruct tname))
+    go (ExprEnumVariantInit (Located initSp enumName) (Located vsp variantName) fieldExprs) = do
+      case lookupEnum enumName env of
+        Nothing -> do
+          recordError (TCUndefinedEnum initSp enumName)
+          return Nothing
+        Just et ->
+          case lookup variantName (enumTypeVariantFields et) of
+            Nothing -> do
+              recordError (TCUnknownEnumVariant vsp enumName variantName)
+              return Nothing
+            Just expectedFields -> do
+              forM_ fieldExprs $ \(Located fsp fname, locExpr) ->
+                case find (\sf -> fieldName sf == fname) expectedFields of
+                  Nothing -> recordError (TCEnumVariantUnknownField fsp enumName variantName fname)
+                  Just sf -> void (inferExpr env locExpr) >> recordType (locSpan locExpr) (qualType (fieldType sf))
+              return (Just (TypeStruct enumName))
     go (ExprArrayInit (Located _ elemType) elems) = do
       mapM_ (inferExpr env) elems
       return (Just (TypeArray (ArrayType (QualifiedType Mutable elemType))))
@@ -738,9 +759,25 @@ checkMatchArm env mSubjType (MatchArm pat body) = do
         )
         env
         pairs
-    MatchEnumVariant (Located _ ename) (Located vsp _) -> do
-      recordType vsp (TypeStruct ename)
-      return env
+    MatchEnumVariant (Located _ ename) (Located vsp vname) fieldBindings -> do
+      recordType vsp (TypeEnum ename)
+      case lookupEnum ename env of
+        Nothing -> return env
+        Just et ->
+          foldM
+            ( \e (Located fsp fname, Located varSp v) ->
+                case lookup vname (enumTypeVariantFields et) >>= find (\sf -> fieldName sf == fname) of
+                  Nothing -> do
+                    recordError (TCEnumBindingUnknownField fsp ename vname fname)
+                    return e
+                  Just sf -> do
+                    recordVarDecl varSp v varSp
+                    recordVarUse varSp v varSp
+                    recordType varSp (qualType (fieldType sf))
+                    return (insertVarWithSpan v (fieldType sf) varSp e)
+            )
+            env
+            fieldBindings
     MatchStruct fields -> do
       let tname = case mSubjType of
             Just (TypeStruct n) -> Just n

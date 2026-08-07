@@ -11,6 +11,7 @@ import AST.Types.AST
 import AST.Types.Common (ErrorName (..), FieldName (..), Located (..), SourceSpan (..), TypeName (..), VarName (..), getSpan)
 import AST.Types.Literal (IntBase (..), IntLiteral (..), Literal (..))
 import AST.Types.Operator (AssignOp (AssignAdd, AssignSub))
+import qualified Data.Text as T
 import Parser.Expr (parseExpr)
 import Parser.LValue (parseLValue)
 import Parser.Operator (parseAssignOp)
@@ -255,12 +256,35 @@ parseMatchPattern =
             (matchSymbol ",")
         _ <- matchSymbol "}"
         return (MatchStruct fields),
-      -- enum variant pattern: Direction.North
+      -- data-carrying enum variant: Shape.Circle { field: var, ... }
+      -- The lexer combines dotted names into a single token, so we read one
+      -- token, split on '.', then require '{' to distinguish from MatchLit.
       MP.try $ do
-        Located tspan (TokIdentifier tname) <- MP.satisfy isIdentifier
-        _ <- matchSymbol "."
-        Located vspan (TokIdentifier vname) <- MP.satisfy isIdentifier
-        return (MatchEnumVariant (Located tspan (TypeName tname)) (Located vspan (TypeName vname))),
+        Located tspan (TokIdentifier name) <- MP.satisfy isIdentifier
+        case T.breakOnEnd "." name of
+          ("", _) -> MP.empty
+          (_, "") -> MP.empty
+          (prefixWithDot, vname) -> do
+            let tname = T.dropEnd 1 prefixWithDot
+            _ <- matchSymbol "{"
+            let parseBinding = do
+                  Located fsp (TokIdentifier fname) <- MP.satisfy isIdentifier
+                  mVar <- MP.optional $ do
+                    _ <- matchSymbol ":"
+                    Located vsp2 (TokIdentifier v) <- MP.satisfy isIdentifier
+                    return (Located vsp2 (VarName v))
+                  let varLoc = case mVar of
+                        Just v -> v
+                        Nothing -> Located fsp (VarName fname)
+                  return (Located fsp (FieldName fname), varLoc)
+            bindings <- MP.sepEndBy parseBinding (matchSymbol ",")
+            _ <- matchSymbol "}"
+            return
+              ( MatchEnumVariant
+                  (Located tspan (TypeName tname))
+                  (Located tspan (TypeName vname))
+                  bindings
+              ),
       -- literal / expression
       MatchLit <$> parseExpr
     ]

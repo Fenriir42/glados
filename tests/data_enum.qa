@@ -1,0 +1,65 @@
+// Data-carrying enum variants showcase.
+// Demonstrates:
+//   1. Payloadless and data-carrying variants in the same enum.
+//   2. Enum.Variant { field: expr } construction syntax.
+//   3. Pattern matching with field destructuring.
+//   4. Multi-field variants.
+
+enum Shape {
+    Circle { radius: float },
+    Rect { width: float, height: float },
+    Point,
+};
+
+fn area(s: Shape) -> float {
+    match s {
+        Shape.Circle { radius: r } => {
+            return 3.14159 * r * r;
+        };
+        Shape.Rect { width: w, height: h } => {
+            return w * h;
+        };
+        Shape.Point => {
+            return 0.0;
+        };
+        _ => { return 0.0; };
+    };
+}
+
+fn describe(s: Shape) -> str {
+    match s {
+        Shape.Circle { radius: r } => {
+            rs: str = string.to_str(r);
+            return `circle(r={rs})`;
+        };
+        Shape.Rect { width: w, height: h } => {
+            ws: str = string.to_str(w);
+            hs: str = string.to_str(h);
+            return `rect({ws}x{hs})`;
+        };
+        Shape.Point => { return "point"; };
+        _ => { return "unknown"; };
+    };
+}
+
+fn main() -> void {
+    c: Shape = Shape.Circle { radius: 5.0 };
+    r: Shape = Shape.Rect { width: 4.0, height: 6.0 };
+    p: Shape = Shape.Point;
+
+    io.println(describe(c));
+    io.println(describe(r));
+    io.println(describe(p));
+
+    ca: float = area(c);
+    ra: float = area(r);
+    pa: float = area(p);
+
+    cas: str = string.to_str(ca);
+    ras: str = string.to_str(ra);
+    pas: str = string.to_str(pa);
+
+    io.println(`circle area: {cas}`);
+    io.println(`rect area:   {ras}`);
+    io.println(`point area:  {pas}`);
+}

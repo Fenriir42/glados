@@ -574,8 +574,23 @@ fmtMatchPat _ _ (MatchTuple vars) =
   "(" <> T.intercalate ", " [unVarName v | Located _ v <- vars] <> ")"
 fmtMatchPat _ _ (MatchStruct fields) =
   "{ " <> T.intercalate ", " [unFieldName f | Located _ f <- fields] <> " }"
-fmtMatchPat _ _ (MatchEnumVariant (Located _ tname) (Located _ vname)) =
-  unTypeName tname <> "." <> unTypeName vname
+fmtMatchPat _ _ (MatchEnumVariant (Located _ tname) (Located _ vname) bindings) =
+  unTypeName tname
+    <> "."
+    <> unTypeName vname
+    <> if null bindings
+      then ""
+      else
+        " { "
+          <> T.intercalate
+            ", "
+            [ unFieldName (locValue fn)
+                <> if unFieldName (locValue fn) == unVarName (locValue v)
+                  then ""
+                  else ": " <> unVarName (locValue v)
+              | (fn, v) <- bindings
+            ]
+          <> " }"
 
 -- ---------------------------------------------------------------------------
 -- LValues
@@ -608,6 +623,15 @@ fmtExpr opts n (ExprField (Located _ e) (Located _ f)) =
   fmtExpr opts n e <> "." <> unFieldName f
 fmtExpr opts n (ExprStructInit (Located _ tname) fields) =
   unTypeName tname
+    <> " { "
+    <> T.intercalate
+      ", "
+      [unFieldName (locValue fn) <> ": " <> fmtExpr opts n (locValue e) | (fn, e) <- fields]
+    <> " }"
+fmtExpr opts n (ExprEnumVariantInit (Located _ ename) (Located _ vname) fields) =
+  unTypeName ename
+    <> "."
+    <> unTypeName vname
     <> " { "
     <> T.intercalate
       ", "

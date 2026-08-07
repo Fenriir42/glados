@@ -684,6 +684,7 @@ freeVarsExpr = \case
   ExprIndex arr idx -> freeVarsExpr (unLocated arr) <> freeVarsExpr (unLocated idx)
   ExprField e _ -> freeVarsExpr (unLocated e)
   ExprStructInit _ fields -> foldMap (freeVarsExpr . unLocated . snd) fields
+  ExprEnumVariantInit _ _ fields -> foldMap (freeVarsExpr . unLocated . snd) fields
   ExprArrayInit _ elems -> foldMap (freeVarsExpr . unLocated) elems
   ExprDictLit pairs -> foldMap (\(k, v) -> freeVarsExpr (unLocated k) <> freeVarsExpr (unLocated v)) pairs
   ExprError _ fields -> foldMap (freeVarsExpr . unLocated . snd) fields
@@ -854,6 +855,10 @@ compileExpr = \case
       void $ emitInstruction IDup
       compileExpr (unLocated locExpr)
       void $ emitInstruction (IFieldSet (unLocated locFname))
+  ExprEnumVariantInit _ (Located _ variantName) fieldExprs -> do
+    mapM_ (compileExpr . unLocated . snd) fieldExprs
+    let fnames = map (unLocated . fst) fieldExprs
+    void $ emitInstruction (INewError (ErrorName (unTypeName variantName)) fnames)
   ExprDictLit pairs -> do
     void $ emitInstruction INewDict
     mapM_
@@ -1078,10 +1083,15 @@ compileMatchArm subjVar (MatchArm pat body) = case pat of
     compileLocatedStmt body
     exitJmp <- emitInstruction (IJump (InstructionPointer 0))
     return [exitJmp]
-  MatchEnumVariant _ (Located _ vname) -> do
+  MatchEnumVariant _ (Located _ vname) fieldBindings -> do
     void $ emitInstruction (ILoad subjVar)
     void $ emitInstruction (IIsErr (ErrorName (unTypeName vname)))
     falseJmp <- emitInstruction (IJumpFalse (InstructionPointer 0))
+    forM_ fieldBindings $ \(Located _ fname, Located _ var) -> do
+      void $ emitInstruction (ILoad subjVar)
+      void $ emitInstruction (IFieldGet fname)
+      void $ emitInstruction (IStore var)
+      addToScope var
     compileLocatedStmt body
     exitJmp <- emitInstruction (IJump (InstructionPointer 0))
     nextArm <- gets (InstructionPointer . csInstructionCounter)
