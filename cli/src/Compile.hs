@@ -88,7 +88,7 @@ compileSource stdlibDir filePath = do
     unless (null realErrors) $ do
       mapM_ (\e -> printErr (displayTypeError e (lines src))) realErrors
       exitFailure
-  case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
+  case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (tcDynMethodCalls tcResult) (Program decls) of
     Left err -> printErr (displayError err (lines src)) >> exitFailure
     Right bc -> return bc
 
@@ -123,7 +123,7 @@ compileSourceWith extraDirs filePath = do
     unless (null realErrors) $ do
       mapM_ (\e -> printErr (displayTypeError e (lines src))) realErrors
       exitFailure
-  case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
+  case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (tcDynMethodCalls tcResult) (Program decls) of
     Left err -> printErr (displayError err (lines src)) >> exitFailure
     Right bc -> return bc
 

@@ -23,6 +23,7 @@ import AST.Types.Common
   ( ErrorName (..),
     FieldName,
     FuncName,
+    TypeName,
     VarName,
   )
 import Data.Hashable (Hashable)
@@ -157,7 +158,7 @@ data Instruction
   | -- | Cast top of stack to the given type
     ICast CastType
   | -- | Allocate a new empty struct in the struct heap; push its VStructRef
-    INewStruct
+    INewStruct TypeName
   | -- | Pop VStructRef, push the named field value
     IFieldGet FieldName
   | -- | Pop value then VStructRef; set the named field in the struct heap
@@ -196,6 +197,9 @@ data Instruction
     -- the branch at the given source line was taken.
     -- No-op when coverage tracking is disabled in the VM.
     ICovBranch Int
+  | -- | Dynamic method dispatch: TOS is the receiver (self); resolves the
+    -- concrete function as @structName.methodName@ at runtime and calls it.
+    IDynMethodCall Text Int
   deriving stock (Show, Eq, Generic)
 
 instance Hashable Instruction

@@ -952,6 +952,47 @@ fn main() -> void {
 }
 ```
 
+### Generic bounds
+
+A type parameter can be constrained to types that implement one or more interfaces using `T: Interface` syntax inside the square brackets. The type checker verifies the constraint at every call site.
+
+```quant
+interface Describable {
+    fn describe(self) -> str;
+}
+
+struct Point { x: int, y: int }
+
+impl Describable for Point {
+    fn describe(self) -> str { return `({self.x}, {self.y})`; }
+}
+
+// T must implement Describable -- calling describe() is safe inside the body.
+fn print_item[T: Describable](item: T) -> void {
+    io.println(item.describe());
+}
+
+fn main() -> void {
+    p: Point = Point { x: 3, y: 4 };
+    print_item(p);   // (3, 4)
+}
+```
+
+Multiple bounds are written with `+`:
+
+```quant
+interface Resettable {
+    fn reset(self) -> void;
+}
+
+fn reset_and_describe[T: Describable + Resettable](item: T) -> str {
+    item.reset();
+    return item.describe();
+}
+```
+
+Passing a type that does not satisfy the bound is a compile-time error. Method calls on a bounded type variable are dispatched at runtime by looking up the concrete type of the receiver -- no vtable, no boxing.
+
 <Aside>
   Quant generics use *type erasure*: the same compiled bytecode handles all concrete types. The type checker enforces type safety at each call site with no runtime overhead and no code duplication.
 </Aside>

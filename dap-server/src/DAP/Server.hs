@@ -642,7 +642,7 @@ doCompile stdlibDir fp = do
       typeErrs = tcErrors tcResult
   unless (null typeErrs) $
     ioError (userError ("type check failed with " ++ show (length typeErrs) ++ " error(s)"))
-  case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
+  case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (tcDynMethodCalls tcResult) (Program decls) of
     Left err -> ioError (userError (show err))
     Right bc -> return bc
 

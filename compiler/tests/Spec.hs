@@ -23,7 +23,7 @@ compileFile filePath = do
         Left parseErr ->
           return $ Left $ "Parse error: " ++ errorBundlePretty parseErr
         Right decls ->
-          case compileProgram Map.empty Set.empty (Program decls) of
+          case compileProgram Map.empty Set.empty Map.empty (Program decls) of
             Left compileErr -> return $ Left $ "Compile error: " ++ show compileErr
             Right bytecodes -> return $ Right bytecodes
 

@@ -1,0 +1,74 @@
+// Generic bounds showcase: fn foo[T: Interface](...) syntax.
+// Demonstrates that:
+//   1. A bounded generic function can call interface methods on T.
+//   2. Passing a type that implements the bound works fine.
+//   3. Multiple bounds are supported: [T: A + B].
+
+interface Describable {
+    fn describe(self) -> str;
+}
+
+interface Resettable {
+    fn reset(self) -> void;
+}
+
+struct Counter {
+    value: int,
+}
+
+impl Describable for Counter {
+    fn describe(self) -> str {
+        n: str = string.to_str(self.value);
+        return `counter({n})`;
+    }
+}
+
+impl Resettable for Counter {
+    fn reset(self) -> void {
+        self.value = 0;
+    }
+}
+
+struct Label {
+    text: str,
+}
+
+impl Describable for Label {
+    fn describe(self) -> str {
+        return self.text;
+    }
+}
+
+// Single bound: T must implement Describable.
+fn print_description[T: Describable](item: T) -> void {
+    io.println(item.describe());
+}
+
+// Multiple bounds: T must implement both Describable and Resettable.
+fn reset_and_describe[T: Describable + Resettable](item: T) -> str {
+    item.reset();
+    return item.describe();
+}
+
+// Helper: extract one item and call its describe.
+fn describe_one[T: Describable](item: T) -> str {
+    return item.describe();
+}
+
+fn main() -> void {
+    c: Counter = Counter { value: 42 };
+    l: Label = Label { text: "hello" };
+
+    // Single-bound call
+    print_description(c);
+    print_description(l);
+
+    // Multi-bound call
+    desc: str = reset_and_describe(c);
+    io.println(desc);
+
+    // Generic helper via bounded type var
+    c2: Counter = Counter { value: 99 };
+    io.println(describe_one(c2));
+    io.println(describe_one(l));
+}

@@ -14,6 +14,7 @@ import AST.Types.AST
         funcDeclName,
         funcDeclParams,
         funcDeclReturnType,
+        funcDeclTypeBounds,
         funcDeclTypeParams
       ),
     ImplDecl (..),
@@ -62,11 +63,24 @@ parseVisibility = do
     isStaticId (Located _ (TokIdentifier "static")) = True
     isStaticId _ = False
 
--- | Parse a single type-parameter name (used in both @fn foo[T]@ and @struct Foo[T]@).
+-- | Parse a single type-parameter name (used in @struct Foo[T]@ and impl methods).
 parseTypeVar :: TokenParser (Located TypeName)
 parseTypeVar = do
   Located sp (TokIdentifier tv) <- MP.satisfy isIdentifier
   return (Located sp (TypeName tv))
+
+-- | Parse a type parameter with optional interface bounds: @T@ or @T: Iface1 + Iface2@.
+parseFuncTypeParam :: TokenParser (Located TypeName, [Located TypeName])
+parseFuncTypeParam = do
+  Located sp (TokIdentifier tv) <- MP.satisfy isIdentifier
+  bounds <- MP.option [] $ do
+    _ <- matchSymbol ":"
+    MP.sepBy1 parseBound (matchSymbol "+")
+  return (Located sp (TypeName tv), bounds)
+  where
+    parseBound = do
+      Located bsp (TokIdentifier b) <- MP.satisfy isIdentifier
+      return (Located bsp (TypeName b))
 
 -- | Substitute type-variable names with @TypeVar@ in a qualified type.
 subQType :: Set.Set T.Text -> QualifiedType -> QualifiedType
@@ -99,13 +113,15 @@ parseDeclFunction = do
   Located visSpan visibility <- parseVisibility
   Located fnSpan _ <- matchKeyword "fn"
   Located nameSpan (TokIdentifier name) <- MP.satisfy isIdentifier
-  -- Optional generic type parameters: fn foo[T, U](...)
+  -- Optional generic type parameters: fn foo[T, U: Iface](...)
   mTypeParams <- MP.optional $ do
     _ <- matchSymbol "["
-    tvs <- MP.sepBy1 parseTypeVar (matchSymbol ",")
+    pairs <- MP.sepBy1 parseFuncTypeParam (matchSymbol ",")
     _ <- matchSymbol "]"
-    return tvs
-  let typeParams = fromMaybe [] mTypeParams
+    return pairs
+  let typeParamPairs = fromMaybe [] mTypeParams
+      typeParams = map fst typeParamPairs
+      typeBounds = [(unLocated n, map unLocated bs) | (n, bs) <- typeParamPairs, not (null bs)]
   Located typeSpan funcType <- parseFunctionType
   Located bodySpan block <- parseBlock
 
@@ -117,6 +133,7 @@ parseDeclFunction = do
         FunctionDecl
           { funcDeclName = Located nameSpan (FuncName name),
             funcDeclTypeParams = typeParams,
+            funcDeclTypeBounds = typeBounds,
             funcDeclParams = map (fmap (subParam tvSet)) (funcParams funcType),
             funcDeclReturnType = fmap (subQType tvSet) (funcReturnType funcType),
             funcDeclBody = block
@@ -276,6 +293,7 @@ parseImplMethod selfType = do
         FunctionDecl
           { funcDeclName = Located nameSpan qualFuncName,
             funcDeclTypeParams = typeParams,
+            funcDeclTypeBounds = [],
             funcDeclParams = params,
             funcDeclReturnType = fmap (subQType tvSet) (funcReturnType funcType),
             funcDeclBody = block

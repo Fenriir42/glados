@@ -9,6 +9,7 @@ module TypeChecker.Env
     lookupEnum,
     lookupInterface,
     lookupGenericParams,
+    lookupGenericBounds,
     insertVar,
     insertVarWithSpan,
     insertFunc,
@@ -17,12 +18,15 @@ module TypeChecker.Env
     insertEnum,
     insertInterface,
     insertGenericParams,
+    insertGenericBounds,
     withVars,
     withTypeVars,
+    withGenericBounds,
     setReturnType,
   )
 where
 
+import AST.Types.AST (InterfaceMethodSig (..))
 import AST.Types.Common (ErrorName, FuncName, SourceSpan, TypeName, VarName)
 import AST.Types.Type (EnumType, ErrorType, FunctionType, QualifiedType, StructType)
 import Data.Map (Map)
@@ -43,12 +47,16 @@ data Env = Env
     envTypeVars :: Set TypeName,
     -- | Type parameters per generic function (for call-site inference)
     envGenericParams :: Map FuncName [TypeName],
-    -- | Interface name -> list of required unqualified method names
-    envInterfaces :: Map TypeName [FuncName]
+    -- | Interface bounds per generic function: fname -> [(TypeParam, [Interface])]
+    envGenericBounds :: Map FuncName [(TypeName, [TypeName])],
+    -- | Bounds in scope in the current generic function body
+    envCurrentBounds :: Map TypeName [TypeName],
+    -- | Interface name -> full method signatures
+    envInterfaces :: Map TypeName [InterfaceMethodSig]
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty Map.empty
+emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty Map.empty Map.empty Map.empty
 
 lookupVar :: VarName -> Env -> Maybe QualifiedType
 lookupVar v = Map.lookup v . envVars
@@ -104,10 +112,21 @@ lookupGenericParams :: FuncName -> Env -> [TypeName]
 lookupGenericParams f env =
   Map.findWithDefault [] f (envGenericParams env)
 
-lookupInterface :: TypeName -> Env -> Maybe [FuncName]
+insertGenericBounds :: FuncName -> [(TypeName, [TypeName])] -> Env -> Env
+insertGenericBounds f bs env =
+  env {envGenericBounds = Map.insert f bs (envGenericBounds env)}
+
+lookupGenericBounds :: FuncName -> Env -> [(TypeName, [TypeName])]
+lookupGenericBounds f env =
+  Map.findWithDefault [] f (envGenericBounds env)
+
+withGenericBounds :: [(TypeName, [TypeName])] -> Env -> Env
+withGenericBounds bs env = env {envCurrentBounds = Map.fromList bs}
+
+lookupInterface :: TypeName -> Env -> Maybe [InterfaceMethodSig]
 lookupInterface t = Map.lookup t . envInterfaces
 
-insertInterface :: TypeName -> [FuncName] -> Env -> Env
+insertInterface :: TypeName -> [InterfaceMethodSig] -> Env -> Env
 insertInterface t ms env = env {envInterfaces = Map.insert t ms (envInterfaces env)}
 
 setReturnType :: QualifiedType -> Env -> Env

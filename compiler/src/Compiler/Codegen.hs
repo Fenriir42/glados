@@ -189,7 +189,9 @@ data CompileState = CompileState
     -- Maps method-name span to the resolved function name (from the type checker)
     csMethodCallMap :: Map SourceSpan FuncName,
     -- Receiver spans of enum-variant accesses (Direction.North); emit INewError
-    csEnumVariantSpans :: Set SourceSpan
+    csEnumVariantSpans :: Set SourceSpan,
+    -- Maps method-name span to the unqualified method name for dynamic dispatch
+    csDynMethodCallMap :: Map SourceSpan Text
   }
   deriving stock (Show)
 
@@ -214,7 +216,8 @@ initialState =
       csFfiFuncs = Map.empty,
       csLambdaBytecodes = [],
       csMethodCallMap = Map.empty,
-      csEnumVariantSpans = Set.empty
+      csEnumVariantSpans = Set.empty,
+      csDynMethodCallMap = Map.empty
     }
 
 type Compile a = ExceptT CompileError (State CompileState) a
@@ -255,9 +258,9 @@ patchAll addrs target instrs = foldr (\a is -> patchJump is a target) instrs add
 -- ---------------------------------------------------------------------------
 -- Program entry
 
-compileProgram :: Map SourceSpan FuncName -> Set SourceSpan -> Program ann -> Either CompileError [Bytecode]
-compileProgram methodCallMap enumVariantSpans (Program decls) =
-  evalState (runExceptT go) (initialState {csMethodCallMap = methodCallMap, csEnumVariantSpans = enumVariantSpans})
+compileProgram :: Map SourceSpan FuncName -> Set SourceSpan -> Map SourceSpan Text -> Program ann -> Either CompileError [Bytecode]
+compileProgram methodCallMap enumVariantSpans dynMethodMap (Program decls) =
+  evalState (runExceptT go) (initialState {csMethodCallMap = methodCallMap, csEnumVariantSpans = enumVariantSpans, csDynMethodCallMap = dynMethodMap})
   where
     go :: Compile [Bytecode]
     go = do
@@ -357,7 +360,9 @@ compileFunction funcDecl captureNames = do
         -- Thread the method call map through so ExprMethodCall can resolve names
         csMethodCallMap = csMethodCallMap oldState,
         -- Thread the enum variant span set through so ExprField can detect enum accesses
-        csEnumVariantSpans = csEnumVariantSpans oldState
+        csEnumVariantSpans = csEnumVariantSpans oldState,
+        -- Thread dynamic dispatch map through
+        csDynMethodCallMap = csDynMethodCallMap oldState
       }
   -- Parameters and captured variables are in scope from the start
   let paramNames = [paramName p | Located _ p <- funcDeclParams funcDecl]
@@ -843,8 +848,8 @@ compileExpr = \case
       else do
         compileExpr (unLocated structExpr)
         void $ emitInstruction (IFieldGet (unLocated locField))
-  ExprStructInit _ fieldExprs -> do
-    void $ emitInstruction INewStruct
+  ExprStructInit locTypeName fieldExprs -> do
+    void $ emitInstruction (INewStruct (unLocated locTypeName))
     forM_ fieldExprs $ \(locFname, locExpr) -> do
       void $ emitInstruction IDup
       compileExpr (unLocated locExpr)
@@ -890,6 +895,7 @@ compileExpr = \case
           FunctionDecl
             { funcDeclName = Located (blockSpan body) lambdaName,
               funcDeclTypeParams = [],
+              funcDeclTypeBounds = [],
               funcDeclParams = params,
               funcDeclReturnType = retType,
               funcDeclBody = body
@@ -910,24 +916,31 @@ compileExpr = \case
       then void $ emitInstruction (ILoadFunc lambdaName)
       else void $ emitInstruction (IMakeClosure lambdaName captures)
   ExprTupleInit elems -> do
-    void $ emitInstruction INewStruct
+    void $ emitInstruction (INewStruct (TypeName "__tuple__"))
     forM_ (zip [0 ..] elems) $ \(i, elemExpr) -> do
       void $ emitInstruction IDup
       compileExpr (unLocated elemExpr)
       void $ emitInstruction (IFieldSet (FieldName (T.pack ("_" ++ show (i :: Int)))))
   ExprMethodCall receiver (Located methodSp rawMethod) args -> do
     methodMap <- gets csMethodCallMap
+    dynMap <- gets csDynMethodCallMap
     case Map.lookup methodSp methodMap of
       Just resolvedFname -> do
         -- Push extra args reversed, then receiver on top (self = first param = top of stack)
         mapM_ (compileExpr . unLocated) (reverse args)
         compileExpr (unLocated receiver)
         void $ emitInstruction (ICall (FunctionRef resolvedFname) (1 + length args))
-      Nothing -> do
-        -- Module/qualified call: receiver text becomes part of the name
-        let qualFname = FuncName (qualPrefix (unLocated receiver) <> unFuncName rawMethod)
-        mapM_ (compileExpr . unLocated) (reverse args)
-        void $ emitInstruction (ICall (FunctionRef qualFname) (length args))
+      Nothing -> case Map.lookup methodSp dynMap of
+        Just methodName -> do
+          -- Dynamic dispatch: push args reversed, then receiver (TOS used for type lookup)
+          mapM_ (compileExpr . unLocated) (reverse args)
+          compileExpr (unLocated receiver)
+          void $ emitInstruction (IDynMethodCall methodName (1 + length args))
+        Nothing -> do
+          -- Module/qualified call: receiver text becomes part of the name
+          let qualFname = FuncName (qualPrefix (unLocated receiver) <> unFuncName rawMethod)
+          mapM_ (compileExpr . unLocated) (reverse args)
+          void $ emitInstruction (ICall (FunctionRef qualFname) (length args))
     where
       qualPrefix (ExprVar (Located _ v)) = unVarName v <> "."
       qualPrefix (ExprField (Located _ e) (Located _ f)) =

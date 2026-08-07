@@ -37,7 +37,7 @@ runPipeline src =
               typeErrs = tcErrors tcResult
           if not (null typeErrs)
             then return $ TypeErrors typeErrs
-            else case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
+            else case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (tcDynMethodCalls tcResult) (Program decls) of
               Left err -> return $ CompileError (show err)
               Right bcs -> do
                 result <- runProgram bcs
@@ -66,7 +66,7 @@ runPipelineWithImports src =
                   typeErrs = tcErrors tcResult
               if not (null typeErrs)
                 then return $ TypeErrors typeErrs
-                else case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
+                else case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (tcDynMethodCalls tcResult) (Program decls) of
                   Left err -> return $ CompileError (show err)
                   Right bcs -> do
                     result <- runProgram bcs
@@ -94,7 +94,7 @@ runPipelineWithModule modName modSrc mainSrc =
                     typeErrs = tcErrors tcResult
                 if not (null typeErrs)
                   then return $ TypeErrors typeErrs
-                  else case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
+                  else case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (tcDynMethodCalls tcResult) (Program decls) of
                     Left err -> return $ CompileError (show err)
                     Right bcs -> do
                       result <- runProgram bcs

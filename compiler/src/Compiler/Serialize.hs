@@ -13,7 +13,7 @@ module Compiler.Serialize
   )
 where
 
-import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), VarName (..))
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), TypeName (..), VarName (..))
 import Compiler.Bytecode
 import Data.Binary (Binary (..))
 import Data.Binary.Get (Get, getByteString, runGetOrFail)
@@ -77,6 +77,10 @@ instance Binary FieldName where
 instance Binary ErrorName where
   put (ErrorName t) = put t
   get = ErrorName <$> get
+
+instance Binary TypeName where
+  put (TypeName t) = put t
+  get = TypeName <$> get
 
 instance Binary InstructionPointer where
   put (InstructionPointer i) = put i
@@ -171,7 +175,7 @@ instance Binary Instruction where
     IArrayGetOrNew -> tag 15
     IArraySet -> tag 16
     ICast ct -> tag 17 >> put ct
-    INewStruct -> tag 18
+    INewStruct tname -> tag 18 >> put tname
     IFieldGet f -> tag 19 >> put f
     IFieldSet f -> tag 20 >> put f
     INewError ename fnames -> tag 21 >> put ename >> put fnames
@@ -185,6 +189,7 @@ instance Binary Instruction where
     ICallFFI lib sym retTy argc -> tag 29 >> put lib >> put sym >> put retTy >> put (argc :: Int)
     ICovMark n -> tag 30 >> put (n :: Int)
     ICovBranch n -> tag 31 >> put (n :: Int)
+    IDynMethodCall mname argc -> tag 32 >> put mname >> put (argc :: Int)
     where
       tag n = put (n :: Word8)
 
@@ -208,7 +213,7 @@ instance Binary Instruction where
       15 -> pure IArrayGetOrNew
       16 -> pure IArraySet
       17 -> ICast <$> get
-      18 -> pure INewStruct
+      18 -> INewStruct <$> get
       19 -> IFieldGet <$> get
       20 -> IFieldSet <$> get
       21 -> INewError <$> get <*> get
@@ -222,6 +227,7 @@ instance Binary Instruction where
       29 -> ICallFFI <$> get <*> get <*> get <*> get
       30 -> ICovMark <$> (get :: Get Int)
       31 -> ICovBranch <$> (get :: Get Int)
+      32 -> IDynMethodCall <$> get <*> (get :: Get Int)
       t -> fail $ "Unknown Instruction tag: " ++ show t
 
 instance Binary Bytecode where

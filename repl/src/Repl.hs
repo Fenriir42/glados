@@ -179,7 +179,7 @@ tryCompile config src existing = do
               case typeErrs of
                 errs@(_ : _) -> return (Left (concatMap formatTypeErr errs))
                 [] ->
-                  return $ case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (Program decls) of
+                  return $ case compileProgram (tcAllCallMap tcResult) (tcEnumVariantSpans tcResult) (tcDynMethodCalls tcResult) (Program decls) of
                     Left err -> Left (displayError err (lines src))
                     Right bcs -> Right (existing ++ bcs)
 

@@ -114,6 +114,8 @@ data FFIDecl = FFIDecl
 data FunctionDecl ann = FunctionDecl
   { funcDeclName :: Located FuncName,
     funcDeclTypeParams :: [Located TypeName],
+    -- | Interface bounds per type parameter: [(T, [Iface1, Iface2])]
+    funcDeclTypeBounds :: [(TypeName, [TypeName])],
     funcDeclParams :: [Located Parameter],
     funcDeclReturnType :: Located QualifiedType,
     funcDeclBody :: Block ann

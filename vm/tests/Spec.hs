@@ -27,7 +27,7 @@ run src =
       case runParser (many parseDecl) "<test>" tokens of
         Left bundle -> return $ Left $ VMRuntimeError ("parse: " ++ errorBundlePretty bundle)
         Right decls ->
-          case compileProgram Map.empty Set.empty (Program decls) of
+          case compileProgram Map.empty Set.empty Map.empty (Program decls) of
             Left err -> return $ Left $ VMRuntimeError ("compile: " ++ show err)
             Right bcs -> runProgram bcs
 

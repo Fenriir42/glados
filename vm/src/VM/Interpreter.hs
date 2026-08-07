@@ -11,7 +11,7 @@ module VM.Interpreter
   )
 where
 
-import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), VarName)
+import AST.Types.Common (ErrorName (..), FieldName (..), FuncName (..), TypeName (..), VarName, unTypeName)
 import Compiler.Bytecode
   ( BinaryOp (..),
     Bytecode (..),
@@ -101,6 +101,8 @@ data VMState = VMState
     vmHeap :: Map Int (Map Int Value),
     vmDictHeap :: Map Int (Map Value Value),
     vmStructHeap :: Map Int (Map Text Value),
+    -- | Maps struct heap IDs to their declared type name (for dynamic dispatch).
+    vmStructTypes :: Map Int TypeName,
     vmSocketHeap :: Map Int NS.Socket,
     vmFFILibs :: Map Text DL,
     vmNextId :: Int,
@@ -138,6 +140,7 @@ runProgram bytecodes = do
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
                 vmStructHeap = Map.empty,
+                vmStructTypes = Map.empty,
                 vmSocketHeap = Map.empty,
                 vmFFILibs = Map.empty,
                 vmNextId = 0,
@@ -169,6 +172,7 @@ runFunction fname bytecodes = do
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
                 vmStructHeap = Map.empty,
+                vmStructTypes = Map.empty,
                 vmSocketHeap = Map.empty,
                 vmFFILibs = Map.empty,
                 vmNextId = 0,
@@ -200,6 +204,7 @@ runFunctionCov covRef fname bytecodes = do
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
                 vmStructHeap = Map.empty,
+                vmStructTypes = Map.empty,
                 vmSocketHeap = Map.empty,
                 vmFFILibs = Map.empty,
                 vmNextId = 0,
@@ -238,6 +243,7 @@ runFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes = do
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
                 vmStructHeap = Map.empty,
+                vmStructTypes = Map.empty,
                 vmSocketHeap = Map.empty,
                 vmFFILibs = Map.empty,
                 vmNextId = 0,
@@ -270,6 +276,7 @@ runDebugProgram hook bytecodes = do
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
                 vmStructHeap = Map.empty,
+                vmStructTypes = Map.empty,
                 vmSocketHeap = Map.empty,
                 vmFFILibs = Map.empty,
                 vmNextId = 0,
@@ -536,15 +543,44 @@ execInstr = \case
     r <- evalCast ct v
     push r
     return Nothing
-  INewStruct -> do
+  INewStruct tname -> do
     sid <- gets vmNextId
     modify $ \s ->
       s
         { vmStructHeap = Map.insert sid Map.empty (vmStructHeap s),
+          vmStructTypes = Map.insert sid tname (vmStructTypes s),
           vmNextId = sid + 1
         }
     push (VStructRef sid)
     return Nothing
+  IDynMethodCall methodName argc -> do
+    stk <- gets vmStack
+    let receiver = stk !! max 0 (argc - 1)
+    resolvedName <- case receiver of
+      VStructRef sid -> do
+        types <- gets vmStructTypes
+        case Map.lookup sid types of
+          Just tname -> return $ FuncName (unTypeName tname <> "." <> methodName)
+          Nothing -> throwError $ VMRuntimeError $ "IDynMethodCall: no type for struct " ++ show sid
+      other -> throwError $ VMRuntimeError $ "IDynMethodCall: receiver is not a struct: " ++ show other
+    funcs <- gets vmFunctions
+    strings <- gets vmStrings
+    case Map.lookup resolvedName funcs of
+      Just bc -> do
+        saveFrame
+        let (callArgs, rest) = splitAt argc stk
+            resolvedArgs = map (resolveStringRef strings) callArgs
+        modify $ \s ->
+          s
+            { vmStack = resolvedArgs ++ rest,
+              vmLocals = Map.empty,
+              vmIP = 0,
+              vmInstrs = bytecodeInstructions bc,
+              vmStrings = bytecodeStrings bc,
+              vmCurrentFunc = resolvedName
+            }
+        return Nothing
+      Nothing -> throwError $ VMUndefinedFunction resolvedName
   IFieldGet (FieldName fname) -> do
     ref <- pop "IFieldGet"
     case ref of

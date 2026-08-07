@@ -7,14 +7,15 @@ module TypeChecker
 where
 
 import AST.Types.AST (Decl (..), EnumDecl (..), EnumVariant (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), InterfaceDecl (..), InterfaceMethodSig (..), Program (..), StructDecl (..), programDecls)
-import AST.Types.Common (FuncName (..), Located (..), SourceSpan, TypeName (..), VarName, locSpan, unLocated)
-import AST.Types.Type (EnumType (..), ErrorType (..), FunctionType (..), StructType (..), Type)
+import AST.Types.Common (FuncName (..), Located (..), SourceSpan, TypeName (..), VarName, initialPos, locSpan, spanSingle, unLocated)
+import AST.Types.Type (Constness (..), EnumType (..), ErrorType (..), FunctionType (..), PrimitiveType (..), QualifiedType (..), StructType (..), Type (..))
 import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertEnum, insertError, insertFunc, insertGenericParams, insertInterface, insertStruct)
+import qualified Data.Text as T
+import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertEnum, insertError, insertFunc, insertGenericBounds, insertGenericParams, insertInterface, insertStruct)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -35,7 +36,10 @@ data TypeCheckResult = TypeCheckResult
     tcOpOverloadMap :: Map SourceSpan FuncName,
     -- | Receiver spans of enum-variant field-access expressions (Direction.North).
     -- Codegen checks this set to emit INewError instead of IFieldGet.
-    tcEnumVariantSpans :: Set SourceSpan
+    tcEnumVariantSpans :: Set SourceSpan,
+    -- | Method calls on bounded type vars that need runtime dispatch (IDynMethodCall).
+    -- Maps the method-name span to the unqualified method name.
+    tcDynMethodCalls :: Map SourceSpan T.Text
   }
 
 -- | Combined map of all dispatch-through-method spans: explicit method calls
@@ -44,22 +48,31 @@ tcAllCallMap :: TypeCheckResult -> Map SourceSpan FuncName
 tcAllCallMap r = Map.union (tcMethodCallMap r) (tcOpOverloadMap r)
 
 -- | Pre-defined operator trait interfaces injected into every program's env.
-builtinInterfaces :: Map TypeName [FuncName]
-builtinInterfaces =
-  Map.fromList
-    [ (TypeName "Add", [FuncName "add"]),
-      (TypeName "Sub", [FuncName "sub"]),
-      (TypeName "Mul", [FuncName "mul"]),
-      (TypeName "Div", [FuncName "div"]),
-      (TypeName "Rem", [FuncName "rem"]),
-      (TypeName "Eq", [FuncName "eq"]),
-      (TypeName "Ne", [FuncName "ne"]),
-      (TypeName "Lt", [FuncName "lt"]),
-      (TypeName "Gt", [FuncName "gt"]),
-      (TypeName "Le", [FuncName "le"]),
-      (TypeName "Ge", [FuncName "ge"]),
-      (TypeName "Neg", [FuncName "neg"])
-    ]
+builtinInterfaces :: Map TypeName [InterfaceMethodSig]
+builtinInterfaces = Map.fromList (map mkEntry opTraits)
+  where
+    opTraits =
+      [ (TypeName "Add", FuncName "add"),
+        (TypeName "Sub", FuncName "sub"),
+        (TypeName "Mul", FuncName "mul"),
+        (TypeName "Div", FuncName "div"),
+        (TypeName "Rem", FuncName "rem"),
+        (TypeName "Eq", FuncName "eq"),
+        (TypeName "Ne", FuncName "ne"),
+        (TypeName "Lt", FuncName "lt"),
+        (TypeName "Gt", FuncName "gt"),
+        (TypeName "Le", FuncName "le"),
+        (TypeName "Ge", FuncName "ge"),
+        (TypeName "Neg", FuncName "neg")
+      ]
+    mkEntry (tname, fname) = (tname, [dummyMethodSig fname])
+    dummyMethodSig fname =
+      InterfaceMethodSig
+        { ifaceMethodName = Located builtinSpan fname,
+          ifaceMethodParams = [],
+          ifaceMethodReturnType = Located builtinSpan (QualifiedType Mutable (TypePrimitive PrimNone))
+        }
+    builtinSpan = spanSingle (initialPos "/builtin")
 
 -- | Type-check a parsed program.  Returns all diagnostics, a map from
 -- every expression span to its inferred type, and a map from every
@@ -103,13 +116,16 @@ typeCheck prog =
         (tcsMethodCallMap finalState)
         (tcsOpOverloadMap finalState)
         (tcsEnumVariantSpans finalState)
+        (tcsDynMethodCalls finalState)
   where
     collectFunc :: Located (Decl ()) -> Env -> Env
     collectFunc (Located _ (DeclFunction _ fd)) env =
       let fname = unLocated (funcDeclName fd)
           tvs = map unLocated (funcDeclTypeParams fd) :: [TypeName]
+          bounds = funcDeclTypeBounds fd
           env' = insertFunc fname (mkFuncType fd) env
-       in if null tvs then env' else insertGenericParams fname tvs env'
+          env'' = if null tvs then env' else insertGenericParams fname tvs env'
+       in if null bounds then env'' else insertGenericBounds fname bounds env''
     collectFunc _ env = env
 
     collectFFI :: Located (Decl ()) -> Env -> Env
@@ -134,8 +150,10 @@ typeCheck prog =
         ( \(Located _ fd) e ->
             let fname = unLocated (funcDeclName fd)
                 tvs = map unLocated (funcDeclTypeParams fd)
+                bounds = funcDeclTypeBounds fd
                 e' = insertFunc fname (mkFuncType fd) e
-             in if null tvs then e' else insertGenericParams fname tvs e'
+                e'' = if null tvs then e' else insertGenericParams fname tvs e'
+             in if null bounds then e'' else insertGenericBounds fname bounds e''
         )
         env
         (implMethods idecl)
@@ -147,8 +165,10 @@ typeCheck prog =
         ( \(Located _ fd) e ->
             let fname = unLocated (funcDeclName fd)
                 tvs = map unLocated (funcDeclTypeParams fd)
+                bounds = funcDeclTypeBounds fd
                 e' = insertFunc fname (mkFuncType fd) e
-             in if null tvs then e' else insertGenericParams fname tvs e'
+                e'' = if null tvs then e' else insertGenericParams fname tvs e'
+             in if null bounds then e'' else insertGenericBounds fname bounds e''
         )
         env
         (implForMethods ifdecl)
@@ -158,7 +178,7 @@ typeCheck prog =
     collectInterface (Located _ (DeclInterface _ idecl)) env =
       insertInterface
         (unLocated (ifaceDeclName idecl))
-        [unLocated (ifaceMethodName sig) | sig <- ifaceDeclMethods idecl]
+        (ifaceDeclMethods idecl)
         env
     collectInterface _ env = env
 

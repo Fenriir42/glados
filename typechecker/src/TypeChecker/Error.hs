@@ -33,6 +33,9 @@ data TypeCheckError
     TCUndefinedEnum SourceSpan TypeName
   | -- | Variant not present in the enum
     TCUnknownEnumVariant SourceSpan TypeName TypeName
+  | -- | Concrete type bound to a type parameter does not implement the required interface
+    -- | TCBoundViolation span typeParamName concreteType interfaceName
+    TCBoundViolation SourceSpan TypeName Type TypeName
   deriving stock (Show, Eq)
 
 tcErrSpan :: TypeCheckError -> SourceSpan
@@ -52,6 +55,7 @@ tcErrSpan (TCUndefinedInterface s _) = s
 tcErrSpan (TCMissingInterfaceMethod s _ _ _) = s
 tcErrSpan (TCUndefinedEnum s _) = s
 tcErrSpan (TCUnknownEnumVariant s _ _) = s
+tcErrSpan (TCBoundViolation s _ _ _) = s
 
 tcErrMessage :: TypeCheckError -> String
 tcErrMessage (TCUndefinedVar _ v) =
@@ -104,3 +108,11 @@ tcErrMessage (TCUnknownEnumVariant _ ename vname) =
     ++ "` has no variant `"
     ++ T.unpack (unTypeName vname)
     ++ "`"
+tcErrMessage (TCBoundViolation _ tv concreteType iface) =
+  "type parameter `"
+    ++ T.unpack (unTypeName tv)
+    ++ "` requires `"
+    ++ T.unpack (unTypeName iface)
+    ++ "`, but `"
+    ++ show concreteType
+    ++ "` does not implement it"

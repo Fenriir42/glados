@@ -15,6 +15,7 @@ import AST.Types.AST
     FunctionDecl (..),
     ImplDecl (..),
     ImplForDecl (..),
+    InterfaceMethodSig (..),
     LValue (..),
     MatchArm (..),
     MatchPattern (..),
@@ -71,12 +72,12 @@ import AST.Types.Type
     qualConstness,
     qualType,
   )
-import Control.Monad (foldM, foldM_, forM_, unless, void, when)
+import Control.Monad (foldM, foldM_, forM_, msum, unless, void, when)
 import Control.Monad.State.Strict (State, modify)
 import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -88,12 +89,14 @@ import TypeChecker.Env
     lookupEnum,
     lookupError,
     lookupFunc,
+    lookupGenericBounds,
     lookupGenericParams,
     lookupInterface,
     lookupStruct,
     lookupVar,
     lookupVarDef,
     setReturnType,
+    withGenericBounds,
     withTypeVars,
   )
 import TypeChecker.Error (TypeCheckError (..))
@@ -112,11 +115,14 @@ data TCState = TCState
     tcsOpOverloadMap :: Map SourceSpan FuncName,
     -- | Receiver spans of enum-variant field-access expressions.
     -- Codegen checks this set to emit INewError instead of IFieldGet.
-    tcsEnumVariantSpans :: Set SourceSpan
+    tcsEnumVariantSpans :: Set SourceSpan,
+    -- | Method calls on bounded type vars that need runtime dispatch.
+    -- Maps the method-name span to the unqualified method name.
+    tcsDynMethodCalls :: Map SourceSpan T.Text
   }
 
 initialTCState :: TCState
-initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Set.empty
+initialTCState = TCState [] Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Set.empty Map.empty
 
 type TC = State TCState
 
@@ -146,6 +152,10 @@ recordVarUse useSp name defSp =
 recordVarDecl :: SourceSpan -> VarName -> SourceSpan -> TC ()
 recordVarDecl nameSp name stmtSp =
   modify $ \s -> s {tcsVarDeclSites = Map.insert nameSp (name, stmtSp) (tcsVarDeclSites s)}
+
+recordDynMethodCall :: SourceSpan -> T.Text -> TC ()
+recordDynMethodCall sp methodName =
+  modify $ \s -> s {tcsDynMethodCalls = Map.insert sp methodName (tcsDynMethodCalls s)}
 
 recordMethodCall :: SourceSpan -> FuncName -> TC ()
 recordMethodCall sp fname =
@@ -333,13 +343,23 @@ inferExpr env (Located sp expr) = do
           let qualFname' = FuncName (unTypeName tname <> "." <> unFuncName methodFuncName)
           recordMethodCall methodSp qualFname'
           inferCall sp methodSp qualFname' (receiver : args)
-        Nothing ->
-          -- Module/qualified call fallback: sys.exit, math.sqrt, imported funcs, etc.
-          inferCall sp methodSp qualFname args
+        Nothing -> case mTypeVarOf mReceiverType of
+          Just tv ->
+            -- Bounded type-var method call: look up return type from interface bounds
+            case findBoundMethodSig tv (unFuncName methodFuncName) env of
+              Just sig -> do
+                recordDynMethodCall methodSp (unFuncName methodFuncName)
+                return $ Just $ qualType $ unLocated $ ifaceMethodReturnType sig
+              Nothing -> inferCall sp methodSp qualFname args
+          Nothing ->
+            -- Module/qualified call fallback: sys.exit, math.sqrt, imported funcs, etc.
+            inferCall sp methodSp qualFname args
       where
         mStructNameOf (Just (TypeStruct n)) = Just n
         mStructNameOf (Just (TypeGenericApp n _)) = Just n
         mStructNameOf _ = Nothing
+        mTypeVarOf (Just (TypeVar n)) = Just n
+        mTypeVarOf _ = Nothing
         receiverPrefix (ExprVar (Located _ v)) = unVarName v <> "."
         receiverPrefix (ExprField (Located _ e) (Located _ f)) =
           receiverPrefix e <> unFieldName f <> "."
@@ -453,6 +473,15 @@ inferExpr env (Located sp expr) = do
                       (catMaybes argResults)
           let rawRet = qualType (unLocated (funcReturnType ft))
           let retType = if Map.null binding then rawRet else applyBindings binding rawRet
+          -- Check that each concrete type satisfies the bounds of its type parameter
+          let tvBoundsList = lookupGenericBounds fname env
+          forM_ tvBoundsList $ \(tv, ifaceNames) ->
+            case Map.lookup tv binding of
+              Nothing -> return ()
+              Just concreteType ->
+                forM_ ifaceNames $ \ifaceName ->
+                  unless (typeImplementsBound concreteType ifaceName env) $
+                    recordError (TCBoundViolation callSp tv concreteType ifaceName)
           recordCallSite nameSpan fname ft
           recordCallWithArgs callSp fname ft argSpans
           let regularParams = filter (not . paramVariadic . unLocated) params
@@ -634,9 +663,10 @@ checkDecl env (Located declSpan decl) = case decl of
         typeName = unLocated (implForTypeName ifdecl)
     case lookupInterface ifaceName env of
       Nothing -> recordError (TCUndefinedInterface declSpan ifaceName)
-      Just requiredMethods ->
-        forM_ requiredMethods $ \mname -> do
-          let qualName = FuncName (unTypeName typeName <> "." <> unFuncName mname)
+      Just requiredSigs ->
+        forM_ requiredSigs $ \sig -> do
+          let mname = unLocated (ifaceMethodName sig)
+              qualName = FuncName (unTypeName typeName <> "." <> unFuncName mname)
           case lookupFunc qualName env of
             Nothing -> recordError (TCMissingInterfaceMethod declSpan ifaceName typeName mname)
             Just _ -> return ()
@@ -648,10 +678,11 @@ checkFunction baseEnv fd = do
   let retQt = unLocated (funcDeclReturnType fd)
   let params = funcDeclParams fd
   let tvs = map unLocated (funcDeclTypeParams fd)
+  let bounds = funcDeclTypeBounds fd
   let env =
         foldr
           (\(Located psp p) e -> insertVarWithSpan (paramName p) (paramType p) psp e)
-          (setReturnType retQt (withTypeVars tvs baseEnv))
+          (setReturnType retQt (withGenericBounds bounds (withTypeVars tvs baseEnv)))
           params
   mapM_ (\(Located psp p) -> recordVarUse psp (paramName p) psp) params
   checkBlock env (funcDeclBody fd)
@@ -866,6 +897,35 @@ applyBindings m (TypeFunction ft) =
     applyInParam p = p {paramType = applyInQType (paramType p)}
     applyInQType qt = QualifiedType (qualConstness qt) (applyBindings m (qualType qt))
 applyBindings _ t = t
+
+-- | Check whether a concrete type has all methods required by an interface.
+typeImplementsBound :: Type -> TypeName -> Env -> Bool
+typeImplementsBound concreteType ifaceName env =
+  case lookupInterface ifaceName env of
+    Nothing -> True
+    Just sigs ->
+      case typeBaseName concreteType of
+        Nothing -> False
+        Just tname ->
+          let qualMethod mname = FuncName (unTypeName tname <> "." <> unFuncName mname)
+           in all (\sig -> isJust (lookupFunc (qualMethod (unLocated (ifaceMethodName sig))) env)) sigs
+  where
+    typeBaseName (TypeStruct n) = Just n
+    typeBaseName (TypeGenericApp n _) = Just n
+    typeBaseName _ = Nothing
+
+-- | Search the current function's generic bounds for an interface that declares
+-- the given method name on type variable @tv@, returning its signature.
+findBoundMethodSig :: TypeName -> T.Text -> Env -> Maybe InterfaceMethodSig
+findBoundMethodSig tv methodName env =
+  case Map.lookup tv (envCurrentBounds env) of
+    Nothing -> Nothing
+    Just ifaceNames ->
+      msum
+        [ find (\sig -> unFuncName (unLocated (ifaceMethodName sig)) == methodName) sigs
+          | iface <- ifaceNames,
+            Just sigs <- [lookupInterface iface env]
+        ]
 
 -- | All casts between primitive types are considered valid.
 isCastValid :: Type -> Type -> Bool
