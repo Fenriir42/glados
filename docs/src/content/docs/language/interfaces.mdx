@@ -1,0 +1,145 @@
+---
+title: Interfaces
+description: Method contracts, interface implementations, and operator overloading
+---
+
+An interface declares a named set of method signatures that a type must implement. Any type can satisfy multiple interfaces.
+
+## Declaring an interface
+
+```quant
+interface Shape {
+    fn area(self) -> float;
+    fn perimeter(self) -> float;
+}
+```
+
+## Implementing an interface
+
+Use `impl InterfaceName for TypeName`. The type checker reports an error if any required method is missing.
+
+```quant
+struct Circle { radius: float }
+struct Rect { width: float, height: float }
+
+impl Shape for Circle {
+    fn area(self) -> float {
+        return 3.14159 * self.radius * self.radius;
+    }
+    fn perimeter(self) -> float {
+        return 2.0 * 3.14159 * self.radius;
+    }
+}
+
+impl Shape for Rect {
+    fn area(self) -> float {
+        return self.width * self.height;
+    }
+    fn perimeter(self) -> float {
+        return 2.0 * (self.width + self.height);
+    }
+}
+```
+
+## Calling interface methods
+
+Methods from `impl Foo for Bar` are called with the same dot syntax as inherent methods. Under the hood they compile to `TypeName.method` functions, identical to inherent impl blocks.
+
+```quant
+fn main() -> void {
+    c: Circle = Circle { radius: 5.0 };
+    r: Rect = Rect { width: 4.0, height: 6.0 };
+
+    println(c.area());       // 78.53975
+    println(c.perimeter());  // 31.4159
+    println(r.area());       // 24.0
+    println(r.perimeter());  // 20.0
+}
+```
+
+A type may implement multiple interfaces:
+
+```quant
+interface Describable {
+    fn describe(self) -> str;
+}
+
+impl Describable for Circle {
+    fn describe(self) -> str { return "circle"; }
+}
+```
+
+## Operator Overloading
+
+Quant lets you define arithmetic and comparison semantics for your own types by
+implementing one of the built-in operator traits.  When the compiler sees an
+expression like `a + b` and `a` is a struct that implements `Add`, it
+automatically desugars the expression to `a.add(b)`.
+
+### Available operator traits
+
+| Trait | Operator | Required method |
+|-------|----------|-----------------|
+| `Add` | `+`      | `fn add(self, other: T) -> T` |
+| `Sub` | `-`      | `fn sub(self, other: T) -> T` |
+| `Mul` | `*`      | `fn mul(self, other: T) -> T` |
+| `Div` | `/`      | `fn div(self, other: T) -> T` |
+| `Rem` | `%`      | `fn rem(self, other: T) -> T` |
+| `Eq`  | `==`     | `fn eq(self, other: T) -> bool` |
+| `Ne`  | `!=`     | `fn ne(self, other: T) -> bool` |
+| `Lt`  | `<`      | `fn lt(self, other: T) -> bool` |
+| `Gt`  | `>`      | `fn gt(self, other: T) -> bool` |
+| `Le`  | `<=`     | `fn le(self, other: T) -> bool` |
+| `Ge`  | `>=`     | `fn ge(self, other: T) -> bool` |
+| `Neg` | unary `-`| `fn neg(self) -> T` |
+
+You do **not** need to declare these traits yourself; they are built in.
+
+### Example: 2-D vector arithmetic
+
+```quant
+struct Vec2 {
+    x: float,
+    y: float,
+}
+
+impl Add for Vec2 {
+    fn add(self, other: Vec2) -> Vec2 {
+        return Vec2 { x: self.x + other.x, y: self.y + other.y };
+    }
+}
+
+impl Sub for Vec2 {
+    fn sub(self, other: Vec2) -> Vec2 {
+        return Vec2 { x: self.x - other.x, y: self.y - other.y };
+    }
+}
+
+impl Neg for Vec2 {
+    fn neg(self) -> Vec2 {
+        return Vec2 { x: -self.x, y: -self.y };
+    }
+}
+
+impl Eq for Vec2 {
+    fn eq(self, other: Vec2) -> bool {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+fn main() -> void {
+    a: Vec2 = Vec2 { x: 1.0, y: 2.0 };
+    b: Vec2 = Vec2 { x: 3.0, y: 4.0 };
+
+    sum: Vec2  = a + b;   // calls Vec2.add
+    diff: Vec2 = b - a;   // calls Vec2.sub
+    neg: Vec2  = -a;      // calls Vec2.neg
+
+    if (a == a) { println("equal"); };   // calls Vec2.eq
+}
+```
+
+## See Also
+
+- [Generics](/language/generics/#generic-bounds) -- constraining type parameters to interfaces
+- [Structs & Methods](/language/structs/#impl-blocks) -- inherent methods on a type

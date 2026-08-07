@@ -25,3 +25,4 @@ result*
 *.pre-commit-config.yaml
 glados
 *.vsix
+docs/package-lock.json

@@ -1,0 +1,101 @@
+---
+title: Tuples
+description: Fixed-size compound values with indexed access and destructuring
+---
+
+A tuple groups a fixed number of values of different types into one compound value. Unlike structs, tuples have no field names - elements are accessed by their zero-based index.
+
+## Type syntax
+
+Write a tuple type as a comma-separated list of types inside parentheses:
+
+```quant
+point: (int, int) = (3, 4);
+pair:  (int, str) = (42, "hello");
+triple: (int, int, int) = (1, 2, 3);
+```
+
+A tuple type must have at least two elements. Single-element parentheses are parsed as a grouping expression, not a tuple.
+
+## Indexed access
+
+Use `.0`, `.1`, `.2`, ... to read elements:
+
+```quant
+fn main() -> void {
+    p: (int, int) = (10, 20);
+    println(p.0);   // 10
+    println(p.1);   // 20
+}
+```
+
+## Returning multiple values
+
+Tuples are the idiomatic way to return more than one value from a function without defining a struct:
+
+```quant
+fn min_max(a: int, b: int) -> (int, int) {
+    if (a < b) {
+        return (a, b);
+    };
+    return (b, a);
+}
+
+fn main() -> void {
+    result: (int, int) = min_max(7, 3);
+    println(result.0);   // 3
+    println(result.1);   // 7
+}
+```
+
+## Destructuring in let
+
+Bind each element directly to a named variable:
+
+```quant
+fn main() -> void {
+    (lo, hi): (int, int) = min_max(7, 3);
+    println(lo);   // 3
+    println(hi);   // 7
+}
+```
+
+The type annotation after `:` must be a tuple type that matches the right-hand side.
+
+## Destructuring in match
+
+Tuple patterns work in `match` arms:
+
+```quant
+fn describe(t: (int, int)) -> str {
+    match t {
+        (0, 0) => { return "origin"; };
+        (x, 0) => { return "on x-axis"; };
+        (0, y) => { return "on y-axis"; };
+        (a, b) => { return "general point"; };
+    };
+}
+```
+
+Each arm binds the elements to fresh local variables in its body.
+
+## Passing tuples to functions
+
+A tuple type is just a type - pass it like any other:
+
+```quant
+fn swap(t: (int, int)) -> (int, int) {
+    return (t.1, t.0);
+}
+
+fn main() -> void {
+    s: (int, int) = swap((3, 4));
+    println(s.0);   // 4
+    println(s.1);   // 3
+}
+```
+
+## See Also
+
+- [Structs & Methods](/language/structs/) -- named-field compound types
+- [Control Flow](/language/control-flow/) -- the `match` statement in full

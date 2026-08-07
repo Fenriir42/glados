@@ -149,7 +149,7 @@
     "types": {
       "patterns": [
         {
-          "comment": "int or int<32> or int<32, u> — trailing \\b prevents matching inside 'interface'",
+          "comment": "int or int<32> or int<32, u>, trailing \\b prevents matching inside 'interface'",
           "name": "storage.type.quant",
           "match": "\\bint(?:\\s*<\\s*\\d+(?:\\s*,\\s*[su])?\\s*>)?\\b"
         },

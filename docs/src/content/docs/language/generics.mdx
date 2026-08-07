@@ -1,0 +1,199 @@
+---
+title: Generics
+description: Generic functions, generic structs, and interface bounds
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Quant supports parametric polymorphism through type parameters declared in square brackets after the function or struct name. A generic function works with any concrete type supplied at the call site; the type checker verifies correctness for each use.
+
+## Generic functions
+
+### Declaring a generic function
+
+```quant
+fn identity[T](x: T) -> T {
+    return x;
+}
+```
+
+`T` is a *type parameter* - a placeholder filled in by the caller. The same function can be called with any type:
+
+```quant
+fn main() -> void {
+    n: int = identity(42);
+    s: str = identity("hello");
+    println(n);   // 42
+    println(s);   // hello
+}
+```
+
+### Multiple type parameters
+
+List additional type parameters separated by commas:
+
+```quant
+fn first[T, U](a: T, b: U) -> T {
+    return a;
+}
+
+fn main() -> void {
+    x: int = first(7, "ignored");
+    println(x);   // 7
+}
+```
+
+### Generics with first-class functions
+
+Type parameters interact naturally with function types, enabling generic higher-order functions:
+
+```quant
+fn map_arr[T, U](arr: [T], f: (T) -> U, n: int) -> [U] {
+    result: [U] = [];
+    i: int = 0;
+    while (i < n) {
+        push(result, f(arr[i]));
+        i++;
+    };
+    return result;
+}
+
+fn main() -> void {
+    nums: [int] = [1, 2, 3];
+    doubled: [int] = map_arr(nums, fn(x: int) -> int { return x * 2; }, 3);
+    println(doubled[0]);   // 2
+    println(doubled[2]);   // 6
+}
+```
+
+## Generic Structs
+
+A struct can be parameterised over one or more type variables using square-bracket syntax after the name. The compiler infers the concrete type arguments from the values you provide at initialisation; the resulting type carries full type information for field access and return types.
+
+### Declaration
+
+```quant
+struct Pair[A, B] {
+    first: A,
+    second: B,
+}
+
+struct Box[T] {
+    value: T,
+    tag: str,
+}
+```
+
+Type parameters must be used in at least one field. They follow the same rules as function type parameters, a single uppercase letter by convention, but any identifier works.
+
+### Instantiation
+
+Provide the concrete type arguments in the variable declaration; the right-hand side fills the fields as usual:
+
+```quant
+fn main() -> void {
+    p: Pair[int, str] = Pair { first: 42, second: "hello" };
+    println(p.first);    // 42
+    println(p.second);   // hello
+
+    b: Box[int] = Box { value: 99, tag: "count" };
+    println(b.value);    // 99
+    println(b.tag);      // count
+}
+```
+
+### Generic functions over generic structs
+
+Functions can take generic struct instances as parameters by mirroring the struct's type parameters:
+
+```quant
+fn get_first[A, B](p: Pair[A, B]) -> A {
+    return p.first;
+}
+
+fn get_second[A, B](p: Pair[A, B]) -> B {
+    return p.second;
+}
+
+fn swap[A, B](p: Pair[A, B]) -> Pair[B, A] {
+    return Pair { first: p.second, second: p.first };
+}
+
+fn main() -> void {
+    p: Pair[int, str] = Pair { first: 7, second: "hello" };
+    println(get_first(p));    // 7
+    println(get_second(p));   // hello
+
+    s: Pair[str, int] = swap(p);
+    println(s.first);         // hello
+    println(s.second);        // 7
+}
+```
+
+The type checker resolves field types through the type-argument binding at each call site; no runtime overhead is added (the implementation is type-erased, like generic functions).
+
+### Returning generic structs
+
+A constructor helper is the idiomatic pattern:
+
+```quant
+fn make_pair[A, B](a: A, b: B) -> Pair[A, B] {
+    return Pair { first: a, second: b };
+}
+
+fn main() -> void {
+    q: Pair[int, int] = make_pair(10, 20);
+    println(q.first);    // 10
+    println(q.second);   // 20
+}
+```
+
+## Generic bounds
+
+A type parameter can be constrained to types that implement one or more interfaces using `T: Interface` syntax inside the square brackets. The type checker verifies the constraint at every call site.
+
+```quant
+interface Describable {
+    fn describe(self) -> str;
+}
+
+struct Point { x: int, y: int }
+
+impl Describable for Point {
+    fn describe(self) -> str { return `({self.x}, {self.y})`; }
+}
+
+// T must implement Describable -- calling describe() is safe inside the body.
+fn print_item[T: Describable](item: T) -> void {
+    io.println(item.describe());
+}
+
+fn main() -> void {
+    p: Point = Point { x: 3, y: 4 };
+    print_item(p);   // (3, 4)
+}
+```
+
+Multiple bounds are written with `+`:
+
+```quant
+interface Resettable {
+    fn reset(self) -> void;
+}
+
+fn reset_and_describe[T: Describable + Resettable](item: T) -> str {
+    item.reset();
+    return item.describe();
+}
+```
+
+Passing a type that does not satisfy the bound is a compile-time error. Method calls on a bounded type variable are dispatched at runtime by looking up the concrete type of the receiver -- no vtable, no boxing.
+
+<Aside>
+  Quant generics use *type erasure*: the same compiled bytecode handles all concrete types. The type checker enforces type safety at each call site with no runtime overhead and no code duplication.
+</Aside>
+
+## See Also
+
+- [Interfaces](/language/interfaces/) -- the contracts used in bounds
+- [Types reference](/reference/types/#generic-types) -- generic type specification

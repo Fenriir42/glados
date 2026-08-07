@@ -1,0 +1,199 @@
+---
+title: Functions
+description: Function calls, visibility, variadic functions, first-class functions, and closures
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Function Calls
+
+Call functions using parentheses:
+
+```quant
+fn add(a: int, b: int) -> int {
+    return a + b;
+}
+
+fn main() -> void {
+    result: int = add(5, 3);
+    println(`Result: {result}`);
+}
+```
+
+## Visibility
+
+By default, functions declared with `fn` are visible to any file that imports the module. The `static` keyword restricts a function to the file it is defined in.
+
+```quant
+// helpers.qa
+fn public_helper() -> void {
+    println("visible to importers");
+}
+
+static fn internal_helper() -> void {
+    println("only visible inside helpers.qa");
+}
+```
+
+When another file imports `helpers`, it can call `public_helper` but not `internal_helper`. This is Quant's module-level encapsulation mechanism.
+
+## Variadic Functions
+
+A parameter declared with `...T` accepts zero or more extra arguments of type `T`. Inside the function the parameter is a `[T]` array -access elements with `[i]` and `len()`.
+
+```quant
+fn sum(args: ...int) -> int {
+    total: int = 0;
+    i: int = 0;
+    while (i < len(args)) {
+        total = total + args[i];
+        i = i + 1;
+    };
+    return total;
+}
+
+fn join(sep: str, parts: ...str) -> str {
+    result: str = "";
+    i: int = 0;
+    while (i < len(parts)) {
+        if (i > 0) { result = string.concat(result, sep); };
+        result = string.concat(result, parts[i]);
+        i = i + 1;
+    };
+    return result;
+}
+
+fn main() -> void {
+    println(`{sum(1, 2, 3, 4)}`);            // 10
+    println(join(", ", "a", "b", "c"));       // a, b, c
+}
+```
+
+<Aside>
+  The variadic parameter must be the last one. The caller passes arguments directly -no array literal needed at the call site.
+</Aside>
+
+The standard library module `varargs` provides ready-made variadic utilities:
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `sum` | `(args: ...int) -> int` | Sum of all arguments |
+| `product` | `(args: ...int) -> int` | Product of all arguments |
+| `min` | `(args: ...int) -> int` | Minimum value |
+| `max` | `(args: ...int) -> int` | Maximum value |
+| `join` | `(sep: str, parts: ...str) -> str` | Join strings with separator |
+| `format` | `(template: str, args: ...str) -> str` | Replace `{}` holes in order |
+
+```quant
+from varargs import sum, join, format
+
+fn main() -> void {
+    println(`{sum(10, 20, 30)}`);
+    println(join(" | ", "one", "two", "three"));
+    println(format("hello {} and {}", "alice", "bob"));
+}
+```
+
+```text
+60
+one | two | three
+hello alice and bob
+```
+
+## First-Class Functions
+
+Functions are values. You can store them in variables, pass them as arguments,
+and create anonymous functions inline with `fn`.
+
+### Function type syntax
+
+A function type is written as `(param-types) -> return-type`:
+
+```quant
+f: (int) -> int          // a function taking int, returning int
+g: (int, str) -> bool    // two params
+h: () -> void            // no params, no return
+```
+
+Parameter names are optional: `(int) -> int` and `(x: int) -> int` are
+interchangeable as types.
+
+### Function references
+
+Write a named function's identifier (without `()`) to get a reference to it:
+
+```quant
+from math import abs
+
+negate: (int) -> int = abs;
+println(negate(-42));    // 42
+```
+
+### Lambda expressions
+
+Use `fn` as an expression to define an anonymous function inline:
+
+```quant
+square: (int) -> int = fn(x: int) -> int { return x * x; };
+println(square(6));    // 36
+```
+
+### Higher-order functions
+
+Accept or return functions through typed parameters:
+
+```quant
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x);
+}
+
+fn double(n: int) -> int { return n * 2; }
+
+fn main() -> void {
+    println(apply(double, 5));                              // 10 (named ref)
+    println(apply(fn(n: int) -> int { return n + 1; }, 5)); // 6 (lambda)
+}
+```
+
+### Closures
+
+A lambda automatically captures variables from its enclosing scope **by value** at the point it is created. The captured copy is independent of the original, later mutations to the outer variable do not affect the closure.
+
+```quant
+fn make_adder(n: int) -> (int) -> int {
+    return fn(x: int) -> int { return x + n; };  // n is captured
+}
+
+fn main() -> void {
+    add5: (int) -> int = make_adder(5);
+    add10: (int) -> int = make_adder(10);
+    println(add5(3));    // 8
+    println(add10(3));   // 13
+
+    // Value-capture: mutating the original does not affect the closure
+    base: int = 42;
+    get: () -> int = fn() -> int { return base; };
+    base = 999;
+    println(get());      // 42
+}
+```
+
+Multiple variables can be captured, and closures can be composed:
+
+```quant
+fn compose(f: (int) -> int, g: (int) -> int) -> (int) -> int {
+    return fn(x: int) -> int { return g(f(x)); };
+}
+
+fn main() -> void {
+    add2: (int) -> int = make_adder(2);
+    times10: (int) -> int = fn(x: int) -> int { return x * 10; };
+    f: (int) -> int = compose(add2, times10);
+    println(f(5));   // (5+2)*10 = 70
+}
+```
+
+## See Also
+
+- [Generics](/language/generics/) -- type-parameterized functions
+- [Error Handling](/language/error-handling/) -- fallible functions with `orerror`

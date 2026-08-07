@@ -1,0 +1,172 @@
+---
+title: Variables & Types
+description: Variable declarations, constants, primitive types, casting, and scope
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Variables
+
+Variables in Quant must be declared with an explicit type annotation using the colon (`:`) syntax.
+
+### Declaration
+
+```quant
+name: type;
+```
+
+### Declaration with Initialization
+
+```quant
+name: type = value;
+```
+
+### Examples
+
+```quant
+fn main() -> void {
+    // Integer variable
+    x: int = 42;
+
+    // Boolean variable
+    is_active: bool = True;
+
+    // String variable
+    message: str = "Hello";
+
+    // Uninitialized variable
+    count: int;
+    count = 10;
+}
+```
+
+## Constants
+
+Use the `const` qualifier to make variables immutable:
+
+```quant
+fn main() -> void {
+    pi: const float = 3.14159;
+    max_size: const int = 100;
+
+    // pi = 3.14;  // Error: cannot modify const variable
+}
+```
+
+The `const` qualifier can also be used in type declarations:
+
+```quant
+matrix: [[const int]];  // Array of arrays containing const integers
+```
+
+## Primitive Types
+
+Quant supports several primitive types:
+
+### Integer Types
+
+- **`int`**: Default 32-bit signed integer
+- **`int<N>`**: Custom bit-size signed integer (e.g., `int<64>`)
+- **`int<N, s>`**: Custom bit-size with signedness (e.g., `int<32, u>` for unsigned)
+
+```quant
+a: int = 42;              // 32-bit signed
+b: int<64> = 1000000;     // 64-bit signed
+c: int<32, u> = 100;      // 32-bit unsigned
+```
+
+### Float Types
+
+- **`float`**: Default 64-bit floating-point
+- **`float<32>`**: 32-bit floating-point
+- **`float<64>`**: 64-bit floating-point
+
+```quant
+x: float = 3.14159;
+y: float<32> = 2.718;
+```
+
+### Boolean Type
+
+- **`bool`**: True or False
+
+```quant
+flag: bool = True;
+is_valid: bool = False;
+```
+
+### String Type
+
+- **`str`**: String type for text
+
+```quant
+message: str = "Hello, Quant!";
+```
+
+String literals use double quotes. To embed expressions inside a string, use a **backtick string**:
+
+```quant
+fn main() -> void {
+    name: str = "Quant";
+    version: int = 1;
+    println(`language: {name}, version: {version}`);
+    // language: Quant, version: 1
+}
+```
+
+Anything inside `{...}` is evaluated as an expression and converted to a string automatically.
+
+<Aside type="tip">
+Backtick strings desugar to `string.concat` and `string.to_str` calls internally, so they produce a plain `str` value and can be used anywhere a `str` is expected. See the [Types reference](/reference/types/#string-interpolation) for full details.
+</Aside>
+
+### Void Type
+
+- **`void`**: Used for functions that don't return a value
+
+```quant
+fn greet() -> void {
+    println("No return value");
+}
+```
+
+## Type Casting
+
+Quant supports explicit type casting using the type name as a function:
+
+```quant
+import math
+
+fn main() -> void {
+    x: float = 3.14;
+    y: int = int(x);  // Cast float to int: y = 3
+
+    z: float = float(42);  // Cast int to float: z = 42.0
+
+    // Casting in expressions
+    result: int = int(math.sqrt(16.0));
+    println(result);
+}
+```
+
+## Scope
+
+Variables are scoped to the block in which they are declared:
+
+```quant
+fn main() -> void {
+    x: int = 10;  // Outer scope
+
+    {
+        y: int = 20;  // Inner scope
+        println(x);   // Can access outer scope
+    };
+
+    // println(y);  // Error: y not in scope
+}
+```
+
+## See Also
+
+- [Types reference](/reference/types/) -- the full type system specification
+- [Expressions & Operators](/language/expressions/) -- what you can do with values

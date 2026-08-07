@@ -1,0 +1,107 @@
+---
+title: Enums
+description: Variant types, data-carrying variants, and pattern matching
+---
+
+An `enum` declares a named set of variants. Variants may be simple tags (no payload) or carry named fields (data-carrying variants). Enums are accessed with dot notation and can appear in `match` arms as patterns.
+
+## Declaration
+
+```quant
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+};
+```
+
+Trailing commas are allowed. No semicolons inside the braces; the final `};` closes the declaration.
+
+## Using enum values
+
+Variant access uses `EnumName.Variant` syntax:
+
+```quant
+d: Direction = Direction.North;
+```
+
+## Matching on enums
+
+Enum variants are valid patterns in `match` arms:
+
+```quant
+fn describe(d: Direction) -> str {
+    match d {
+        Direction.North => return "north";
+        Direction.South => return "south";
+        Direction.East  => return "east";
+        Direction.West  => return "west";
+        _ => return "unknown";
+    };
+}
+```
+
+The wildcard arm (`_`) handles any unmatched variant, which is useful when adding new variants later.
+
+## Full example
+
+```quant
+enum Color { Red, Green, Blue };
+
+fn main() -> void {
+    c: Color = Color.Green;
+    match c {
+        Color.Red   => println("red");
+        Color.Green => println("green");
+        Color.Blue  => println("blue");
+        _ => println("other");
+    };
+}
+```
+
+## Data-carrying variants
+
+Variants can carry named fields declared inside `{ }`:
+
+```quant
+enum Shape {
+    Circle { radius: float },
+    Rect   { width: float, height: float },
+    Point,
+};
+```
+
+Payloadless variants (`Point`) and field-carrying variants can coexist in the same `enum`.
+
+### Construction
+
+Use `EnumName.Variant { field: value, ... }` to create a data-carrying value:
+
+```quant
+c: Shape = Shape.Circle { radius: 5.0 };
+r: Shape = Shape.Rect { width: 4.0, height: 6.0 };
+p: Shape = Shape.Point;
+```
+
+### Pattern matching with field destructuring
+
+Use `EnumName.Variant { field: binding, ... }` in `match` arms to bind fields to local variables:
+
+```quant
+fn area(s: Shape) -> float {
+    match s {
+        Shape.Circle { radius: r } => { return 3.14159 * r * r; };
+        Shape.Rect   { width: w, height: h } => { return w * h; };
+        Shape.Point  => { return 0.0; };
+        _ => { return 0.0; };
+    };
+}
+```
+
+Field names are listed explicitly so you can rename them at the binding site (`radius: r` binds the `radius` field to a local variable `r`). You can also use the shorthand where field name equals binding name: `{ radius }` instead of `{ radius: radius }`.
+
+## See Also
+
+- [Control Flow](/language/control-flow/#match-statement) -- the `match` statement in full
+- [Structs & Methods](/language/structs/) -- named-field types without variants

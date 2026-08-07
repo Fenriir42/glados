@@ -1,0 +1,99 @@
+---
+title: Low-Level I/O
+description: Raw file descriptors with sys, and mutable buffers with buf
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+For output beyond `print`/`println`, Quant exposes raw POSIX file descriptors through the `sys` module and a mutable string-buffer type through `buf`.
+
+## Writing to stderr
+
+Use `sys.write` with the standard file descriptor numbers directly:
+
+```quant
+import sys
+
+fn main() -> void {
+    sys.write(sys.stderr_fd(), "fatal: something went wrong\n");
+    sys.exit(1);
+}
+```
+
+Standard descriptors: `sys.stdin_fd()` = 0, `sys.stdout_fd()` = 1, `sys.stderr_fd()` = 2.
+
+## Opening and reading arbitrary files
+
+```quant
+import sys
+
+fn main() -> void {
+    fd: int = sys.open("/etc/hostname", sys.o_rdonly());
+    if (fd >= 0) {
+        content: str = sys.read(fd, 256);
+        sys.close(fd);
+        println(content);
+    };
+}
+```
+
+Build `flags` for `sys.open` by combining constants with the `|` operator:
+
+| Constant | Meaning |
+|----------|---------|
+| `sys.o_rdonly()` | Open for reading |
+| `sys.o_wronly()` | Open for writing |
+| `sys.o_rdwr()` | Open for reading and writing |
+| `sys.o_creat()` | Create if absent (mode 0644) |
+| `sys.o_trunc()` | Truncate to zero on open |
+| `sys.o_append()` | Writes always go to end of file |
+
+## Buffers
+
+`buf.*` provides a mutable accumulation buffer backed by a `[str]` array. Chunks are appended cheaply and joined only when you flush:
+
+```quant
+fn eprint(msg: str) -> void {
+    b: [str] = buf.new();
+    buf.writeln(b, msg);
+    buf.flush(b, sys.stderr_fd());
+}
+```
+
+The `buf.flush(b, fd)` call joins all chunks, writes them to `fd` with a single `write(2)` call, clears the buffer, and returns the byte count. No import statement is needed -`buf.*` functions are always available as dotted calls.
+
+## Building a custom printf
+
+Combining `buf`, `sys`, and `string.replace_first`:
+
+```quant
+from sys import write, stdout_fd, stderr_fd
+from string import replace_first, from_int, from_float
+
+fn printf(fd: int, fmt: str, args: ...str) -> int {
+    b: [str] = buf.new();
+    result: str = fmt;
+    i: int = 0;
+    while (i < len(args)) {
+        result = replace_first(result, "{}", args[i]);
+        i = i + 1;
+    };
+    buf.write(b, result);
+    return buf.flush(b, fd);
+}
+
+fn main() -> void {
+    printf(stdout_fd(), "x = {}, pi = {}\n",
+           from_int(42), from_float(3.14));
+    printf(stderr_fd(), "error: {}\n", "something failed");
+}
+```
+
+<Aside>
+  Mixing `println` (buffered stdout) with `sys.write` or `buf.flush` targeting fd 1 may interleave output unexpectedly. Call `sys.flush(sys.stdout_fd())` first if you need a defined ordering.
+</Aside>
+
+## See Also
+
+- [Standard Library reference](/reference/stdlib/#sys) -- full `sys` and `buf` API
+- [Sockets](/system/sockets/) -- network I/O

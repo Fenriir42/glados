@@ -27,18 +27,42 @@ export default defineConfig({
 			},
 			sidebar: [
 				{
-					label: 'Guides',
+					label: 'Getting Started',
 					items: [
-						{ label: 'Installation', slug: 'guides/installation' },
-						{ label: 'Getting Started', slug: 'guides/getting-started' },
-						{ label: 'Editor Setup', slug: 'guides/editor-setup' },
-						{ label: 'Language Basics', slug: 'guides/language-basics' },
-						{ label: 'Control Flow', slug: 'guides/control-flow' },
-						{ label: 'Arrays', slug: 'guides/arrays' },
-						{ label: 'Dicts', slug: 'guides/dicts' },
-						{ label: 'JSON', slug: 'guides/json' },
-						{ label: 'Sockets', slug: 'guides/socket' },
-						{ label: 'FFI (extern)', slug: 'guides/ffi' },
+						{ label: 'Installation', slug: 'getting-started/installation' },
+						{ label: 'Quickstart', slug: 'getting-started/quickstart' },
+						{ label: 'Editor Setup', slug: 'getting-started/editor-setup' },
+					],
+				},
+				{
+					label: 'Language',
+					items: [
+						{ label: 'Variables & Types', slug: 'language/variables-and-types' },
+						{ label: 'Expressions & Operators', slug: 'language/expressions' },
+						{ label: 'Control Flow', slug: 'language/control-flow' },
+						{ label: 'Functions', slug: 'language/functions' },
+						{ label: 'Structs & Methods', slug: 'language/structs' },
+						{ label: 'Tuples', slug: 'language/tuples' },
+						{ label: 'Enums', slug: 'language/enums' },
+						{ label: 'Interfaces', slug: 'language/interfaces' },
+						{ label: 'Generics', slug: 'language/generics' },
+						{ label: 'Error Handling', slug: 'language/error-handling' },
+					],
+				},
+				{
+					label: 'Data & Collections',
+					items: [
+						{ label: 'Arrays', slug: 'data/arrays' },
+						{ label: 'Dicts', slug: 'data/dicts' },
+						{ label: 'JSON', slug: 'data/json' },
+					],
+				},
+				{
+					label: 'System & Interop',
+					items: [
+						{ label: 'Sockets', slug: 'system/sockets' },
+						{ label: 'FFI (extern)', slug: 'system/ffi' },
+						{ label: 'Low-Level I/O', slug: 'system/low-level-io' },
 					],
 				},
 				{
@@ -50,20 +74,6 @@ export default defineConfig({
 						{ label: 'Grammar', slug: 'reference/grammar' },
 					],
 				},
-				{
-					label: 'POC',
-					autogenerate: { directory: 'poc' },
-				},
-				{
-					label: 'Studies',
-					items: [
-						{ label: 'Documentation System Comparison', slug: 'studies/doc' },
-						{ label: 'Parsing libraries', slug: 'studies/parser' },
-						{ label: 'Data Persistence', slug: 'studies/persistence' },
-						{ label: 'Virtual Machine', slug: 'studies/vm' },
-						{ label: 'Security Vulnerabilities', slug: 'studies/vulnerabilities' },
-					]
-				}
 			],
 		}),
 	],
