@@ -140,7 +140,36 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~FFI callbacks~~ | Done -- extern fns may take function-typed params: `fn qsort(..., compar: (ptr, ptr) -> int)`; a Quant function passed there becomes a C function pointer (GHC wrapper import) that re-enters the VM; `ptr.add`/`ptr.read_*`/`ptr.write_*` builtins for raw memory; see `tests/ffi_callback.qa` |
 | Generalized FFI callback shapes | Lift the fixed `(ptr, ptr) -> int` comparator restriction: thread the extern's declared function type into `ICallFFI` so the VM can pick (or synthesize) a matching C wrapper -- e.g. `(int) -> void` for signal handlers, `(ptr) -> void` for iterators, `(float, float) -> float` for numeric kernels |
 | ~~Async / await~~ | Done -- `async fn f() -> T` returns `task(T)` at the call site; `await expr` unwraps it; cooperative green-task scheduler in the VM (`ISpawn`/`IAwait`); tasks advance only at await points; see `tests/async.qa` |
-| Multi-target codegen | LLVM IR or C emission as an alternative backend to the bytecode VM; enables AOT compilation and better performance |
+| Native backend | Transpile to C for an optimized standalone binary; staged plan below |
+
+### Native backend: transpile to C
+
+Goal: `glados build --target=c` translates the compiled bytecode (not the AST)
+to C, links it against a small runtime library, and invokes the system C
+compiler to produce an optimized standalone binary. The bytecode VM remains the
+reference implementation; every stage is validated by diffing native output
+against VM output over the full `tests/*.qa` corpus.
+
+Working bytecode-level keeps the entire existing pipeline (parser, type
+checker, codegen, imports, generics erasure) untouched -- the new backend only
+replaces the interpreter.
+
+| Stage | Deliverable | Notes |
+|-------|-------------|-------|
+| 1. C runtime foundations | `runtime/quant_runtime.{h,c}` | `QuantValue` tagged union; heap objects for arrays, dicts, structs, strings; allocation via Boehm GC (fallback: never-free arena); `print`/`println`; buildable and unit-testable without any codegen |
+| 2. Core translator + driver | `glados build --target=c` | Translate one `.qbc` function to one C function: stack ops, arithmetic, comparisons, jumps as labels/`goto`, `ICall` as direct C calls; emit `main.c`, link runtime, invoke `cc`; hello-world to fibonacci territory |
+| 3. Differential test harness | `glados test --native` | Run every showcase under VM and native binary, diff stdout and exit codes; CI gate from this point on -- semantics regressions become impossible to miss |
+| 4. Builtin coverage | runtime ports of `string.*`, `math.*`, `array.*`, `dict.*`, `io.*`, `sys.*`, `file.*`, `buf.*`, `json.*`, `regex.*` | Largest single chunk of runtime work; port in the order the test corpus demands it |
+| 5. Structs, enums, dispatch | struct heap + type tags in C | `INewStruct`/`IFieldGet`/`IFieldSet`; enums as tagged error-values (same representation the VM uses); `IDynMethodCall` via a struct-type -> function table |
+| 6. Errors and options | `orerror`/`option` semantics | `VErrorVal` representation, `ITryOp` as early return, `IMustOp` as panic with message |
+| 7. Closures and first-class functions | `IMakeClosure`/`ICallIndirect` | Closure = function pointer + captured-bindings block; fixes the pre-existing gap that `IMakeClosure` is not even serialisable today |
+| 8. FFI passthrough | externs as plain C calls | No dlopen/libffi at runtime: extern decls become declarations + direct calls resolved at link time; callbacks become ordinary function pointers, which lifts the `(ptr, ptr) -> int` shape restriction natively |
+| 9. Async/await | cooperative scheduler in C | Tasks as heap-allocated contexts (`ucontext` or explicit state machines); same deterministic advance-at-await semantics as the VM scheduler |
+| 10. Optimization pass | the "optimized" in optimized binary | Unbox int/float locals to C scalars instead of `QuantValue` where types are known; `-O2`/LTO in the driver; benchmark suite comparing VM vs native |
+
+Stages 1-3 form the minimum credible milestone (a native hello world validated
+against the VM); each later stage widens the subset of `tests/*.qa` that passes
+under `--native` until the corpus is green end-to-end.
 
 ### Debugger (DAP) -- done
 
