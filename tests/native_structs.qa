@@ -1,0 +1,87 @@
+// Showcase for the native backend's structs, enums, dynamic dispatch, and
+// dicts (stage 5).  Every line must print identically under the VM and the
+// natively compiled binary -- `glados native-diff tests/native_structs.qa`.
+
+// --- interface + dynamic dispatch over two struct types ---
+interface Greeter {
+    fn greet(self) -> str;
+}
+
+struct Human { name: str }
+struct Bot { id: int }
+
+impl Greeter for Human {
+    fn greet(self) -> str {
+        return string.concat("hi ", self.name);
+    }
+}
+
+impl Greeter for Bot {
+    fn greet(self) -> str {
+        return string.concat("beep ", string.from_int(self.id));
+    }
+}
+
+// --- data-carrying enum with a match ---
+enum Shape {
+    Circle { radius: float },
+    Square { side: float },
+    Empty,
+};
+
+fn area(s: Shape) -> float {
+    match s {
+        Shape.Circle { radius: r } => { return 3.0 * r * r; };
+        Shape.Square { side: x } => { return x * x; };
+        Shape.Empty => { return 0.0; };
+        _ => { return 0.0; };
+    };
+}
+
+// --- orerror with try and must ---
+error DivByZero;
+
+fn safe_div(a: int, b: int) -> orerror(int, DivByZero) {
+    if (b == 0) {
+        return error DivByZero;
+    };
+    return a / b;
+}
+
+fn run_div(a: int, b: int) -> orerror(int, DivByZero) {
+    r: int = try safe_div(a, b);
+    return r * 2;
+}
+
+fn main() -> void {
+    // dynamic dispatch: the concrete greet() is chosen by the receiver type
+    h: Human = Human { name: "ada" };
+    b: Bot = Bot { id: 7 };
+    println("%s", h.greet());
+    println("%s", b.greet());
+
+    // enum construction + match
+    c: Shape = Shape.Circle { radius: 2.0 };
+    sq: Shape = Shape.Square { side: 3.0 };
+    println("circle area = %f", area(c));
+    println("square area = %f", area(sq));
+    println("empty area = %f", area(Shape.Empty));
+
+    // orerror: happy path via try, then unwrap with must
+    ok: int = must run_div(10, 2);
+    println("run_div(10,2) = %d", ok);
+
+    // dict: insert, overwrite, read back
+    scores: dict(str, int) = {};
+    scores["alice"] = 10;
+    scores["bob"] = 20;
+    scores["alice"] = 15;
+    println("alice = %d", scores["alice"]);
+    println("bob = %d", scores["bob"]);
+    println("has alice = %d", dict.has(scores, "alice"));
+    println("has carol = %d", dict.has(scores, "carol"));
+    println("len = %d", dict.len(scores));
+    dict.delete(scores, "bob");
+    println("len after delete = %d", dict.len(scores));
+    println("has bob = %d", dict.has(scores, "bob"));
+}

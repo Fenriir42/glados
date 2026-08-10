@@ -144,6 +144,16 @@ QtValue qt_struct_get(QtValue st, const char *field); /* panics if missing */
 void qt_struct_set(QtValue st, const char *field, QtValue v);
 const char *qt_struct_type(QtValue st);
 
+/* Field read across structs and error/enum values (IFieldGet). */
+QtValue qt_field_get(QtValue ref, const char *field);
+
+/* Polymorphic indexing over arrays and dicts (IArrayGet / IArraySet). */
+QtValue qt_index_get(QtValue ref, QtValue idx);
+void qt_index_set(QtValue ref, QtValue idx, QtValue v);
+
+/* IMustOp: panic if the value is an error/enum, otherwise a no-op. */
+void qt_must(QtValue v);
+
 /* ------------------------------------------------------------------ */
 /* Errors / enum variants                                              */
 

@@ -738,6 +738,45 @@ QtValue qt_array_get_or_new(QtValue arr, int64_t idx) {
     return fresh;
 }
 
+/* IFieldGet works on both structs and error/enum values (the VM reads
+ * fields from either). */
+QtValue qt_field_get(QtValue ref, const char *field) {
+    if (ref.tag == QT_ERROR) {
+        return qt_error_get_field(ref, field);
+    }
+    return qt_struct_get(ref, field);
+}
+
+/* IArrayGet/IArraySet are polymorphic over arrays (int index) and dicts
+ * (value key), matching the VM's single indexing instruction.  A missing
+ * dict key is a runtime error, exactly as in the VM. */
+QtValue qt_index_get(QtValue ref, QtValue idx) {
+    if (ref.tag == QT_DICT) {
+        if (!qt_dict_has(ref, idx)) {
+            qt_panic("dict key not found");
+        }
+        return qt_dict_get(ref, idx);
+    }
+    return qt_array_get(ref, qt_want_int(idx, "array index"));
+}
+
+void qt_index_set(QtValue ref, QtValue idx, QtValue v) {
+    if (ref.tag == QT_DICT) {
+        qt_dict_set(ref, idx, v);
+        return;
+    }
+    qt_array_set(ref, qt_want_int(idx, "array index"), v);
+}
+
+/* IMustOp: unwrapping an error value panics like the VM's `must`. */
+void qt_must(QtValue v) {
+    if (v.tag == QT_ERROR) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "must: unwrapped error `%s`", v.as.err->name);
+        qt_panic(msg);
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Operators                                                           */
 
@@ -1770,6 +1809,16 @@ QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
     }
     if (strncmp(name, "buf.", 4) == 0) {
         return builtin_buf(name + 4, nargs, args);
+    }
+    if (strcmp(name, "dict.has") == 0 && nargs == 2) {
+        return qt_bool(qt_dict_has(args[0], args[1]));
+    }
+    if (strcmp(name, "dict.len") == 0 && nargs == 1) {
+        return qt_int(qt_dict_len(args[0]));
+    }
+    if (strcmp(name, "dict.delete") == 0 && nargs == 2) {
+        qt_dict_delete(args[0], args[1]);
+        return qt_unit();
     }
     char msg[256];
     snprintf(msg, sizeof(msg), "native backend: unsupported builtin `%s`",
