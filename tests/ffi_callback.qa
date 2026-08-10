@@ -1,0 +1,60 @@
+// FFI callbacks showcase: passing a Quant function to C as a function pointer.
+// Demonstrates:
+//   1. extern fn with a function-typed parameter: (ptr, ptr) -> int.
+//   2. qsort calling back into a Quant comparator.
+//   3. ptr.* builtins for reading/writing raw C memory.
+//   4. Reverse ordering via a second comparator.
+
+extern "libc.so.6" {
+    fn malloc(size: int) -> ptr
+    fn free(p: ptr) -> void
+    fn qsort(base: ptr, nmemb: int, size: int, compar: (ptr, ptr) -> int) -> void
+}
+
+fn compare_asc(a: ptr, b: ptr) -> int {
+    x: int = ptr.read_int32(a);
+    y: int = ptr.read_int32(b);
+    return x - y;
+}
+
+fn compare_desc(a: ptr, b: ptr) -> int {
+    x: int = ptr.read_int32(a);
+    y: int = ptr.read_int32(b);
+    return y - x;
+}
+
+fn print_buf(buf: ptr, n: int) -> void {
+    line: str = "";
+    for (i: int = 0; i < n; i++) {
+        v: int = ptr.read_int32(ptr.add(buf, i * 4));
+        sv: str = string.to_str(v);
+        if (i > 0) {
+            line = string.concat(line, " ");
+        };
+        line = string.concat(line, sv);
+    };
+    io.println(line);
+}
+
+fn main() -> void {
+    n: int = 6;
+    buf: ptr = malloc(n * 4);
+
+    vals: [int] = [42, 7, 19, 3, 88, 1];
+    for (i: int = 0; i < n; i++) {
+        ptr.write_int32(ptr.add(buf, i * 4), vals[i]);
+    };
+
+    io.println("before:");
+    print_buf(buf, n);
+
+    qsort(buf, n, 4, compare_asc);
+    io.println("ascending:");
+    print_buf(buf, n);
+
+    qsort(buf, n, 4, compare_desc);
+    io.println("descending:");
+    print_buf(buf, n);
+
+    free(buf);
+}

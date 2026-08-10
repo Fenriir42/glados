@@ -79,6 +79,10 @@ builtinReturnType (FuncName n)
   | n == "ptr.is_null" = boolT
   | n == "ptr.to_int" = intT
   | n == "ptr.from_int" = ptrT
+  | n == "ptr.add" = ptrT
+  | n `elem` ["ptr.read_int32", "ptr.read_int64"] = intT
+  | n == "ptr.read_float64" = floatT
+  | n `elem` ["ptr.write_int32", "ptr.write_int64", "ptr.write_float64"] = voidT
   | otherwise = Nothing
   where
     voidFuncs =

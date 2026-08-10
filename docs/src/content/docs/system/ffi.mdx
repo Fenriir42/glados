@@ -98,6 +98,57 @@ fn main() -> void {
 
 ---
 
+## Callbacks: passing Quant functions to C
+
+An `extern` function may declare a parameter with a function type. Passing a Quant function there hands C a real function pointer; when C calls it, execution re-enters the Quant VM:
+
+```quant
+extern "libc.so.6" {
+    fn malloc(size: int) -> ptr
+    fn free(p: ptr) -> void
+    fn qsort(base: ptr, nmemb: int, size: int, compar: (ptr, ptr) -> int) -> void
+}
+
+fn compare_asc(a: ptr, b: ptr) -> int {
+    x: int = ptr.read_int32(a);
+    y: int = ptr.read_int32(b);
+    return x - y;
+}
+
+fn main() -> void {
+    n: int = 4;
+    buf: ptr = malloc(n * 4);
+    vals: [int] = [42, 7, 19, 3];
+    for (i: int = 0; i < n; i++) {
+        ptr.write_int32(ptr.add(buf, i * 4), vals[i]);
+    };
+    qsort(buf, n, 4, compare_asc);
+    free(buf);
+}
+```
+
+The callback may read and write the VM's heaps (arrays, dicts, structs); mutations persist across invocations and after the C call returns. A runtime error raised inside a callback is re-thrown once the C function returns.
+
+**Current limitation**: the callback's C-side shape is fixed to `(ptr, ptr) -> int` -- the comparator signature used by `qsort` and `bsearch`. The Quant function receives each C argument as a `ptr` and must return an `int` (a `bool` is converted to 0/1).
+
+### Raw memory access
+
+The `ptr` module provides byte-level access to C memory for use inside callbacks and around `malloc`-style APIs:
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `ptr.add` | `(p: ptr, off: int) -> ptr` | Pointer plus byte offset |
+| `ptr.read_int32` | `(p: ptr) -> int` | Read a 32-bit signed int |
+| `ptr.write_int32` | `(p: ptr, v: int) -> void` | Write a 32-bit signed int |
+| `ptr.read_int64` | `(p: ptr) -> int` | Read a 64-bit signed int |
+| `ptr.write_int64` | `(p: ptr, v: int) -> void` | Write a 64-bit signed int |
+| `ptr.read_float64` | `(p: ptr) -> float` | Read a C double |
+| `ptr.write_float64` | `(p: ptr, v: float) -> void` | Write a C double |
+
+These operate on raw addresses with no bounds checking -- reading or writing through an invalid pointer crashes the process, exactly like C.
+
+---
+
 ## Runtime behaviour
 
 - Libraries are opened with `RTLD_LAZY` on the first call and cached for the lifetime of the program, `dlopen` is not called again on subsequent calls.

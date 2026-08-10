@@ -33,7 +33,8 @@ import qualified Data.Aeson.KeyMap as AesonKM
 import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
-import Data.IORef (IORef, modifyIORef)
+import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
+import Data.Int (Int32, Int64)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Scientific as Scientific
@@ -43,6 +44,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
+import Foreign.C.Types (CInt (..))
 import Foreign.LibFFI
   ( argCDouble,
     argInt64,
@@ -57,7 +59,8 @@ import Foreign.LibFFI
     retVoid,
     retWord32,
   )
-import Foreign.Ptr (FunPtr, Ptr, ptrToWordPtr, wordPtrToPtr)
+import Foreign.Ptr (FunPtr, Ptr, castFunPtrToPtr, freeHaskellFunPtr, ptrToWordPtr, wordPtrToPtr)
+import Foreign.Storable (peekByteOff, pokeByteOff)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import System.Environment (getArgs)
@@ -896,9 +899,52 @@ execInstr = \case
           modify $ \s -> s {vmFFILibs = Map.insert lib d (vmFFILibs s)}
           return d
     funPtr <- S.liftIO $ dlsym dl (T.unpack sym)
-    result <- S.liftIO $ callWithFFIArgs funPtr retTy resolvedArgs
-    push result
-    return Nothing
+    let isFunVal v = case v of VFunction _ -> True; VClosure _ _ -> True; _ -> False
+    if not (any isFunVal resolvedArgs)
+      then do
+        result <- S.liftIO $ callWithFFIArgs funPtr retTy resolvedArgs
+        push result
+        return Nothing
+      else do
+        -- Callback args: wrap each function value as a C function pointer
+        -- that re-enters the interpreter.  State is threaded through an
+        -- IORef so heap mutations made by callbacks survive; the first
+        -- callback error is rethrown once the C call returns.
+        st <- S.get
+        stRef <- S.liftIO $ newIORef st
+        errRef <- S.liftIO $ newIORef Nothing
+        wrapped <-
+          S.liftIO $
+            mapM
+              ( \v ->
+                  if isFunVal v
+                    then do
+                      fp <- wrapCallback stRef errRef v
+                      return (VPointer (fromIntegral (ptrToWordPtr (castFunPtrToPtr fp))), Just fp)
+                    else return (v, Nothing)
+              )
+              resolvedArgs
+        result <- S.liftIO $ callWithFFIArgs funPtr retTy (map fst wrapped)
+        S.liftIO $ mapM_ freeHaskellFunPtr [fp | (_, Just fp) <- wrapped]
+        -- Merge callback-visible state back into the running VM (heaps,
+        -- allocation counters, task table); keep our own control state.
+        st' <- S.liftIO $ readIORef stRef
+        modify $ \s ->
+          s
+            { vmHeap = vmHeap st',
+              vmDictHeap = vmDictHeap st',
+              vmStructHeap = vmStructHeap st',
+              vmStructTypes = vmStructTypes st',
+              vmSocketHeap = vmSocketHeap st',
+              vmFFILibs = vmFFILibs st',
+              vmNextId = vmNextId st',
+              vmNextTaskId = vmNextTaskId st',
+              vmTasks = vmTasks st'
+            }
+        mErr <- S.liftIO $ readIORef errRef
+        mapM_ throwError mErr
+        push result
+        return Nothing
 
 -- ---------------------------------------------------------------------------
 -- Heap-aware builtins (array.len, array.push, array.pop, sys.exit)
@@ -1303,6 +1349,33 @@ callHeapBuiltin name args = case (name, args) of
   ("ptr.to_int", [VPointer addr]) -> return $ VInt (fromIntegral addr)
   -- ptr.from_int : int -> ptr
   ("ptr.from_int", [VInt n]) -> return $ VPointer (fromIntegral n)
+  -- ptr.add : ptr -> int -> ptr  (byte offset)
+  ("ptr.add", [VPointer addr, VInt off]) ->
+    return $ VPointer (fromIntegral (fromIntegral addr + off))
+  -- ptr.read_int32 : ptr -> int
+  ("ptr.read_int32", [VPointer addr]) -> do
+    n <- S.liftIO (peekByteOff (wordPtrToPtr (fromIntegral addr)) 0 :: IO Int32)
+    return $ VInt (fromIntegral n)
+  -- ptr.write_int32 : ptr -> int -> void
+  ("ptr.write_int32", [VPointer addr, VInt v]) -> do
+    S.liftIO (pokeByteOff (wordPtrToPtr (fromIntegral addr)) 0 (fromIntegral v :: Int32))
+    return VUnit
+  -- ptr.read_int64 : ptr -> int
+  ("ptr.read_int64", [VPointer addr]) -> do
+    n <- S.liftIO (peekByteOff (wordPtrToPtr (fromIntegral addr)) 0 :: IO Int64)
+    return $ VInt (fromIntegral n)
+  -- ptr.write_int64 : ptr -> int -> void
+  ("ptr.write_int64", [VPointer addr, VInt v]) -> do
+    S.liftIO (pokeByteOff (wordPtrToPtr (fromIntegral addr)) 0 (fromIntegral v :: Int64))
+    return VUnit
+  -- ptr.read_float64 : ptr -> float
+  ("ptr.read_float64", [VPointer addr]) -> do
+    d <- S.liftIO (peekByteOff (wordPtrToPtr (fromIntegral addr)) 0 :: IO Double)
+    return $ VFloat d
+  -- ptr.write_float64 : ptr -> float -> void
+  ("ptr.write_float64", [VPointer addr, VFloat d]) -> do
+    S.liftIO (pokeByteOff (wordPtrToPtr (fromIntegral addr)) 0 d)
+    return VUnit
   -- assert : bool -> str -> void
   ("assert", rawArgs@[_, _]) -> do
     strings <- gets vmStrings
@@ -1491,6 +1564,66 @@ resolveValue _ (VInt n) = T.pack (show n)
 resolveValue _ (VFloat f) = T.pack (show f)
 resolveValue _ (VBool b) = if b then "true" else "false"
 resolveValue _ _ = ""
+
+-- ---------------------------------------------------------------------------
+-- FFI callbacks
+
+-- | The supported C callback shape: two opaque pointers in, int out
+-- (the qsort/bsearch comparator signature).
+type CCompareFn = Ptr () -> Ptr () -> IO CInt
+
+foreign import ccall "wrapper"
+  mkCompareCallback :: CCompareFn -> IO (FunPtr CCompareFn)
+
+-- | Run a Quant function value to completion in a state derived from @st@:
+-- fresh stack/locals/task machinery, shared heaps and function table.
+invokeQuantValue :: VMState -> Value -> [Value] -> IO (Either VMError (Value, VMState))
+invokeQuantValue st fnVal cbArgs = do
+  let (fname, capturedLocals) = case fnVal of
+        VClosure fn caps -> (fn, Map.fromList caps)
+        VFunction fn -> (fn, Map.empty)
+        _ -> (FuncName "", Map.empty)
+  case Map.lookup fname (vmFunctions st) of
+    Nothing -> return $ Left $ VMUndefinedFunction fname
+    Just bc -> do
+      let callSt =
+            st
+              { vmStack = cbArgs,
+                vmLocals = capturedLocals,
+                vmIP = 0,
+                vmInstrs = bytecodeInstructions bc,
+                vmStrings = bytecodeStrings bc,
+                vmCallStack = [],
+                vmCurrentFunc = fname,
+                -- The callback body is its own root task.
+                vmCurrentTask = 0,
+                vmReadyQueue = []
+              }
+      (result, st') <- runStateT (runExceptT execLoop) callSt
+      return $ case result of
+        Left err -> Left err
+        Right v -> Right (v, st')
+
+-- | Wrap a Quant function value as a C function pointer.  The callback
+-- re-enters the interpreter against the shared state ref; heap mutations
+-- persist across invocations.  The first callback error is captured in
+-- @errRef@ (a C caller cannot unwind a Haskell exception) and rethrown
+-- by the FFI call site afterwards.
+wrapCallback :: IORef VMState -> IORef (Maybe VMError) -> Value -> IO (FunPtr CCompareFn)
+wrapCallback stRef errRef fnVal = mkCompareCallback $ \pa pb -> do
+  st <- readIORef stRef
+  let toVal p = VPointer (fromIntegral (ptrToWordPtr p))
+  r <- invokeQuantValue st fnVal [toVal pa, toVal pb]
+  case r of
+    Left err -> do
+      modifyIORef errRef (\case Nothing -> Just err; je -> je)
+      return 0
+    Right (v, st') -> do
+      writeIORef stRef st'
+      return $ case v of
+        VInt n -> fromIntegral n
+        VBool True -> 1
+        _ -> 0
 
 -- ---------------------------------------------------------------------------
 -- FFI dispatch
