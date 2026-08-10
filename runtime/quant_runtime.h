@@ -271,6 +271,15 @@ QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args);
 /* Capture argv so sys.args / sys.argc can see the command line. */
 void qt_set_args(int argc, char **argv);
 
+/* FFI (stage 8). qt_ffi_call dlopen/dlsym-resolves @sym@ in @lib@ and calls
+ * it, marshalling QtValue args by tag; @ret@ is the CRetType code
+ * (0=void 1=int 2=float 3=str 4=bool 5=ptr).  Function-valued arguments
+ * become a C comparator trampoline that re-enters generated code through the
+ * dispatcher registered with qt_set_dispatch. */
+QtValue qt_ffi_call(const char *lib, const char *sym, int ret, size_t argc,
+                    const QtValue *args);
+void qt_set_dispatch(QtValue (*fn)(const char *, size_t, const QtValue *));
+
 /* ------------------------------------------------------------------ */
 /* Failure                                                             */
 

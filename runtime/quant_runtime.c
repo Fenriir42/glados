@@ -9,6 +9,7 @@
 #include "quant_runtime.h"
 
 #include <ctype.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <math.h>
@@ -1802,6 +1803,220 @@ static QtValue builtin_math(const char *fn, size_t nargs, const QtValue *args) {
     qt_panic(msg);
 }
 
+/* ------------------------------------------------------------------ */
+/* ptr.* raw-memory builtins (see ROADMAP: Native backend stage 8)      */
+
+static QtValue builtin_ptr(const char *fn, size_t nargs, const QtValue *args) {
+    if (strcmp(fn, "null") == 0 && nargs == 0) {
+        return qt_ptr(0);
+    }
+    if (strcmp(fn, "is_null") == 0 && nargs == 1) {
+        return qt_bool(args[0].as.ptr == 0);
+    }
+    if (strcmp(fn, "to_int") == 0 && nargs == 1) {
+        return qt_int((int64_t)args[0].as.ptr);
+    }
+    if (strcmp(fn, "from_int") == 0 && nargs == 1) {
+        return qt_ptr((uint64_t)qt_want_int(args[0], "ptr.from_int"));
+    }
+    if (strcmp(fn, "add") == 0 && nargs == 2) {
+        return qt_ptr(args[0].as.ptr + (uint64_t)qt_want_int(args[1], "ptr.add"));
+    }
+    void *p = (void *)(uintptr_t)args[0].as.ptr;
+    if (strcmp(fn, "read_int32") == 0 && nargs == 1) {
+        int32_t v;
+        memcpy(&v, p, sizeof(v));
+        return qt_int(v);
+    }
+    if (strcmp(fn, "write_int32") == 0 && nargs == 2) {
+        int32_t v = (int32_t)qt_want_int(args[1], "ptr.write_int32");
+        memcpy(p, &v, sizeof(v));
+        return qt_unit();
+    }
+    if (strcmp(fn, "read_int64") == 0 && nargs == 1) {
+        int64_t v;
+        memcpy(&v, p, sizeof(v));
+        return qt_int(v);
+    }
+    if (strcmp(fn, "write_int64") == 0 && nargs == 2) {
+        int64_t v = qt_want_int(args[1], "ptr.write_int64");
+        memcpy(p, &v, sizeof(v));
+        return qt_unit();
+    }
+    if (strcmp(fn, "read_float64") == 0 && nargs == 1) {
+        double v;
+        memcpy(&v, p, sizeof(v));
+        return qt_float(v);
+    }
+    if (strcmp(fn, "write_float64") == 0 && nargs == 2) {
+        double v = args[1].as.f;
+        memcpy(p, &v, sizeof(v));
+        return qt_unit();
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "ptr.%s: bad arguments", fn);
+    qt_panic(msg);
+}
+
+/* ------------------------------------------------------------------ */
+/* FFI: dlopen + hand-written trampolines, no libffi (stage 8).         */
+
+/* Dispatch back into generated code (registered by main) for callbacks. */
+static QtValue (*g_dispatch)(const char *, size_t, const QtValue *) = NULL;
+
+void qt_set_dispatch(QtValue (*fn)(const char *, size_t, const QtValue *)) {
+    g_dispatch = fn;
+}
+
+/* The Quant callable currently installed as a C comparator callback. */
+static QtValue g_ffi_cb;
+
+/* Comparator trampoline matching qsort's (const void*, const void*) -> int;
+ * re-enters Quant through the registered dispatcher.  Matches the VM's sole
+ * supported callback shape. */
+static int qt_ffi_cmp(const void *a, const void *b) {
+    QtValue cargs[2];
+    cargs[0] = qt_ptr((uint64_t)(uintptr_t)a);
+    cargs[1] = qt_ptr((uint64_t)(uintptr_t)b);
+    qt_callable_bind(g_ffi_cb);
+    QtValue r = g_dispatch(qt_callable_name(g_ffi_cb), 2, cargs);
+    if (r.tag == QT_INT) {
+        return (int)r.as.i;
+    }
+    if (r.tag == QT_BOOL) {
+        return r.as.i ? 1 : 0;
+    }
+    return 0;
+}
+
+/* One marshalled argument: either an integer/pointer slot or a double. */
+typedef struct {
+    uint64_t u;
+    double d;
+} FfiSlot;
+
+QtValue qt_ffi_call(const char *lib, const char *sym, int ret, size_t argc,
+                    const QtValue *args) {
+    void *h = dlopen(lib, RTLD_LAZY);
+    if (!h) {
+        qt_panic("ffi: cannot open library");
+    }
+    void *fp = dlsym(h, sym);
+    if (!fp) {
+        qt_panic("ffi: symbol not found");
+    }
+    if (argc > 6) {
+        qt_panic("ffi: too many arguments");
+    }
+    FfiSlot s[6];
+    unsigned m = 0; /* bit i set => argument i is a double */
+    for (size_t i = 0; i < argc; i++) {
+        QtValue v = args[i];
+        s[i].u = 0;
+        s[i].d = 0.0;
+        switch (v.tag) {
+            case QT_FLOAT:
+                s[i].d = v.as.f;
+                m |= (1u << i);
+                break;
+            case QT_BOOL:
+                s[i].u = v.as.i ? 1 : 0;
+                break;
+            case QT_STRING:
+                s[i].u = (uint64_t)(uintptr_t)v.as.s;
+                break;
+            case QT_PTR:
+                s[i].u = v.as.ptr;
+                break;
+            case QT_FN:
+            case QT_CLOSURE:
+                g_ffi_cb = v;
+                s[i].u = (uint64_t)(uintptr_t)&qt_ffi_cmp;
+                break;
+            default:
+                s[i].u = (uint64_t)v.as.i;
+                break;
+        }
+    }
+    int rf = (ret == 2); /* CRetFloat */
+    uint64_t ir = 0;
+    double fr = 0.0;
+#define U(i) (s[i].u)
+#define D(i) (s[i].d)
+#define CALL(PROTO, ...)                                                       \
+    do {                                                                       \
+        if (rf)                                                                \
+            fr = ((double(*) PROTO)fp)(__VA_ARGS__);                           \
+        else                                                                   \
+            ir = ((uint64_t(*) PROTO)fp)(__VA_ARGS__);                         \
+    } while (0)
+    switch (argc) {
+        case 0:
+            CALL((void));
+            break;
+        case 1:
+            if (m == 1) {
+                CALL((double), D(0));
+            } else {
+                CALL((uint64_t), U(0));
+            }
+            break;
+        case 2:
+            switch (m) {
+                case 0: CALL((uint64_t, uint64_t), U(0), U(1)); break;
+                case 1: CALL((double, uint64_t), D(0), U(1)); break;
+                case 2: CALL((uint64_t, double), U(0), D(1)); break;
+                case 3: CALL((double, double), D(0), D(1)); break;
+            }
+            break;
+        case 3:
+            switch (m) {
+                case 0: CALL((uint64_t, uint64_t, uint64_t), U(0), U(1), U(2)); break;
+                case 1: CALL((double, uint64_t, uint64_t), D(0), U(1), U(2)); break;
+                case 2: CALL((uint64_t, double, uint64_t), U(0), D(1), U(2)); break;
+                case 3: CALL((double, double, uint64_t), D(0), D(1), U(2)); break;
+                case 4: CALL((uint64_t, uint64_t, double), U(0), U(1), D(2)); break;
+                case 5: CALL((double, uint64_t, double), D(0), U(1), D(2)); break;
+                case 6: CALL((uint64_t, double, double), U(0), D(1), D(2)); break;
+                case 7: CALL((double, double, double), D(0), D(1), D(2)); break;
+            }
+            break;
+        case 4:
+            if (m != 0) {
+                qt_panic("ffi: float arguments past position 3 unsupported");
+            }
+            CALL((uint64_t, uint64_t, uint64_t, uint64_t), U(0), U(1), U(2), U(3));
+            break;
+        case 5:
+            if (m != 0) {
+                qt_panic("ffi: float arguments past position 3 unsupported");
+            }
+            CALL((uint64_t, uint64_t, uint64_t, uint64_t, uint64_t), U(0), U(1),
+                 U(2), U(3), U(4));
+            break;
+        case 6:
+            if (m != 0) {
+                qt_panic("ffi: float arguments past position 3 unsupported");
+            }
+            CALL((uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t),
+                 U(0), U(1), U(2), U(3), U(4), U(5));
+            break;
+    }
+#undef CALL
+#undef U
+#undef D
+    switch (ret) {
+        case 0: return qt_unit();             /* CRetVoid */
+        case 1: return qt_int((int64_t)ir);   /* CRetInt */
+        case 2: return qt_float(fr);          /* CRetFloat */
+        case 3:                               /* CRetStr */
+            return qt_string(ir ? qt_strdup((const char *)(uintptr_t)ir) : "");
+        case 4: return qt_bool((uint32_t)ir != 0); /* CRetBool */
+        case 5: return qt_ptr(ir);            /* CRetPtr */
+    }
+    return qt_unit();
+}
+
 QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
     if (strcmp(name, "print") == 0 || strcmp(name, "io.print") == 0) {
         if (nargs > 0) {
@@ -1875,6 +2090,9 @@ QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
     if (strcmp(name, "dict.delete") == 0 && nargs == 2) {
         qt_dict_delete(args[0], args[1]);
         return qt_unit();
+    }
+    if (strncmp(name, "ptr.", 4) == 0) {
+        return builtin_ptr(name + 4, nargs, args);
     }
     char msg[256];
     snprintf(msg, sizeof(msg), "native backend: unsupported builtin `%s`",

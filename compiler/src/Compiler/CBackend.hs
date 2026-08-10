@@ -52,6 +52,7 @@ emitC bcs
             ++ funcs
             ++ [ "int main(int argc, char **argv) {",
                  "    qt_set_args(argc, argv);",
+                 "    qt_set_dispatch(qf_dispatch);",
                  "    " <> mangle (FuncName "main") <> "(0, (const QtValue *)0);",
                  "    return 0;",
                  "}"
@@ -247,6 +248,7 @@ supportedBuiltins =
       ++ map ("sys." <>) sysBuiltins
       ++ map ("file." <>) fileBuiltins
       ++ map ("buf." <>) bufBuiltins
+      ++ map ("ptr." <>) ptrBuiltins
 
 -- | string.* builtins the C runtime implements (stage 4).  Excludes
 -- `hash`, whose VM definition folds over unbounded Integers.
@@ -358,6 +360,22 @@ fileBuiltins =
     "lines"
   ]
 
+-- | ptr.* raw-memory builtins the C runtime implements (stage 8).
+ptrBuiltins :: [Text]
+ptrBuiltins =
+  [ "null",
+    "is_null",
+    "to_int",
+    "from_int",
+    "add",
+    "read_int32",
+    "write_int32",
+    "read_int64",
+    "write_int64",
+    "read_float64",
+    "write_float64"
+  ]
+
 -- | buf.* builtins the C runtime implements (stage 4).
 bufBuiltins :: [Text]
 bufBuiltins =
@@ -442,6 +460,7 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
     ok $ "  st[sp++] = qt_fn(" <> cString (unFuncName target) <> ");"
   IMakeClosure target capVars -> ok (emitMakeClosure target capVars)
   ICallIndirect argc -> ok (emitCallIndirect argc)
+  ICallFFI lib sym retTy argc -> ok (emitFFI lib sym retTy argc)
   other -> unsupported other
   where
     ok = Right
@@ -542,5 +561,30 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
             <> " QtValue qcl = st[--sp];"
             <> " qt_callable_bind(qcl);"
             <> " st[sp++] = qf_dispatch(qt_callable_name(qcl), "
+            <> nText
+            <> ", ca); }"
+    -- Foreign call: marshal args, then dispatch through the runtime FFI shim.
+    emitFFI lib sym retTy argc =
+      let nText = T.pack (show argc)
+          bufLen = T.pack (show (max 1 argc))
+          retCode = case retTy of
+            CRetVoid -> "0"
+            CRetInt -> "1"
+            CRetFloat -> "2"
+            CRetStr -> "3"
+            CRetBool -> "4"
+            CRetPtr -> "5"
+       in "  { QtValue ca["
+            <> bufLen
+            <> "]; for (size_t qi = 0; qi < "
+            <> nText
+            <> "; qi++) { ca[qi] = st[--sp]; }"
+            <> " st[sp++] = qt_ffi_call("
+            <> cString lib
+            <> ", "
+            <> cString sym
+            <> ", "
+            <> retCode
+            <> ", "
             <> nText
             <> ", ca); }"
