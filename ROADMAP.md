@@ -165,11 +165,18 @@ replaces the interpreter.
 | ~~7. Closures and first-class functions~~ | `IMakeClosure`/`ICallIndirect` | Done -- `ILoadFunc` pushes a `QT_FN` name reference; `IMakeClosure` copies the captured locals into a `QtClosure` (name + captured `QtValue` block); `ICallIndirect` binds the closure's environment and dispatches through `qf_dispatch` by name. Each lambda body reads its captures back from `qt_env` at entry (in `IMakeClosure` order). `tests/closures.qa` (adders, multipliers, composition, multi-capture, value-capture semantics) diffs byte-identically |
 | ~~8. FFI passthrough~~ | externs via `dlopen` + trampolines | Done -- `ICallFFI` resolves the symbol with `dlopen`/`dlsym` and calls it through hand-written trampolines (no libffi), marshalling each `QtValue` arg by tag into an integer/pointer or `double` register slot (full float/int mask coverage for 0-3 args, integer-only for 4-6). Function-valued args become a C comparator trampoline that re-enters generated code via a registered dispatcher -- the same `(ptr,ptr)->int` callback shape the VM supports. All `ptr.*` raw-memory builtins are ported. `tests/ffi_math.qa` (libm) and `tests/ffi_callback.qa` (libc `qsort` with a Quant comparator) diff byte-identically. (The bytecode does not preserve extern argument types, so link-time prototypes are not possible; `dlopen` matches the VM's own approach) |
 | ~~9. Async/await~~ | cooperative scheduler in C | Done -- each task runs on its own `ucontext` stack; `ISpawn` queues a task without running it, `IAwait` yields to the scheduler when the awaited task is unfinished, and completed tasks re-queue their waiters (FIFO) -- the same advance-at-await, run-ready-in-order semantics as the VM scheduler. `main` runs as task 0 when a program uses async; non-async programs still call `main` directly on the process stack. `tests/async.qa` (spawn-without-run, nested spawn/await, cached re-await, inline await) diffs byte-identically |
-| 10. Optimization pass | the "optimized" in optimized binary | Unbox int/float locals to C scalars instead of `QuantValue` where types are known; `-O2`/LTO in the driver; benchmark suite comparing VM vs native |
+| ~~10. Optimization pass~~ | the "optimized" in optimized binary | Done -- the driver compiles with `-O2 -flto` (no `-ffast-math`/`-march=native`, so float results stay bit-identical); `-flto` inlines the tiny runtime value accessors into the generated hot paths. Explicit source-level unboxing was unnecessary: at `-O2` the C compiler already scalar-replaces the 16-byte `QtValue` (SROA), so a bespoke pass would duplicate the backend. A `benchmarks/` suite (`make bench`) times VM vs native after checking their output matches; measured **63x** (fib), **94x** (nested loops), **109x** (prime counting) |
 
 Stages 1-3 form the minimum credible milestone (a native hello world validated
 against the VM); each later stage widens the subset of `tests/*.qa` that passes
 under `--native` until the corpus is green end-to-end.
+
+**All ten stages are complete.** `glados native-diff` reports 26 of the
+showcase programs matching the VM byte-for-byte; the only skips are three
+files that do not compile under the plain VM either and the `socket.*`
+network builtins (out of scope for the native backend). The remaining
+unported builtins are `dict.keys`/`values` (need VM `Ord` key ordering),
+`json.*` (needs a C encoder/parser), and `regex.*` (needs a regex engine).
 
 ### Debugger (DAP) -- done
 

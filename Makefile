@@ -82,6 +82,10 @@ runtime-test: .build/libquant_runtime.a
 native-diff: glados
 	./glados native-diff
 
+.PHONY: bench
+bench: glados
+	@ ./benchmarks/run.sh ./glados
+
 .PHONY: clean
 clean:
 	@ $(RM) .build/mk.*

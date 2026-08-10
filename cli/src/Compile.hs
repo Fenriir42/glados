@@ -105,6 +105,11 @@ buildNative bytecodes out = do
   let ccArgs =
         [ "-std=c11",
           "-O2",
+          -- Link-time optimisation lets the compiler inline the tiny runtime
+          -- value accessors (qt_int, qt_binary, ...) into the generated hot
+          -- paths.  No -ffast-math / -march=native: float results must stay
+          -- bit-identical to the VM.
+          "-flto",
           "-I" ++ runtimeDir,
           cFile,
           runtimeDir </> "quant_runtime.c",
