@@ -114,6 +114,16 @@ QtValue qt_bool(int b);
 QtValue qt_string(const char *s); /* keeps the pointer; s must be immortal */
 QtValue qt_ptr(uint64_t addr);
 
+/* First-class functions (stage 7). qt_fn is a bare named reference;
+ * qt_closure copies n captured bindings from env. qt_env reads the
+ * currently-bound closure environment; qt_callable_name / qt_callable_bind
+ * resolve and install a callable for ICallIndirect. */
+QtValue qt_fn(const char *name);
+QtValue qt_closure(const char *name, size_t n, const QtValue *env);
+QtValue qt_env(size_t i);
+const char *qt_callable_name(QtValue c);
+void qt_callable_bind(QtValue c);
+
 QtValue qt_array_new(void);
 QtValue qt_dict_new(void);
 QtValue qt_struct_new(const char *type_name);

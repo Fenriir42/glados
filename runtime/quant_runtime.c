@@ -90,6 +90,62 @@ QtValue qt_ptr(uint64_t addr) {
     return v;
 }
 
+/* Closures carry the target function's name plus a copy of the captured
+ * bindings (in IMakeClosure order).  The generated code reads them back at
+ * function entry via qt_env. */
+struct QtClosure {
+    const char *name;
+    QtValue *env;
+    size_t env_len;
+};
+
+QtValue qt_fn(const char *name) {
+    QtValue v;
+    v.tag = QT_FN;
+    v.as.fn = name;
+    return v;
+}
+
+QtValue qt_closure(const char *name, size_t n, const QtValue *env) {
+    QtClosure *c = qt_alloc(sizeof(QtClosure));
+    c->name = name;
+    c->env_len = n;
+    c->env = NULL;
+    if (n > 0) {
+        c->env = qt_alloc(n * sizeof(QtValue));
+        memcpy(c->env, env, n * sizeof(QtValue));
+    }
+    QtValue v;
+    v.tag = QT_CLOSURE;
+    v.as.clo = c;
+    return v;
+}
+
+/* Environment of the closure currently being entered.  ICallIndirect sets
+ * it via qt_callable_bind immediately before dispatch; the callee copies
+ * what it needs into locals before making any further indirect call. */
+static const QtValue *g_env = NULL;
+
+QtValue qt_env(size_t i) {
+    return g_env[i];
+}
+
+/* Resolve the symbolic name a callable dispatches to (QT_FN or QT_CLOSURE). */
+const char *qt_callable_name(QtValue c) {
+    if (c.tag == QT_FN) {
+        return c.as.fn;
+    }
+    if (c.tag == QT_CLOSURE) {
+        return c.as.clo->name;
+    }
+    qt_panic("call: value is not a function or closure");
+}
+
+/* Install a callable's captured environment for the upcoming dispatch. */
+void qt_callable_bind(QtValue c) {
+    g_env = (c.tag == QT_CLOSURE) ? c.as.clo->env : NULL;
+}
+
 QtValue qt_array_new(void) {
     QtArray *a = qt_alloc(sizeof(QtArray));
     a->items = NULL;

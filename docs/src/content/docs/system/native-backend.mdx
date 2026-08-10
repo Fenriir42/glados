@@ -70,13 +70,13 @@ immediately.
 The native backend currently covers a broad subset of the language:
 functions, recursion, control flow, int/float/bool/string scalars, arrays,
 dicts, structs, enums, error/option values (`try`/`must`), interfaces with
-dynamic method dispatch, casts, the printing builtins, and the full
-`string.*` (except `hash`), `math.*`, `sys.*`, `file.*`, and `buf.*` builtin
-families (plus `dict.has`/`len`/`delete`). Closures, FFI, async, and the
-`dict.keys`/`values`, `json.*`, `regex.*`, and `socket.*` builtins are not
-yet translated -- programs using them fail at compile time with a message
-naming the unsupported instruction or builtin. Coverage grows stage by
-stage; see ROADMAP.md.
+dynamic method dispatch, closures and first-class functions, casts, the
+printing builtins, and the full `string.*` (except `hash`), `math.*`,
+`sys.*`, `file.*`, and `buf.*` builtin families (plus `dict.has`/`len`/`delete`).
+FFI, async, and the `dict.keys`/`values`, `json.*`, `regex.*`, and
+`socket.*` builtins are not yet translated -- programs using them fail at
+compile time with a message naming the unsupported instruction or builtin.
+Coverage grows stage by stage; see ROADMAP.md.
 </Aside>
 
 ## Environment
