@@ -53,15 +53,27 @@ emitC bcs
             ++ [ "int main(int argc, char **argv) {",
                  "    qt_set_args(argc, argv);",
                  "    qt_set_dispatch(qf_dispatch);",
-                 "    " <> mangle (FuncName "main") <> "(0, (const QtValue *)0);",
+                 mainCall,
                  "    return 0;",
                  "}"
                ]
   where
+    usesAsync = any (any isAsyncInstr . bytecodeInstructions) bcs
+    -- Async programs drive `main` through the cooperative scheduler (as task
+    -- 0); everything else calls it directly on the process stack.
+    mainCall
+      | usesAsync = "    qt_async_run(" <> cString "main" <> ");"
+      | otherwise = "    " <> mangle (FuncName "main") <> "(0, (const QtValue *)0);"
     protoLine bc =
       "static QtValue "
         <> mangle (bytecodeFunction bc)
         <> "(size_t argc, const QtValue *args);"
+
+-- | Instructions that require the async runtime (drive `main` via the scheduler).
+isAsyncInstr :: Instruction -> Bool
+isAsyncInstr (ISpawn _ _) = True
+isAsyncInstr IAwait = True
+isAsyncInstr _ = False
 
 -- | Resolve an @IDynMethodCall@'s @Type.method@ name to the concrete C
 -- function at runtime.  The receiver's struct type + the method name form
@@ -461,18 +473,10 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
   IMakeClosure target capVars -> ok (emitMakeClosure target capVars)
   ICallIndirect argc -> ok (emitCallIndirect argc)
   ICallFFI lib sym retTy argc -> ok (emitFFI lib sym retTy argc)
-  other -> unsupported other
+  ISpawn (FunctionRef target) argc -> ok (emitSpawn target argc)
+  IAwait -> ok "  st[sp - 1] = qt_await(st[sp - 1]);"
   where
     ok = Right
-    unsupported i =
-      Left $
-        "native backend: unsupported instruction "
-          ++ takeWhile (/= ' ') (show i)
-          ++ " (in function `"
-          ++ T.unpack (unFuncName fname)
-          ++ "` at offset "
-          ++ show idx
-          ++ ")"
     pushValue v = case v of
       VInt n -> ok $ pushConst ("qt_int(INT64_C(" <> T.pack (show n) <> "))")
       VFloat f -> ok $ pushConst ("qt_float(" <> T.pack (showHFloat f "") <> ")")
@@ -585,6 +589,20 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
             <> cString sym
             <> ", "
             <> retCode
+            <> ", "
+            <> nText
+            <> ", ca); }"
+    -- Spawn an async task: queue the function without transferring control.
+    emitSpawn target argc =
+      let nText = T.pack (show argc)
+          bufLen = T.pack (show (max 1 argc))
+       in "  { QtValue ca["
+            <> bufLen
+            <> "]; for (size_t qi = 0; qi < "
+            <> nText
+            <> "; qi++) { ca[qi] = st[--sp]; }"
+            <> " st[sp++] = qt_spawn("
+            <> cString (unFuncName target)
             <> ", "
             <> nText
             <> ", ca); }"

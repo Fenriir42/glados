@@ -74,11 +74,11 @@ dynamic method dispatch, closures and first-class functions, `extern` FFI
 calls (via `dlopen`, including `(ptr,ptr)->int` callbacks), raw pointers,
 casts, the printing builtins, and the full `string.*` (except `hash`),
 `math.*`, `sys.*`, `file.*`, `buf.*`, and `ptr.*` builtin families (plus
-`dict.has`/`len`/`delete`). Async (`spawn`/`await`) and the
-`dict.keys`/`values`, `json.*`, `regex.*`, and `socket.*` builtins are not
-yet translated -- programs using them fail at compile time with a message
-naming the unsupported instruction or builtin. Coverage grows stage by
-stage; see ROADMAP.md.
+`dict.has`/`len`/`delete`), and async `spawn`/`await` (a cooperative
+`ucontext` scheduler). The `dict.keys`/`values`, `json.*`, `regex.*`, and
+`socket.*` builtins are not yet translated -- programs using them fail at
+compile time with a message naming the unsupported instruction or builtin.
+Coverage grows stage by stage; see ROADMAP.md.
 </Aside>
 
 ## Environment

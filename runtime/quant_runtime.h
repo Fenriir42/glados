@@ -119,6 +119,7 @@ QtValue qt_ptr(uint64_t addr);
  * currently-bound closure environment; qt_callable_name / qt_callable_bind
  * resolve and install a callable for ICallIndirect. */
 QtValue qt_fn(const char *name);
+QtValue qt_task(int64_t id);
 QtValue qt_closure(const char *name, size_t n, const QtValue *env);
 QtValue qt_env(size_t i);
 const char *qt_callable_name(QtValue c);
@@ -279,6 +280,14 @@ void qt_set_args(int argc, char **argv);
 QtValue qt_ffi_call(const char *lib, const char *sym, int ret, size_t argc,
                     const QtValue *args);
 void qt_set_dispatch(QtValue (*fn)(const char *, size_t, const QtValue *));
+
+/* Async / await (stage 9). qt_spawn queues a task running @name@ with a copy
+ * of @args@ and returns its handle; qt_await yields to the cooperative
+ * scheduler until the awaited task finishes and returns its result;
+ * qt_async_run spawns the entry function as task 0 and drives the scheduler. */
+QtValue qt_spawn(const char *name, size_t argc, const QtValue *args);
+QtValue qt_await(QtValue task);
+void qt_async_run(const char *main_name);
 
 /* ------------------------------------------------------------------ */
 /* Failure                                                             */

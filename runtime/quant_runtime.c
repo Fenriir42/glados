@@ -18,6 +18,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 #ifdef QUANT_GC
@@ -104,6 +105,13 @@ QtValue qt_fn(const char *name) {
     QtValue v;
     v.tag = QT_FN;
     v.as.fn = name;
+    return v;
+}
+
+QtValue qt_task(int64_t id) {
+    QtValue v;
+    v.tag = QT_TASK;
+    v.as.i = id;
     return v;
 }
 
@@ -2015,6 +2023,115 @@ QtValue qt_ffi_call(const char *lib, const char *sym, int ret, size_t argc,
         case 5: return qt_ptr(ir);            /* CRetPtr */
     }
     return qt_unit();
+}
+
+/* ------------------------------------------------------------------ */
+/* Async / await: cooperative ucontext scheduler (stage 9).             */
+/*                                                                      */
+/* Each task runs on its own stack.  Spawning queues a task without     */
+/* running it; awaiting an unfinished task yields to the scheduler,      */
+/* which drains the ready queue (FIFO) until the awaited task is done    */
+/* and re-queues waiters on completion -- the same advance-at-await,     */
+/* run-ready-in-order semantics as the VM scheduler.                     */
+
+#define QT_TASK_CAP 4096
+#define QT_TASK_STACK (1u << 20) /* 1 MiB per task stack */
+
+typedef struct {
+    ucontext_t ctx;
+    const char *fname;
+    QtValue *args;
+    size_t argc;
+    QtValue result;
+    int started;
+    int done;
+    long waiting_on; /* task id being awaited, or -1 */
+} QtTask;
+
+static QtTask *g_tasks[QT_TASK_CAP];
+static long g_ntasks = 0;
+static long g_ready[QT_TASK_CAP];
+static long g_ready_head = 0;
+static long g_ready_tail = 0;
+static ucontext_t g_sched_ctx;
+static long g_cur = -1;
+
+static void ready_push(long id) {
+    if (g_ready_tail - g_ready_head >= QT_TASK_CAP) {
+        qt_panic("async: ready queue overflow");
+    }
+    g_ready[g_ready_tail++ % QT_TASK_CAP] = id;
+}
+
+static long ready_pop(void) {
+    return g_ready[g_ready_head++ % QT_TASK_CAP];
+}
+
+/* Task body: dispatch into the generated function, store the result, then
+ * wake every task that was awaiting this one and hand control back. */
+static void qt_task_entry(void) {
+    long id = g_cur;
+    QtTask *t = g_tasks[id];
+    t->result = g_dispatch(t->fname, t->argc, t->args);
+    t->done = 1;
+    for (long i = 0; i < g_ntasks; i++) {
+        if (!g_tasks[i]->done && g_tasks[i]->waiting_on == id) {
+            g_tasks[i]->waiting_on = -1;
+            ready_push(i);
+        }
+    }
+    swapcontext(&t->ctx, &g_sched_ctx); /* never resumes: task is done */
+}
+
+QtValue qt_spawn(const char *name, size_t argc, const QtValue *args) {
+    if (g_ntasks >= QT_TASK_CAP) {
+        qt_panic("async: too many tasks");
+    }
+    long id = g_ntasks++;
+    QtTask *t = qt_alloc(sizeof(QtTask));
+    t->fname = name;
+    t->argc = argc;
+    t->args = NULL;
+    t->started = 0;
+    t->done = 0;
+    t->waiting_on = -1;
+    if (argc > 0) {
+        t->args = qt_alloc(argc * sizeof(QtValue));
+        memcpy(t->args, args, argc * sizeof(QtValue));
+    }
+    g_tasks[id] = t;
+    ready_push(id);
+    return qt_task(id);
+}
+
+QtValue qt_await(QtValue tv) {
+    long id = (long)tv.as.i;
+    QtTask *t = g_tasks[id];
+    if (!t->done) {
+        QtTask *self = g_tasks[g_cur];
+        self->waiting_on = id;
+        swapcontext(&self->ctx, &g_sched_ctx); /* yield; resumed when t is done */
+    }
+    return t->result;
+}
+
+/* Spawn the entry function as task 0 and run the scheduler to completion. */
+void qt_async_run(const char *main_name) {
+    qt_spawn(main_name, 0, NULL);
+    while (g_ready_head != g_ready_tail) {
+        long id = ready_pop();
+        g_cur = id;
+        QtTask *t = g_tasks[id];
+        if (!t->started) {
+            t->started = 1;
+            getcontext(&t->ctx);
+            t->ctx.uc_stack.ss_sp = qt_alloc(QT_TASK_STACK);
+            t->ctx.uc_stack.ss_size = QT_TASK_STACK;
+            t->ctx.uc_link = &g_sched_ctx;
+            makecontext(&t->ctx, qt_task_entry, 0);
+        }
+        swapcontext(&g_sched_ctx, &t->ctx);
+    }
 }
 
 QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
