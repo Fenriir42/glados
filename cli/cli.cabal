@@ -29,6 +29,7 @@ executable cli
     Compile
     Display
     Manifest
+    NativeDiff
     PM
 
   hs-source-dirs: src

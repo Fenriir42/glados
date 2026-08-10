@@ -78,6 +78,10 @@ runtime-test: .build/libquant_runtime.a
 	@ .build/runtime-test
 	@ $(LOG_TIME) "Runtime tests $(C_GREEN)passed$(C_RESET)"
 
+.PHONY: native-diff
+native-diff: glados
+	./glados native-diff
+
 .PHONY: clean
 clean:
 	@ $(RM) .build/mk.*

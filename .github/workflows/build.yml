@@ -29,3 +29,9 @@ jobs:
 
       - name: Run all tests
         run: cabal test all
+
+      - name: Run C runtime tests
+        run: make runtime-test
+
+      - name: Run native differential harness
+        run: cabal run -v0 exe:cli -- native-diff

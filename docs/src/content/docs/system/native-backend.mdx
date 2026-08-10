@@ -42,12 +42,37 @@ be diffed byte-for-byte.
 The speedup is substantial: a naive `fib(30)` runs about 50x faster than
 under the VM.
 
+## Checking native output against the VM
+
+The `native-diff` subcommand is the backend's safety net. It runs every
+`.qa` file under both engines and diffs stdout and exit codes:
+
+```bash
+glados native-diff            # defaults to tests/
+glados native-diff my_dir a.qa
+```
+
+Each file is reported as one of:
+
+- `ok` -- VM and native output are byte-identical (including exit code).
+- `skip` -- the translator does not cover the file yet (the unsupported
+  instruction or builtin is named), or the file does not compile
+  standalone. Unsupported programs are rejected at compile time, so a
+  skip can never hide a behavioral difference.
+- `DIFF` -- the two engines disagree; the first differing line is shown.
+  This always indicates a bug and fails the run with exit status 1.
+
+The harness runs in CI on every pull request, so any change to the
+compiler, VM, or C runtime that makes the two engines disagree is caught
+immediately.
+
 <Aside type="caution">
 The native backend currently covers a subset of the language: functions,
 recursion, control flow, int/float/bool/string scalars, arrays, casts, and
 the core printing builtins. Structs, enums, errors, closures, dicts, FFI,
 and async are not yet translated -- programs using them fail at compile
-time with a message naming the unsupported instruction. Coverage grows
+time with a message naming the unsupported instruction or builtin.
+Coverage grows
 stage by stage; see ROADMAP.md.
 </Aside>
 

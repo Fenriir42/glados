@@ -92,6 +92,18 @@ output.
 Exits with status 1 if any test fails or if \fB\-\-cov\-min\fR is set and
 the threshold is not met.
 .TP
+.B native\-diff [\fIPATH\fR...]
+Differential test harness for the native backend. Runs every
+\fI.qa\fR file found under the given paths (default: \fBtests/\fR)
+under both the bytecode VM and a natively compiled binary, then
+diffs stdout and exit codes. Files the C translator does not cover
+yet are reported as skips (the translator rejects unsupported
+instructions and builtins at compile time, so a skip can never hide
+a semantics difference). Native binaries are written to
+\fI.build/native\-diff/\fR. Exits with status 1 if any file produces
+different output under the two engines. Requires a C compiler and
+the Quant C runtime (see ENVIRONMENT).
+.TP
 .B lint
 Run
 .BR wheatley (1)
@@ -222,6 +234,15 @@ Check formatting and lint in CI:
 .nf
 glados fmt \-\-check
 glados lint
+.fi
+.RE
+.PP
+Compile to a native binary and cross-check it against the VM:
+.PP
+.RS
+.nf
+glados compiler \-\-native hello hello.qa
+glados native\-diff tests/
 .fi
 .RE
 .SH SEE ALSO

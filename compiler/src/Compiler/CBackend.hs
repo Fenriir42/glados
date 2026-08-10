@@ -3,12 +3,13 @@
 -- Each bytecode function becomes one C function over the runtime's
 -- QtValue type; the VM operand stack becomes a per-function C array,
 -- jumps become labels and gotos, and calls to user functions become
--- direct C calls (anything else routes through qt_call_builtin).
+-- direct C calls (supported builtins route through qt_call_builtin).
 --
 -- Translation is total over the stage-2 subset and fails with a clear
--- message on instructions later stages will cover (structs, closures,
--- errors, FFI, async), so unsupported programs error at compile time
--- rather than at runtime.
+-- message on instructions and builtins later stages will cover
+-- (structs, closures, errors, FFI, async), so unsupported programs
+-- error at compile time rather than at runtime -- which is what lets
+-- the differential harness (stage 3) treat them as clean skips.
 module Compiler.CBackend (emitC) where
 
 import AST.Types.Common (FuncName (..), VarName (..))
@@ -174,6 +175,28 @@ unOpName UOpBitNot = "QT_UOP_BITNOT"
 pushConst :: Text -> Text
 pushConst expr = "  st[sp++] = " <> expr <> ";"
 
+-- | Builtins qt_call_builtin implements (keep in sync with the runtime).
+-- Calls to any other non-user function fail at translation time so the
+-- differential harness can classify them as skips, not runtime diffs.
+supportedBuiltins :: Set.Set Text
+supportedBuiltins =
+  Set.fromList
+    [ "print",
+      "println",
+      "io.print",
+      "io.println",
+      "string.to_str",
+      "string.concat",
+      "string.from_int",
+      "string.from_float",
+      "len",
+      "array.len",
+      "push",
+      "array.push",
+      "pop",
+      "array.pop"
+    ]
+
 emitInstr :: FuncName -> Set.Set FuncName -> Text -> (Int, Instruction) -> Either String Text
 emitInstr fname userFns poolName (idx, instr) = case instr of
   IPush v -> pushValue v
@@ -190,7 +213,18 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
     ok $ "  if (qt_truthy(st[--sp])) goto I" <> T.pack (show t) <> ";"
   IJumpFalse (InstructionPointer t) ->
     ok $ "  if (!qt_truthy(st[--sp])) goto I" <> T.pack (show t) <> ";"
-  ICall (FunctionRef target) argc -> ok (emitCall target argc)
+  ICall (FunctionRef target) argc
+    | Set.member target userFns || Set.member (unFuncName target) supportedBuiltins ->
+        ok (emitCall target argc)
+    | otherwise ->
+        Left $
+          "native backend: unsupported builtin `"
+            ++ T.unpack (unFuncName target)
+            ++ "` (in function `"
+            ++ T.unpack (unFuncName fname)
+            ++ "` at offset "
+            ++ show idx
+            ++ ")"
   IRet -> ok "  return st[--sp];"
   INop -> ok "  ;"
   ICovMark _ -> ok "  ;"

@@ -5,6 +5,7 @@ import qualified Compiler (Options (..), options, prologue)
 import Compiler.Disasm (disassemble)
 import Compiler.Serialize (decodeBytecodes, encodeBytecodes)
 import qualified Data.ByteString.Lazy as BSL
+import NativeDiff (runNativeDiff)
 import Options.Applicative
 import PM
   ( runBuild,
@@ -27,6 +28,7 @@ data Command
   | CmdBuild Bool (Maybe String)
   | CmdRun
   | CmdTest (Maybe FilePath) Bool (Maybe Int) (Maybe FilePath)
+  | CmdNativeDiff [FilePath]
   | CmdLint
   | CmdFmt Bool
   | CmdDoc String FilePath
@@ -58,6 +60,10 @@ commandParser =
         "test"
         testParser
         "discover and run all *_test.qa files"
+      <> cmd
+        "native-diff"
+        nativeDiffParser
+        "run .qa files under both VM and native binary, diff outputs"
       <> cmd
         "lint"
         (pure CmdLint)
@@ -95,6 +101,11 @@ testParser =
     <*> switch (long "cov" <> help "print function coverage report after tests")
     <*> optional (option auto (long "cov-min" <> metavar "PCT" <> help "fail if coverage is below PCT%"))
     <*> optional (strOption (long "cov-out" <> metavar "FILE" <> help "write JSON coverage report to FILE"))
+
+nativeDiffParser :: Parser Command
+nativeDiffParser =
+  CmdNativeDiff
+    <$> many (argument str (metavar "PATH..." <> help "files or directories to diff (default: tests/)"))
 
 fmtParser :: Parser Command
 fmtParser =
@@ -140,6 +151,7 @@ dispatch (CmdInit name) = runInit name
 dispatch (CmdBuild rel target) = runBuild rel target
 dispatch CmdRun = runRun
 dispatch (CmdTest mf cov covMin covOut) = runTest mf cov covMin covOut
+dispatch (CmdNativeDiff paths) = runNativeDiff paths
 dispatch CmdLint = runLint
 dispatch (CmdFmt check) = runFmt check
 dispatch (CmdDoc fmt out) = runDoc fmt out
