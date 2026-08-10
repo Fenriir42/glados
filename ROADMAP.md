@@ -156,7 +156,7 @@ replaces the interpreter.
 
 | Stage | Deliverable | Notes |
 |-------|-------------|-------|
-| 1. C runtime foundations | `runtime/quant_runtime.{h,c}` | `QuantValue` tagged union; heap objects for arrays, dicts, structs, strings; allocation via Boehm GC (fallback: never-free arena); `print`/`println`; buildable and unit-testable without any codegen |
+| ~~1. C runtime foundations~~ | `runtime/quant_runtime.{h,c}` | Done -- `QtValue` tagged union; arrays/dicts/structs/errors as heap objects; never-free arena allocation (`-DQUANT_GC` hooks in Boehm); `print`/`println`/format holes byte-identical to the VM (verified by diff); `make runtime-test` runs 93 C unit checks |
 | 2. Core translator + driver | `glados build --target=c` | Translate one `.qbc` function to one C function: stack ops, arithmetic, comparisons, jumps as labels/`goto`, `ICall` as direct C calls; emit `main.c`, link runtime, invoke `cc`; hello-world to fibonacci territory |
 | 3. Differential test harness | `glados test --native` | Run every showcase under VM and native binary, diff stdout and exit codes; CI gate from this point on -- semantics regressions become impossible to miss |
 | 4. Builtin coverage | runtime ports of `string.*`, `math.*`, `array.*`, `dict.*`, `io.*`, `sys.*`, `file.*`, `buf.*`, `json.*`, `regex.*` | Largest single chunk of runtime work; port in the order the test corpus demands it |

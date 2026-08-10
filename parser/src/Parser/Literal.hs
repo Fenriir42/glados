@@ -1,6 +1,6 @@
 module Parser.Literal where
 
-import AST.Types.Common (Located (..))
+import AST.Types.Common (Located (..), posColumn, spanEnd, spanStart, unColumn)
 import AST.Types.Literal
   ( ArrayLiteral (..),
     BoolLiteral (..),
@@ -46,7 +46,14 @@ parseFloatLiteral = do
   Located intSpan (TokInt n BaseDec) <- MP.satisfy isInt
   Located decimalSpan _ <- matchSymbol "."
   Located fracSpan (TokInt fracN BaseDec) <- MP.satisfy isInt
-  let floatVal = read (show n ++ "." ++ show fracN) :: Double
+  -- The fraction's digit count must come from the source width, not the
+  -- numeric value: in 0.001 the fractional token is "001" but its value
+  -- is 1, so reconstructing from the value would yield 0.1.
+  let fracDigits =
+        max
+          (length (show fracN))
+          (unColumn (posColumn (spanEnd fracSpan)) - unColumn (posColumn (spanStart fracSpan)))
+      floatVal = fromIntegral n + fromIntegral fracN / (10 ^ fracDigits) :: Double
       combinedSpan = intSpan <> decimalSpan <> fracSpan
   return $ Located combinedSpan (FloatLiteral floatVal)
 

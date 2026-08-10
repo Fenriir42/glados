@@ -58,6 +58,26 @@ $(CABAL-EXTRACT): cabal-extract
 tests_run:
 	@ cabal test all
 
+# --- Native backend C runtime (see ROADMAP: Native backend stage 1) --------
+
+RUNTIME_CC     ?= cc
+RUNTIME_CFLAGS ?= -std=c11 -Wall -Wextra -Werror -O2
+
+.PHONY: runtime
+runtime: .build/libquant_runtime.a
+
+.build/libquant_runtime.a: runtime/quant_runtime.c runtime/quant_runtime.h
+	@ mkdir -p .build
+	@ $(RUNTIME_CC) $(RUNTIME_CFLAGS) -c runtime/quant_runtime.c -o .build/quant_runtime.o
+	@ ar rcs $@ .build/quant_runtime.o
+	@ $(LOG_TIME) "Build $(C_CYAN)libquant_runtime.a$(C_RESET)"
+
+.PHONY: runtime-test
+runtime-test: .build/libquant_runtime.a
+	@ $(RUNTIME_CC) $(RUNTIME_CFLAGS) runtime/test_runtime.c .build/libquant_runtime.a -o .build/runtime-test
+	@ .build/runtime-test
+	@ $(LOG_TIME) "Runtime tests $(C_GREEN)passed$(C_RESET)"
+
 .PHONY: clean
 clean:
 	@ $(RM) .build/mk.*
