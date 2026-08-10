@@ -69,12 +69,11 @@ immediately.
 <Aside type="caution">
 The native backend currently covers a subset of the language: functions,
 recursion, control flow, int/float/bool/string scalars, arrays, casts, the
-printing builtins, every pure `string.*` builtin (except `hash`), every
-`math.*` builtin, and `sys.exit`. Structs, enums, errors, closures, dicts,
-FFI, async, and the heap/IO builtins (`string.split`/`join`, file and fd
-I/O, `buf.*`, `dict.*`, `json.*`, `regex.*`) are not yet translated --
-programs using them fail at compile time with a message naming the
-unsupported instruction or builtin. Coverage grows
+printing builtins, and the full `string.*` (except `hash`), `math.*`,
+`sys.*`, `file.*`, and `buf.*` builtin families. Structs, enums, errors,
+closures, dicts, FFI, async, and the `dict.*`/`json.*`/`regex.*`/`socket.*`
+builtins are not yet translated -- programs using them fail at compile time
+with a message naming the unsupported instruction or builtin. Coverage grows
 stage by stage; see ROADMAP.md.
 </Aside>
 

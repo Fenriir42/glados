@@ -39,7 +39,8 @@ emitC bcs
             ++ map protoLine bcs
             ++ [""]
             ++ funcs
-            ++ [ "int main(void) {",
+            ++ [ "int main(int argc, char **argv) {",
+                 "    qt_set_args(argc, argv);",
                  "    " <> mangle (FuncName "main") <> "(0, (const QtValue *)0);",
                  "    return 0;",
                  "}"
@@ -190,11 +191,13 @@ supportedBuiltins =
       "push",
       "array.push",
       "pop",
-      "array.pop",
-      "sys.exit"
+      "array.pop"
     ]
       ++ map ("string." <>) stringBuiltins
       ++ map ("math." <>) mathBuiltins
+      ++ map ("sys." <>) sysBuiltins
+      ++ map ("file." <>) fileBuiltins
+      ++ map ("buf." <>) bufBuiltins
 
 -- | string.* builtins the C runtime implements (stage 4).  Excludes
 -- `hash`, whose VM definition folds over unbounded Integers.
@@ -223,7 +226,10 @@ stringBuiltins =
     "replace_first",
     "repeat",
     "to_int",
-    "to_float"
+    "to_float",
+    "split",
+    "join",
+    "format"
   ]
 
 -- | math.* builtins the C runtime implements (stage 4).
@@ -253,6 +259,66 @@ mathBuiltins =
     "fmax",
     "pi",
     "tau"
+  ]
+
+-- | sys.* builtins the C runtime implements (stage 4).  `sys.args`/`argc`
+-- are included but are not output-diffable under the harness: the VM sees
+-- the host `glados` process arguments while the native binary sees its own.
+sysBuiltins :: [Text]
+sysBuiltins =
+  [ "exit",
+    "write",
+    "read",
+    "open",
+    "close",
+    "flush",
+    "isatty",
+    "stdin_fd",
+    "stdout_fd",
+    "stderr_fd",
+    "o_rdonly",
+    "o_wronly",
+    "o_rdwr",
+    "o_creat",
+    "o_trunc",
+    "o_append",
+    "time",
+    "time_millis",
+    "sleep",
+    "argc",
+    "args",
+    "env",
+    "set_env",
+    "platform",
+    "hostname",
+    "getcwd",
+    "chdir",
+    "system"
+  ]
+
+-- | file.* builtins the C runtime implements (stage 4).
+fileBuiltins :: [Text]
+fileBuiltins =
+  [ "read",
+    "write",
+    "append",
+    "exists",
+    "delete",
+    "rename",
+    "size",
+    "lines"
+  ]
+
+-- | buf.* builtins the C runtime implements (stage 4).
+bufBuiltins :: [Text]
+bufBuiltins =
+  [ "new",
+    "write",
+    "writeln",
+    "to_str",
+    "len",
+    "clear",
+    "flush"
   ]
 
 emitInstr :: FuncName -> Set.Set FuncName -> Text -> (Int, Instruction) -> Either String Text

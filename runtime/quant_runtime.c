@@ -1,13 +1,23 @@
 /* quant_runtime.c - C runtime for the Quant native backend (stage 1). */
 
+/* Feature-test macros must precede every system header: they enable the
+ * POSIX I/O (open/read/write/isatty), setenv, gethostname, and usleep the
+ * sys.* and file.* builtins rely on. */
+#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+
 #include "quant_runtime.h"
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
 
 #ifdef QUANT_GC
 #include <gc.h>
@@ -1252,8 +1262,354 @@ static QtValue builtin_string(const char *fn, size_t nargs, const QtValue *args)
         }
         return qt_float(v);
     }
+    if (strcmp(fn, "split") == 0 && nargs == 2) {
+        const char *s = qt_to_string(args[0]);
+        const char *sep = qt_to_string(args[1]);
+        QtValue out = qt_array_new();
+        size_t seplen = strlen(sep);
+        if (seplen == 0) {
+            qt_array_push(out, qt_string(qt_strdup(s)));
+            return out;
+        }
+        const char *start = s;
+        const char *p;
+        while ((p = strstr(start, sep)) != NULL) {
+            qt_array_push(out, string_slice(start, 0, (size_t)(p - start)));
+            start = p + seplen;
+        }
+        qt_array_push(out, qt_string(qt_strdup(start)));
+        return out;
+    }
+    if (strcmp(fn, "join") == 0 && nargs == 2 && args[0].tag == QT_ARRAY) {
+        const char *sep = qt_to_string(args[1]);
+        size_t seplen = strlen(sep);
+        QtArray *a = args[0].as.arr;
+        size_t total = (a->len > 0) ? seplen * (a->len - 1) : 0;
+        for (size_t i = 0; i < a->len; i++) {
+            total += strlen(qt_to_string(a->items[i]));
+        }
+        char *out = qt_alloc(total + 1);
+        size_t w = 0;
+        for (size_t i = 0; i < a->len; i++) {
+            if (i > 0) {
+                memcpy(out + w, sep, seplen);
+                w += seplen;
+            }
+            const char *e = qt_to_string(a->items[i]);
+            size_t el = strlen(e);
+            memcpy(out + w, e, el);
+            w += el;
+        }
+        out[w] = '\0';
+        return qt_string(out);
+    }
+    if (strcmp(fn, "format") == 0 && nargs == 2 && args[1].tag == QT_ARRAY) {
+        QtArray *a = args[1].as.arr;
+        return qt_string(qt_apply_format(qt_to_string(args[0]), a->len, a->items));
+    }
     char msg[128];
     snprintf(msg, sizeof(msg), "string.%s: bad arguments", fn);
+    qt_panic(msg);
+}
+
+/* ------------------------------------------------------------------ */
+/* sys.* / file.* / buf.* builtins (see ROADMAP: Native backend stage 4) */
+
+/* Command-line arguments, captured by main() via qt_set_args. */
+static int qt_argc = 0;
+static char **qt_argv = NULL;
+
+void qt_set_args(int argc, char **argv) {
+    qt_argc = argc;
+    qt_argv = argv;
+}
+
+/* Write a string's bytes to a raw fd, flushing stdio first so that output
+ * ordering matches the VM.  Returns bytes written, or -1 on error. */
+static int64_t fd_write_str(int64_t fd, const char *s) {
+    if (fd == 1) {
+        fflush(stdout);
+    } else if (fd == 2) {
+        fflush(stderr);
+    }
+    size_t len = strlen(s);
+    ssize_t r = write((int)fd, s, len);
+    return r < 0 ? -1 : (int64_t)r;
+}
+
+static const char *platform_name(void) {
+#if defined(__APPLE__)
+    return "macos";
+#elif defined(_WIN32)
+    return "windows";
+#else
+    return "linux";
+#endif
+}
+
+static QtValue builtin_sys(const char *fn, size_t nargs, const QtValue *args) {
+    /* Zero-argument fd numbers and POSIX open flags. */
+    if (nargs == 0) {
+        if (strcmp(fn, "stdin_fd") == 0) {
+            return qt_int(0);
+        }
+        if (strcmp(fn, "stdout_fd") == 0) {
+            return qt_int(1);
+        }
+        if (strcmp(fn, "stderr_fd") == 0) {
+            return qt_int(2);
+        }
+        if (strcmp(fn, "o_rdonly") == 0) {
+            return qt_int(0);
+        }
+        if (strcmp(fn, "o_wronly") == 0) {
+            return qt_int(1);
+        }
+        if (strcmp(fn, "o_rdwr") == 0) {
+            return qt_int(2);
+        }
+        if (strcmp(fn, "o_creat") == 0) {
+            return qt_int(64);
+        }
+        if (strcmp(fn, "o_trunc") == 0) {
+            return qt_int(512);
+        }
+        if (strcmp(fn, "o_append") == 0) {
+            return qt_int(1024);
+        }
+        if (strcmp(fn, "time") == 0) {
+            return qt_int((int64_t)time(NULL));
+        }
+        if (strcmp(fn, "time_millis") == 0) {
+            return qt_int((int64_t)(clock() / (CLOCKS_PER_SEC / 1000)));
+        }
+        if (strcmp(fn, "argc") == 0) {
+            return qt_int(qt_argc > 0 ? qt_argc - 1 : 0);
+        }
+        if (strcmp(fn, "args") == 0) {
+            QtValue out = qt_array_new();
+            for (int i = 1; i < qt_argc; i++) {
+                qt_array_push(out, qt_string(qt_argv[i]));
+            }
+            return out;
+        }
+        if (strcmp(fn, "platform") == 0) {
+            return qt_string(platform_name());
+        }
+        if (strcmp(fn, "hostname") == 0) {
+            char buf[256];
+            if (gethostname(buf, sizeof(buf)) != 0) {
+                buf[0] = '\0';
+            }
+            buf[sizeof(buf) - 1] = '\0';
+            return qt_string(qt_strdup(buf));
+        }
+        if (strcmp(fn, "getcwd") == 0) {
+            char buf[4096];
+            const char *r = getcwd(buf, sizeof(buf));
+            return qt_string(qt_strdup(r ? r : ""));
+        }
+    }
+    if (nargs == 1) {
+        if (strcmp(fn, "sleep") == 0) {
+            usleep((useconds_t)(qt_want_int(args[0], "sys.sleep") * 1000));
+            return qt_unit();
+        }
+        if (strcmp(fn, "close") == 0) {
+            return qt_bool(close((int)qt_want_int(args[0], "sys.close")) == 0);
+        }
+        if (strcmp(fn, "flush") == 0) {
+            int64_t fd = qt_want_int(args[0], "sys.flush");
+            if (fd == 1) {
+                fflush(stdout);
+            } else if (fd == 2) {
+                fflush(stderr);
+            }
+            return qt_unit();
+        }
+        if (strcmp(fn, "isatty") == 0) {
+            return qt_bool(isatty((int)qt_want_int(args[0], "sys.isatty")) == 1);
+        }
+        if (strcmp(fn, "env") == 0) {
+            const char *v = getenv(qt_to_string(args[0]));
+            return qt_string(v ? qt_strdup(v) : "");
+        }
+        if (strcmp(fn, "chdir") == 0) {
+            return qt_bool(chdir(qt_to_string(args[0])) == 0);
+        }
+        if (strcmp(fn, "system") == 0) {
+            int code = system(qt_to_string(args[0]));
+            return qt_int(code == -1 ? -1 : (int64_t)((code >> 8) & 0xff));
+        }
+    }
+    if (nargs == 2) {
+        if (strcmp(fn, "write") == 0) {
+            return qt_int(fd_write_str(qt_want_int(args[0], "sys.write"),
+                                       qt_to_string(args[1])));
+        }
+        if (strcmp(fn, "read") == 0) {
+            int64_t fd = qt_want_int(args[0], "sys.read");
+            int64_t n = qt_want_int(args[1], "sys.read");
+            if (n < 0) {
+                n = 0;
+            }
+            char *buf = qt_alloc((size_t)n + 1);
+            ssize_t r = read((int)fd, buf, (size_t)n);
+            buf[r < 0 ? 0 : r] = '\0';
+            return qt_string(buf);
+        }
+        if (strcmp(fn, "open") == 0) {
+            const char *path = qt_to_string(args[0]);
+            int64_t f = qt_want_int(args[1], "sys.open");
+            int mode = (int)(f & 3);
+            int oflags = (mode == 1) ? O_WRONLY : (mode == 2) ? O_RDWR : O_RDONLY;
+            if (f & 64) {
+                oflags |= O_CREAT;
+            }
+            if (f & 512) {
+                oflags |= O_TRUNC;
+            }
+            if (f & 1024) {
+                oflags |= O_APPEND;
+            }
+            int fd = open(path, oflags, 0644);
+            return qt_int(fd);
+        }
+        if (strcmp(fn, "set_env") == 0) {
+            setenv(qt_to_string(args[0]), qt_to_string(args[1]), 1);
+            return qt_bool(1);
+        }
+    }
+    if (strcmp(fn, "exit") == 0 && nargs == 1) {
+        exit((int)qt_want_int(args[0], "sys.exit"));
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "sys.%s: bad arguments", fn);
+    qt_panic(msg);
+}
+
+static QtValue builtin_file(const char *fn, size_t nargs, const QtValue *args) {
+    const char *path = qt_to_string(args[0]);
+    if (strcmp(fn, "exists") == 0 && nargs == 1) {
+        struct stat sb;
+        return qt_bool(stat(path, &sb) == 0);
+    }
+    if (strcmp(fn, "delete") == 0 && nargs == 1) {
+        return qt_bool(remove(path) == 0);
+    }
+    if (strcmp(fn, "size") == 0 && nargs == 1) {
+        struct stat sb;
+        return qt_int(stat(path, &sb) == 0 ? (int64_t)sb.st_size : -1);
+    }
+    if (strcmp(fn, "rename") == 0 && nargs == 2) {
+        return qt_bool(rename(path, qt_to_string(args[1])) == 0);
+    }
+    if ((strcmp(fn, "read") == 0 || strcmp(fn, "lines") == 0) && nargs == 1) {
+        FILE *fp = fopen(path, "rb");
+        if (!fp) {
+            return strcmp(fn, "read") == 0 ? qt_string("") : qt_array_new();
+        }
+        size_t cap = 4096;
+        size_t len = 0;
+        char *buf = qt_alloc(cap);
+        size_t got;
+        while ((got = fread(buf + len, 1, cap - len, fp)) > 0) {
+            len += got;
+            if (len == cap) {
+                size_t ncap = cap * 2;
+                char *nb = qt_alloc(ncap);
+                memcpy(nb, buf, len);
+                buf = nb;
+                cap = ncap;
+            }
+        }
+        fclose(fp);
+        buf[len] = '\0';
+        if (strcmp(fn, "read") == 0) {
+            return qt_string(buf);
+        }
+        /* file.lines: split on '\n'; a trailing newline does not yield a
+         * final empty element (matching Haskell's Data.Text.lines). */
+        QtValue out = qt_array_new();
+        size_t start = 0;
+        for (size_t i = 0; i <= len; i++) {
+            if (i == len || buf[i] == '\n') {
+                if (i == len && start == len) {
+                    break; /* no trailing empty line */
+                }
+                qt_array_push(out, string_slice(buf, start, i));
+                start = i + 1;
+            }
+        }
+        return out;
+    }
+    if ((strcmp(fn, "write") == 0 || strcmp(fn, "append") == 0) && nargs == 2) {
+        FILE *fp = fopen(path, strcmp(fn, "append") == 0 ? "ab" : "wb");
+        if (!fp) {
+            return qt_bool(0);
+        }
+        const char *content = qt_to_string(args[1]);
+        size_t clen = strlen(content);
+        int ok = fwrite(content, 1, clen, fp) == clen;
+        fclose(fp);
+        return qt_bool(ok);
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "file.%s: bad arguments", fn);
+    qt_panic(msg);
+}
+
+static QtValue builtin_buf(const char *fn, size_t nargs, const QtValue *args) {
+    if (strcmp(fn, "new") == 0 && nargs == 0) {
+        return qt_array_new();
+    }
+    /* All remaining buf.* take the buffer (an array of strings) first. */
+    QtArray *b = args[0].as.arr;
+    if (strcmp(fn, "write") == 0 && nargs == 2) {
+        qt_array_push(args[0], args[1]);
+        return qt_unit();
+    }
+    if (strcmp(fn, "writeln") == 0 && nargs == 2) {
+        qt_array_push(args[0], qt_string(qt_to_string(args[1])));
+        qt_array_push(args[0], qt_string("\n"));
+        return qt_unit();
+    }
+    if (strcmp(fn, "clear") == 0 && nargs == 1) {
+        b->len = 0;
+        return qt_unit();
+    }
+    if (strcmp(fn, "len") == 0 && nargs == 1) {
+        int64_t total = 0;
+        for (size_t i = 0; i < b->len; i++) {
+            total += (int64_t)utf8_count(qt_to_string(b->items[i]));
+        }
+        return qt_int(total);
+    }
+    if ((strcmp(fn, "to_str") == 0 || strcmp(fn, "flush") == 0)) {
+        size_t total = 0;
+        for (size_t i = 0; i < b->len; i++) {
+            total += strlen(qt_to_string(b->items[i]));
+        }
+        char *out = qt_alloc(total + 1);
+        size_t w = 0;
+        for (size_t i = 0; i < b->len; i++) {
+            const char *e = qt_to_string(b->items[i]);
+            size_t el = strlen(e);
+            memcpy(out + w, e, el);
+            w += el;
+        }
+        out[w] = '\0';
+        if (strcmp(fn, "to_str") == 0 && nargs == 1) {
+            return qt_string(out);
+        }
+        if (strcmp(fn, "flush") == 0 && nargs == 2) {
+            int64_t r = fd_write_str(qt_want_int(args[1], "buf.flush"), out);
+            b->len = 0;
+            return qt_int(r);
+        }
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "buf.%s: bad arguments", fn);
     qt_panic(msg);
 }
 
@@ -1400,14 +1756,20 @@ QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
         nargs == 1) {
         return qt_array_pop(args[0]);
     }
-    if (strcmp(name, "sys.exit") == 0 && nargs == 1) {
-        exit((int)qt_want_int(args[0], "sys.exit"));
-    }
     if (strncmp(name, "string.", 7) == 0) {
         return builtin_string(name + 7, nargs, args);
     }
     if (strncmp(name, "math.", 5) == 0) {
         return builtin_math(name + 5, nargs, args);
+    }
+    if (strncmp(name, "sys.", 4) == 0) {
+        return builtin_sys(name + 4, nargs, args);
+    }
+    if (strncmp(name, "file.", 5) == 0) {
+        return builtin_file(name + 5, nargs, args);
+    }
+    if (strncmp(name, "buf.", 4) == 0) {
+        return builtin_buf(name + 4, nargs, args);
     }
     char msg[256];
     snprintf(msg, sizeof(msg), "native backend: unsupported builtin `%s`",

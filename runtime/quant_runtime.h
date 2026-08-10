@@ -248,6 +248,9 @@ QtValue qt_cast_string(QtValue v);
 
 QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args);
 
+/* Capture argv so sys.args / sys.argc can see the command line. */
+void qt_set_args(int argc, char **argv);
+
 /* ------------------------------------------------------------------ */
 /* Failure                                                             */
 

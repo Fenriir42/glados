@@ -50,5 +50,26 @@ fn main() -> int {
     println("pi = %f", math.pi());
     println("fmax = %f", math.fmax(1.5, 2.5));
 
+    // --- string.* : array-valued builtins ---
+    parts: [str] = string.split("a,b,c", ",");
+    println("split[0] = %s", parts[0]);
+    println("split[2] = %s", parts[2]);
+    println("join = %s", string.join(parts, "-"));
+    println("format = %s", string.format("%s=%d", ["x", 7]));
+
+    // --- file.* : round-trip through a temp file ---
+    p: str = "/tmp/quant_native_builtins.txt";
+    println("write ok = %d", file.write(p, "one\ntwo\nthree\n"));
+    println("exists = %d", file.exists(p));
+    println("size = %d", file.size(p));
+    println("read = %s", file.read(p));
+    lines: [str] = file.lines(p);
+    println("lines len = %d", len(lines));
+    println("lines[1] = %s", lines[1]);
+    println("append ok = %d", file.append(p, "four\n"));
+    println("lines len after append = %d", len(file.lines(p)));
+    println("delete ok = %d", file.delete(p));
+    println("exists after delete = %d", file.exists(p));
+
     return 0;
 }
