@@ -1,6 +1,6 @@
 module Main where
 
-import Compile (compileSource, execute, resolveStdlib)
+import Compile (buildNative, compileSource, emitCFile, execute, resolveStdlib)
 import qualified Compiler (Options (..), options, prologue)
 import Compiler.Disasm (disassemble)
 import Compiler.Serialize (decodeBytecodes, encodeBytecodes)
@@ -24,7 +24,7 @@ import System.Exit (exitFailure)
 data Command
   = CmdCompiler Compiler.Options
   | CmdInit String
-  | CmdBuild Bool
+  | CmdBuild Bool (Maybe String)
   | CmdRun
   | CmdTest (Maybe FilePath) Bool (Maybe Int) (Maybe FilePath)
   | CmdLint
@@ -86,6 +86,7 @@ buildParser :: Parser Command
 buildParser =
   CmdBuild
     <$> switch (long "release" <> help "enable release optimisations")
+    <*> optional (strOption (long "target" <> metavar "TARGET" <> help "build target: c (native binary via the C backend)"))
 
 testParser :: Parser Command
 testParser =
@@ -136,7 +137,7 @@ main = execParser opts >>= dispatch
 dispatch :: Command -> IO ()
 dispatch (CmdCompiler o) = runCompiler o
 dispatch (CmdInit name) = runInit name
-dispatch (CmdBuild rel) = runBuild rel
+dispatch (CmdBuild rel target) = runBuild rel target
 dispatch CmdRun = runRun
 dispatch (CmdTest mf cov covMin covOut) = runTest mf cov covMin covOut
 dispatch CmdLint = runLint
@@ -148,7 +149,7 @@ dispatch CmdClean = runClean
 -- Direct compiler subcommand
 
 runCompiler :: Compiler.Options -> IO ()
-runCompiler (Compiler.Options mFile dump mOut mLoad mStdlib) =
+runCompiler (Compiler.Options mFile dump mOut mLoad mStdlib mNative mEmitC) =
   case mLoad of
     Just bcFile -> do
       bs <- BSL.readFile bcFile
@@ -158,11 +159,14 @@ runCompiler (Compiler.Options mFile dump mOut mLoad mStdlib) =
       filePath <- maybe (die "specify a source file or --load FILE") return mFile
       stdlibDir <- resolveStdlib mStdlib
       bytecodes <- compileSource stdlibDir filePath
-      if dump
-        then putStr (disassemble bytecodes)
-        else case mOut of
-          Just outFile -> BSL.writeFile outFile (encodeBytecodes bytecodes)
-          Nothing -> execute bytecodes
+      case (mNative, mEmitC) of
+        (Just bin, _) -> buildNative bytecodes bin
+        (Nothing, Just cFile) -> emitCFile bytecodes cFile
+        (Nothing, Nothing)
+          | dump -> putStr (disassemble bytecodes)
+          | otherwise -> case mOut of
+              Just outFile -> BSL.writeFile outFile (encodeBytecodes bytecodes)
+              Nothing -> execute bytecodes
 
 -- ---------------------------------------------------------------------------
 -- Helpers

@@ -166,6 +166,10 @@ int qt_value_eq(QtValue a, QtValue b);
  * A 400-byte buffer covers every double; smaller buffers truncate safely. */
 void qt_format_float(char *buf, size_t bufsize, double f);
 
+/* Raw Haskell show (no integral-".0" shortcut): fixed in [0.1, 1e7),
+ * scientific outside.  Used by string casts (evalCast semantics). */
+void qt_format_float_show(char *buf, size_t bufsize, double f);
+
 /* renderValue semantics (print/println): booleans are "True"/"False",
  * unit is empty, refs render as "<array#..>" style placeholders.
  * Returns a runtime-allocated string. */
@@ -186,6 +190,63 @@ void qt_println(QtValue v);
 /* print/println with format arguments: print("x=% y=%", a, b) */
 void qt_print_fmt(const char *fmt, size_t nargs, const QtValue *args);
 void qt_println_fmt(const char *fmt, size_t nargs, const QtValue *args);
+
+/* ------------------------------------------------------------------ */
+/* Operators (IBinary / IUnary / ICast semantics)                      */
+
+typedef enum {
+    QT_BOP_ADD,
+    QT_BOP_SUB,
+    QT_BOP_MUL,
+    QT_BOP_DIV,
+    QT_BOP_MOD,
+    QT_BOP_EQ,
+    QT_BOP_NEQ,
+    QT_BOP_LT,
+    QT_BOP_LTE,
+    QT_BOP_GT,
+    QT_BOP_GTE,
+    QT_BOP_AND,
+    QT_BOP_OR,
+    QT_BOP_BITAND,
+    QT_BOP_BITOR,
+    QT_BOP_BITXOR,
+    QT_BOP_SHL,
+    QT_BOP_SHR
+} QtBinOp;
+
+typedef enum {
+    QT_UOP_NEG,
+    QT_UOP_NOT,
+    QT_UOP_BITNOT
+} QtUnOp;
+
+/* evalBinary semantics: int/float promotion; div and mod are floor
+ * division like Haskell; comparisons go through double like the VM's
+ * cmpOp; == and != use valEq (references never compare equal). */
+QtValue qt_binary(QtBinOp op, QtValue a, QtValue b);
+QtValue qt_unary(QtUnOp op, QtValue v);
+
+/* IJumpTrue/IJumpFalse condition: bools as-is, ints nonzero, else panic. */
+int qt_truthy(QtValue v);
+
+/* Unwrap an int value or panic with the given context. */
+int64_t qt_want_int(QtValue v, const char *ctx);
+
+/* IArrayGetOrNew: like get, but a missing/unit slot is replaced with a
+ * fresh empty array whose ref is returned (nested array writes). */
+QtValue qt_array_get_or_new(QtValue arr, int64_t idx);
+
+/* evalCast semantics. */
+QtValue qt_cast_int(QtValue v);
+QtValue qt_cast_float(QtValue v);
+QtValue qt_cast_bool(QtValue v);
+QtValue qt_cast_string(QtValue v);
+
+/* ------------------------------------------------------------------ */
+/* Builtin dispatch (grown per backend stage; unknown names panic)     */
+
+QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args);
 
 /* ------------------------------------------------------------------ */
 /* Failure                                                             */

@@ -64,6 +64,7 @@ export default defineConfig({
 						{ label: 'Sockets', slug: 'system/sockets' },
 						{ label: 'FFI (extern)', slug: 'system/ffi' },
 						{ label: 'Low-Level I/O', slug: 'system/low-level-io' },
+						{ label: 'Native Backend', slug: 'system/native-backend' },
 					],
 				},
 				{

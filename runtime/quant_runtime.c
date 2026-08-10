@@ -398,7 +398,12 @@ int qt_value_eq(QtValue a, QtValue b) {
 /* ------------------------------------------------------------------ */
 /* Rendering                                                           */
 
-void qt_format_float(char *buf, size_t bufsize, double f) {
+/* Shared float rendering.  With integral_fixed set this is the VM's
+ * formatFloat (integral floats print as "<digits>.0" at any magnitude);
+ * without it this is raw Haskell show (fixed notation only in
+ * [0.1, 1e7), scientific outside, used by string casts). */
+static void format_float_core(char *buf, size_t bufsize, double f,
+                              int integral_fixed) {
     if (f != f) {
         snprintf(buf, bufsize, "NaN");
         return;
@@ -442,11 +447,8 @@ void qt_format_float(char *buf, size_t bufsize, double f) {
         nd--;
     }
     digits[nd] = '\0';
-    /* VM formatFloat: any integral float prints as "<digits>.0" regardless
-     * of magnitude; non-integral floats follow Haskell show, which uses
-     * fixed notation for 0.1 <= x < 1e7 and scientific outside. */
     int intdigits = exp10 + 1;
-    int integral = intdigits >= nd;
+    int integral = integral_fixed && intdigits >= nd;
     if (integral || (exp10 >= -1 && exp10 <= 6)) {
         size_t o = 0;
         if (*sign != '\0' && o + 1 < bufsize) {
@@ -488,6 +490,14 @@ void qt_format_float(char *buf, size_t bufsize, double f) {
                      exp10);
         }
     }
+}
+
+void qt_format_float(char *buf, size_t bufsize, double f) {
+    format_float_core(buf, bufsize, f, 1);
+}
+
+void qt_format_float_show(char *buf, size_t bufsize, double f) {
+    format_float_core(buf, bufsize, f, 0);
 }
 
 static const char *render_scalar(QtValue v, int for_print) {
@@ -684,6 +694,359 @@ void qt_print_fmt(const char *fmt, size_t nargs, const QtValue *args) {
 void qt_println_fmt(const char *fmt, size_t nargs, const QtValue *args) {
     qt_print_fmt(fmt, nargs, args);
     fputc('\n', stdout);
+}
+
+/* ------------------------------------------------------------------ */
+/* Translator helpers                                                  */
+
+int qt_truthy(QtValue v) {
+    if (v.tag == QT_BOOL) {
+        return v.as.i != 0;
+    }
+    if (v.tag == QT_INT) {
+        return v.as.i != 0;
+    }
+    qt_panic("conditional jump: expected bool");
+}
+
+int64_t qt_want_int(QtValue v, const char *ctx) {
+    if (v.tag != QT_INT) {
+        qt_panic(ctx);
+    }
+    return v.as.i;
+}
+
+QtValue qt_array_get_or_new(QtValue arr, int64_t idx) {
+    QtArray *a = as_array(arr, "expected array in index");
+    if (idx >= 0 && (size_t)idx < a->len && a->items[idx].tag != QT_UNIT) {
+        return a->items[idx];
+    }
+    QtValue fresh = qt_array_new();
+    qt_array_set(arr, idx, fresh);
+    return fresh;
+}
+
+/* ------------------------------------------------------------------ */
+/* Operators                                                           */
+
+/* valEq semantics for == and !=: scalars structural, errors by name,
+ * references (arrays/dicts/structs/...) never equal. */
+static int val_eq_op(QtValue a, QtValue b) {
+    if (a.tag != b.tag) {
+        return 0;
+    }
+    switch (a.tag) {
+        case QT_INT:
+        case QT_BOOL:
+            return a.as.i == b.as.i;
+        case QT_FLOAT:
+            return a.as.f == b.as.f;
+        case QT_STRING:
+            return strcmp(a.as.s, b.as.s) == 0;
+        case QT_ERROR:
+            return strcmp(a.as.err->name, b.as.err->name) == 0;
+        case QT_UNIT:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static double num_as_double(QtValue v, const char *ctx) {
+    if (v.tag == QT_INT) {
+        return (double)v.as.i;
+    }
+    if (v.tag == QT_FLOAT) {
+        return v.as.f;
+    }
+    qt_panic(ctx);
+}
+
+/* Haskell div/mod: floor division. */
+static int64_t floor_div(int64_t a, int64_t b) {
+    int64_t q = a / b;
+    if ((a % b != 0) && ((a < 0) != (b < 0))) {
+        q -= 1;
+    }
+    return q;
+}
+
+static int64_t floor_mod(int64_t a, int64_t b) {
+    int64_t r = a % b;
+    if (r != 0 && ((r < 0) != (b < 0))) {
+        r += b;
+    }
+    return r;
+}
+
+static int both_int(QtValue a, QtValue b) {
+    return a.tag == QT_INT && b.tag == QT_INT;
+}
+
+static int numeric_pair(QtValue a, QtValue b) {
+    return (a.tag == QT_INT || a.tag == QT_FLOAT) &&
+           (b.tag == QT_INT || b.tag == QT_FLOAT);
+}
+
+QtValue qt_binary(QtBinOp op, QtValue a, QtValue b) {
+    switch (op) {
+        case QT_BOP_ADD:
+        case QT_BOP_SUB:
+        case QT_BOP_MUL:
+            if (both_int(a, b)) {
+                int64_t x = a.as.i, y = b.as.i;
+                return qt_int(op == QT_BOP_ADD   ? x + y
+                              : op == QT_BOP_SUB ? x - y
+                                                 : x * y);
+            }
+            if (numeric_pair(a, b)) {
+                double x = num_as_double(a, ""), y = num_as_double(b, "");
+                return qt_float(op == QT_BOP_ADD   ? x + y
+                                : op == QT_BOP_SUB ? x - y
+                                                   : x * y);
+            }
+            qt_panic("Binary arithmetic: bad types");
+        case QT_BOP_DIV:
+            if (both_int(a, b)) {
+                if (b.as.i == 0) {
+                    qt_panic("Division by zero");
+                }
+                return qt_int(floor_div(a.as.i, b.as.i));
+            }
+            if (numeric_pair(a, b)) {
+                return qt_float(num_as_double(a, "") / num_as_double(b, ""));
+            }
+            qt_panic("Binary division: bad types");
+        case QT_BOP_MOD:
+            if (both_int(a, b)) {
+                if (b.as.i == 0) {
+                    qt_panic("Modulo by zero");
+                }
+                return qt_int(floor_mod(a.as.i, b.as.i));
+            }
+            qt_panic("Binary modulo: bad types");
+        case QT_BOP_EQ:
+            return qt_bool(val_eq_op(a, b));
+        case QT_BOP_NEQ:
+            return qt_bool(!val_eq_op(a, b));
+        case QT_BOP_LT:
+        case QT_BOP_LTE:
+        case QT_BOP_GT:
+        case QT_BOP_GTE: {
+            /* cmpOp: both sides through double, exactly like the VM */
+            double x = num_as_double(a, "Comparison: bad types");
+            double y = num_as_double(b, "Comparison: bad types");
+            int r = op == QT_BOP_LT    ? x < y
+                    : op == QT_BOP_LTE ? x <= y
+                    : op == QT_BOP_GT  ? x > y
+                                       : x >= y;
+            return qt_bool(r);
+        }
+        case QT_BOP_AND:
+        case QT_BOP_OR:
+            if (a.tag == QT_BOOL && b.tag == QT_BOOL) {
+                return qt_bool(op == QT_BOP_AND ? (a.as.i && b.as.i)
+                                                : (a.as.i || b.as.i));
+            }
+            qt_panic("Binary logic: bad types");
+        case QT_BOP_BITAND:
+        case QT_BOP_BITOR:
+        case QT_BOP_BITXOR:
+        case QT_BOP_SHL:
+        case QT_BOP_SHR:
+            if (both_int(a, b)) {
+                int64_t x = a.as.i, y = b.as.i;
+                switch (op) {
+                    case QT_BOP_BITAND:
+                        return qt_int(x & y);
+                    case QT_BOP_BITOR:
+                        return qt_int(x | y);
+                    case QT_BOP_BITXOR:
+                        return qt_int(x ^ y);
+                    case QT_BOP_SHL:
+                        return qt_int(x << y);
+                    default:
+                        return qt_int(x >> y);
+                }
+            }
+            qt_panic("Binary bitwise: bad types");
+        default:
+            qt_panic("Binary: unknown operator");
+    }
+}
+
+QtValue qt_unary(QtUnOp op, QtValue v) {
+    switch (op) {
+        case QT_UOP_NEG:
+            if (v.tag == QT_INT) {
+                return qt_int(-v.as.i);
+            }
+            if (v.tag == QT_FLOAT) {
+                return qt_float(-v.as.f);
+            }
+            qt_panic("Unary negate: bad type");
+        case QT_UOP_NOT:
+            if (v.tag == QT_BOOL) {
+                return qt_bool(!v.as.i);
+            }
+            qt_panic("Unary not: bad type");
+        case QT_UOP_BITNOT:
+            if (v.tag == QT_INT) {
+                return qt_int(~v.as.i);
+            }
+            qt_panic("Unary bitnot: bad type");
+        default:
+            qt_panic("Unary: unknown operator");
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Casts                                                               */
+
+QtValue qt_cast_int(QtValue v) {
+    switch (v.tag) {
+        case QT_FLOAT:
+            return qt_int((int64_t)v.as.f); /* truncate toward zero */
+        case QT_INT:
+            return v;
+        case QT_BOOL:
+            return qt_int(v.as.i);
+        case QT_STRING: {
+            char *end = NULL;
+            int64_t n = strtoll(v.as.s, &end, 10);
+            if (end == v.as.s || *end != '\0') {
+                qt_panic("Cannot cast string to int");
+            }
+            return qt_int(n);
+        }
+        default:
+            qt_panic("Cast to int: bad type");
+    }
+}
+
+QtValue qt_cast_float(QtValue v) {
+    switch (v.tag) {
+        case QT_INT:
+            return qt_float((double)v.as.i);
+        case QT_FLOAT:
+            return v;
+        case QT_STRING: {
+            char *end = NULL;
+            double f = strtod(v.as.s, &end);
+            if (end == v.as.s || *end != '\0') {
+                qt_panic("Cannot cast string to float");
+            }
+            return qt_float(f);
+        }
+        default:
+            qt_panic("Cast to float: bad type");
+    }
+}
+
+QtValue qt_cast_bool(QtValue v) {
+    switch (v.tag) {
+        case QT_INT:
+            return qt_bool(v.as.i != 0);
+        case QT_BOOL:
+            return v;
+        default:
+            qt_panic("Cast to bool: bad type");
+    }
+}
+
+QtValue qt_cast_string(QtValue v) {
+    char buf[400];
+    switch (v.tag) {
+        case QT_INT:
+            snprintf(buf, sizeof(buf), "%" PRId64, v.as.i);
+            return qt_string(qt_strdup(buf));
+        case QT_FLOAT:
+            /* evalCast uses raw Haskell show, not formatFloat */
+            qt_format_float_show(buf, sizeof(buf), v.as.f);
+            return qt_string(qt_strdup(buf));
+        case QT_BOOL:
+            return qt_string(v.as.i ? "true" : "false");
+        case QT_STRING:
+            return v;
+        default:
+            qt_panic("Cast to string: bad type");
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Builtin dispatch                                                    */
+
+static QtValue builtin_concat(size_t nargs, const QtValue *args) {
+    size_t total = 1;
+    for (size_t i = 0; i < nargs; i++) {
+        total += strlen(qt_to_string(args[i]));
+    }
+    char *out = qt_alloc(total);
+    out[0] = '\0';
+    size_t len = 0;
+    for (size_t i = 0; i < nargs; i++) {
+        const char *piece = qt_to_string(args[i]);
+        size_t plen = strlen(piece);
+        memcpy(out + len, piece, plen);
+        len += plen;
+    }
+    out[len] = '\0';
+    return qt_string(out);
+}
+
+QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
+    if (strcmp(name, "print") == 0 || strcmp(name, "io.print") == 0) {
+        if (nargs > 0) {
+            if (nargs == 1) {
+                qt_print(args[0]);
+            } else {
+                qt_print_fmt(qt_render(args[0]), nargs - 1, args + 1);
+            }
+        }
+        return qt_unit();
+    }
+    if (strcmp(name, "println") == 0 || strcmp(name, "io.println") == 0) {
+        if (nargs == 0) {
+            fputc('\n', stdout);
+        } else if (nargs == 1) {
+            qt_println(args[0]);
+        } else {
+            qt_println_fmt(qt_render(args[0]), nargs - 1, args + 1);
+        }
+        return qt_unit();
+    }
+    if (strcmp(name, "string.to_str") == 0 && nargs == 1) {
+        return qt_string(qt_to_string(args[0]));
+    }
+    if (strcmp(name, "string.concat") == 0) {
+        return builtin_concat(nargs, args);
+    }
+    if (strcmp(name, "string.from_int") == 0 && nargs == 1) {
+        return qt_string(qt_to_string(args[0]));
+    }
+    if (strcmp(name, "string.from_float") == 0 && nargs == 1) {
+        return qt_string(qt_to_string(args[0]));
+    }
+    if ((strcmp(name, "len") == 0 || strcmp(name, "array.len") == 0) &&
+        nargs == 1) {
+        if (args[0].tag == QT_STRING) {
+            return qt_int((int64_t)strlen(args[0].as.s));
+        }
+        return qt_int(qt_array_len(args[0]));
+    }
+    if ((strcmp(name, "push") == 0 || strcmp(name, "array.push") == 0) &&
+        nargs == 2) {
+        qt_array_push(args[0], args[1]);
+        return qt_unit();
+    }
+    if ((strcmp(name, "pop") == 0 || strcmp(name, "array.pop") == 0) &&
+        nargs == 1) {
+        return qt_array_pop(args[0]);
+    }
+    char msg[256];
+    snprintf(msg, sizeof(msg), "native backend: unsupported builtin `%s`",
+             name);
+    qt_panic(msg);
 }
 
 /* ------------------------------------------------------------------ */

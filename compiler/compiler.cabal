@@ -28,6 +28,7 @@ library
   exposed-modules:
     Compiler
     Compiler.Bytecode
+    Compiler.CBackend
     Compiler.Codegen
     Compiler.Disasm
     Compiler.Error

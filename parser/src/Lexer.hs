@@ -121,7 +121,7 @@ reservedNames =
   ]
 
 tokInt :: Parser Token
-tokInt = withLoc $ lexeme $ do
+tokInt = withLoc $ do
   prefix <- optional (char '0')
   case prefix of
     Just _ -> do
@@ -141,7 +141,7 @@ tokInt = withLoc $ lexeme $ do
     Nothing -> TokInt <$> L.decimal <*> pure BaseDec
 
 tokString :: Parser Token
-tokString = withLoc $ lexeme $ do
+tokString = withLoc $ do
   startPos <- getOffset -- 1. Capture position at start quote
   void (char '"')
   content <- go startPos
@@ -168,7 +168,7 @@ tokString = withLoc $ lexeme $ do
 
 -- | Parse Symbols
 tokSymbol :: Parser Token
-tokSymbol = withLoc $ lexeme $ do
+tokSymbol = withLoc $ do
   sym <-
     choice $
       -- Longest operators first (3 chars)
@@ -198,7 +198,7 @@ tokSymbol = withLoc $ lexeme $ do
 
 -- | Parse Identifiers/Keywords
 tokWord :: Parser Token
-tokWord = withLoc $ lexeme $ do
+tokWord = withLoc $ do
   first <- letterChar <|> char '_'
   rest <- many (alphaNumChar <|> char '_')
   let firstPart = first : rest
@@ -216,7 +216,7 @@ tokWord = withLoc $ lexeme $ do
     else return $ TokIdentifier word
 
 tokBool :: Parser Token
-tokBool = withLoc $ lexeme $ do
+tokBool = withLoc $ do
   b <- (string "True" >> return True) <|> (string "False" >> return False)
   return $ TokBool b
 

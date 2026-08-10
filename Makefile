@@ -103,14 +103,15 @@ VERSION := 1.0.0
 DESTDIR  ?=
 PREFIX   ?= /usr/local
 
-BIN_DEST   = $(DESTDIR)$(PREFIX)/bin
-SHARE_DEST = $(DESTDIR)$(PREFIX)/share/quant/lib
-MAN_DEST   = $(DESTDIR)$(PREFIX)/share/man/man1
+BIN_DEST     = $(DESTDIR)$(PREFIX)/bin
+SHARE_DEST   = $(DESTDIR)$(PREFIX)/share/quant/lib
+RUNTIME_DEST = $(DESTDIR)$(PREFIX)/share/quant/runtime
+MAN_DEST     = $(DESTDIR)$(PREFIX)/share/man/man1
 
 .PHONY: install
 install:
 	@ cabal build cli glados-lsp glados-repl quant-fmt wheatley dap-server
-	@ install -d $(BIN_DEST) $(SHARE_DEST) $(MAN_DEST)
+	@ install -d $(BIN_DEST) $(SHARE_DEST) $(RUNTIME_DEST) $(MAN_DEST)
 	@ install -m 755 $(shell cabal -v0 list-bin exe:cli) $(BIN_DEST)/glados
 	@ install -m 755 $(shell cabal -v0 list-bin exe:glados-lsp) $(BIN_DEST)/quant-lsp
 	@ install -m 755 $(shell cabal -v0 list-bin exe:glados-repl) $(BIN_DEST)/glados-repl
@@ -118,6 +119,7 @@ install:
 	@ install -m 755 $(shell cabal -v0 list-bin exe:wheatley) $(BIN_DEST)/wheatley
 	@ install -m 755 $(shell cabal -v0 list-bin exe:quant-dap) $(BIN_DEST)/quant-dap
 	@ cp -r std/. $(SHARE_DEST)/
+	@ install -m 644 runtime/quant_runtime.c runtime/quant_runtime.h $(RUNTIME_DEST)/
 	@ install -m 644 man/glados.1 $(MAN_DEST)/glados.1
 	@ install -m 644 man/quant-lsp.1 $(MAN_DEST)/quant-lsp.1
 	@ install -m 644 man/glados-repl.1 $(MAN_DEST)/glados-repl.1
@@ -131,6 +133,7 @@ install:
 	@ $(LOG_TIME) "Install $(C_GREEN)wheatley$(C_RESET) -> $(BIN_DEST)/wheatley"
 	@ $(LOG_TIME) "Install $(C_GREEN)quant-dap$(C_RESET) -> $(BIN_DEST)/quant-dap"
 	@ $(LOG_TIME) "Install $(C_GREEN)stdlib$(C_RESET) -> $(SHARE_DEST)"
+	@ $(LOG_TIME) "Install $(C_GREEN)C runtime$(C_RESET) -> $(RUNTIME_DEST)"
 	@ $(LOG_TIME) "Install $(C_GREEN)man pages$(C_RESET) -> $(MAN_DEST)"
 
 .PHONY: uninstall

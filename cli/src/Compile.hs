@@ -2,6 +2,8 @@ module Compile
   ( resolveStdlib,
     compileSource,
     compileSourceWith,
+    buildNative,
+    emitCFile,
     execute,
     executeFunction,
     executeFunctionCov,
@@ -27,24 +29,28 @@ import AST.Types.Common
     unFuncName,
   )
 import qualified Compiler (Bytecode)
+import Compiler.CBackend (emitC)
 import Compiler.Codegen (compileProgram)
 import Compiler.Error (displayError)
 import Compiler.Import (resolveImports)
 import Control.Exception (SomeException, catch)
-import Control.Monad (unless)
+import Control.Monad (filterM, unless)
 import Data.Char (isAlphaNum)
 import Data.IORef (IORef)
 import Data.List (isPrefixOf, isSuffixOf, partition)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import Display
 import Lib (lexFile)
 import Parser.Decl (parseDecl)
-import System.Directory (doesDirectoryExist, listDirectory)
+import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.Environment (lookupEnv)
-import System.Exit (exitFailure)
+import System.Exit (ExitCode (..), exitFailure)
 import System.FilePath (dropExtension, takeBaseName, takeDirectory, (</>))
+import System.Process (readProcessWithExitCode)
 import Text.Megaparsec (errorBundlePretty, many, runParser)
 import TypeChecker (TypeCheckResult (..), tcAllCallMap, tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
@@ -64,6 +70,51 @@ resolveStdlib Nothing = do
       let systemPath = "/usr/local/share/quant/lib"
       exists <- doesDirectoryExist systemPath
       return (if exists then systemPath else "./std")
+
+-- ---------------------------------------------------------------------------
+-- Native backend driver
+
+-- | Locate the C runtime sources (quant_runtime.h / quant_runtime.c).
+resolveRuntime :: IO FilePath
+resolveRuntime = do
+  env <- lookupEnv "QUANT_RUNTIME_DIR"
+  let candidates = maybe [] pure env ++ ["./runtime", "/usr/local/share/quant/runtime"]
+  found <- filterM (\d -> doesFileExist (d </> "quant_runtime.c")) candidates
+  case found of
+    (d : _) -> return d
+    [] ->
+      die
+        "native backend: cannot find the C runtime (quant_runtime.c);\n\
+        \set QUANT_RUNTIME_DIR or run from the repository root"
+
+-- | Write the generated C for the given bytecodes to a file.
+emitCFile :: [Compiler.Bytecode] -> FilePath -> IO ()
+emitCFile bytecodes outFile =
+  case emitC bytecodes of
+    Left err -> die err
+    Right csrc -> TIO.writeFile outFile csrc
+
+-- | Translate to C, then compile and link a native binary at @out@.
+-- The generated C is kept next to the binary as @out.c@ for inspection.
+buildNative :: [Compiler.Bytecode] -> FilePath -> IO ()
+buildNative bytecodes out = do
+  runtimeDir <- resolveRuntime
+  let cFile = out ++ ".c"
+  emitCFile bytecodes cFile
+  cc <- fromMaybe "cc" <$> lookupEnv "QUANT_CC"
+  let ccArgs =
+        [ "-std=c11",
+          "-O2",
+          "-I" ++ runtimeDir,
+          cFile,
+          runtimeDir </> "quant_runtime.c",
+          "-o",
+          out
+        ]
+  (code, _, errOut) <- readProcessWithExitCode cc ccArgs ""
+  case code of
+    ExitSuccess -> return ()
+    ExitFailure _ -> die ("native backend: C compilation failed:\n" ++ errOut)
 
 -- ---------------------------------------------------------------------------
 -- Compilation pipeline

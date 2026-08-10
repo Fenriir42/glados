@@ -11,7 +11,7 @@ module PM
 where
 
 import AST.Types.Common (FuncName (..))
-import Compile (compileSource, compileSourceWith, execute, executeFunctionLineCov, resolveStdlib)
+import Compile (buildNative, compileSource, compileSourceWith, execute, executeFunctionLineCov, resolveStdlib)
 import qualified Compiler (Bytecode)
 import Compiler.Bytecode (Instruction (ICovBranch, ICovMark), bytecodeFunction, bytecodeInstructions)
 import Compiler.Serialize (encodeBytecodes)
@@ -90,17 +90,26 @@ mainTestTemplate name =
 -- ---------------------------------------------------------------------------
 -- build
 
-runBuild :: Bool -> IO ()
-runBuild _release = do
+runBuild :: Bool -> Maybe String -> IO ()
+runBuild _release target = do
   m <- loadManifest
   stdlib <- resolveStdlib (mStdlib m)
   createDirectoryIfMissing True ".build"
   printStep "compiling" (mEntry m)
   bc <- compileSource stdlib (mEntry m)
-  let out = ".build" </> "main.qbc"
-  BSL.writeFile out (encodeBytecodes bc)
-  printStep "written" out
-  printOk "build successful"
+  case target of
+    Just "c" -> do
+      let out = ".build" </> "main"
+      printStep "native" (out ++ ".c")
+      buildNative bc out
+      printStep "written" out
+      printOk "build successful"
+    Just other -> die ("unknown build target `" ++ other ++ "` (supported: c)")
+    Nothing -> do
+      let out = ".build" </> "main.qbc"
+      BSL.writeFile out (encodeBytecodes bc)
+      printStep "written" out
+      printOk "build successful"
 
 -- ---------------------------------------------------------------------------
 -- run

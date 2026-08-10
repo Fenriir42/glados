@@ -1,0 +1,59 @@
+---
+title: Native Backend (experimental)
+description: Compile Quant to a standalone optimized binary via C
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Quant programs normally run on the bytecode VM. The native backend instead
+translates the compiled bytecode to C and hands it to the system C compiler,
+producing a standalone optimized binary.
+
+## Compiling a file
+
+```bash
+glados compiler program.qa --native ./program
+./program
+```
+
+The generated C is kept next to the binary (`./program.c`) for inspection.
+To only generate the C without compiling it:
+
+```bash
+glados compiler program.qa --emit-c program.c
+```
+
+## Compiling a project
+
+```bash
+glados build --target c
+./.build/main
+```
+
+## How it works
+
+Each bytecode function becomes one C function over the runtime's `QtValue`
+type; the VM's operand stack becomes a local array, jumps become `goto`
+labels, and calls to your functions become direct C calls. The binary links
+against a small C runtime (`quant_runtime.c`) that reproduces the VM's value
+semantics exactly -- including printing formats, so VM and native output can
+be diffed byte-for-byte.
+
+The speedup is substantial: a naive `fib(30)` runs about 50x faster than
+under the VM.
+
+<Aside type="caution">
+The native backend currently covers a subset of the language: functions,
+recursion, control flow, int/float/bool/string scalars, arrays, casts, and
+the core printing builtins. Structs, enums, errors, closures, dicts, FFI,
+and async are not yet translated -- programs using them fail at compile
+time with a message naming the unsupported instruction. Coverage grows
+stage by stage; see ROADMAP.md.
+</Aside>
+
+## Environment
+
+| Variable | Meaning |
+|----------|---------|
+| `QUANT_RUNTIME_DIR` | Directory containing `quant_runtime.{c,h}` (default: `./runtime`, then `/usr/local/share/quant/runtime`) |
+| `QUANT_CC` | C compiler to invoke (default: `cc`) |
