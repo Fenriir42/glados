@@ -148,6 +148,46 @@ fn just_read[T: Read](r: T) -> void {
 
 If a child re-declares a method that a parent also declares, the child's signature wins. Extending an undeclared interface is a compile-time error.
 
+## Associated Types
+
+An interface can declare *associated types* -- type members that each implementation binds to a concrete type:
+
+```quant
+interface Producer {
+    type Item;
+
+    fn produce(self) -> Item;
+}
+```
+
+Each `impl` binds every declared associated type with `type Name = <concrete>;`, and its methods use the concrete type directly:
+
+```quant
+struct NumberSource { seed: int }
+
+impl Producer for NumberSource {
+    type Item = int;
+
+    fn produce(self) -> int {
+        return self.seed * 2;
+    }
+}
+
+struct WordSource { word: str }
+
+impl Producer for WordSource {
+    type Item = str;
+
+    fn produce(self) -> str {
+        return self.word;
+    }
+}
+```
+
+The type checker enforces the bindings in both directions: omitting a declared associated type is an error, and binding a name the interface does not declare is an error. Associated types are inherited through [interface inheritance](#interface-inheritance) like methods are.
+
+Calls on concrete receivers use the implementation's concrete signature, so `ns.produce()` is an `int` and `ws.produce()` is a `str` with full type checking. In generic code (`fn f[T: Producer](p: T)`), a method result that mentions an associated type is treated as opaque -- the checker cannot resolve `Item` without a concrete receiver.
+
 ## Operator Overloading
 
 Quant lets you define arithmetic and comparison semantics for your own types by

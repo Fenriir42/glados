@@ -151,6 +151,8 @@ data InterfaceDecl = InterfaceDecl
   { ifaceDeclName :: Located TypeName,
     -- | Parent interfaces: @interface ReadWrite extends Read, Write@
     ifaceDeclExtends :: [Located TypeName],
+    -- | Associated type declarations: @type Item;@
+    ifaceDeclAssocTypes :: [Located TypeName],
     ifaceDeclMethods :: [InterfaceMethodSig]
   }
   deriving stock (Show, Eq, Generic)
@@ -158,6 +160,8 @@ data InterfaceDecl = InterfaceDecl
 data ImplForDecl ann = ImplForDecl
   { implForIfaceName :: Located TypeName,
     implForTypeName :: Located TypeName,
+    -- | Associated type bindings: @type Item = int;@
+    implForAssocTypes :: [(Located TypeName, Located Type)],
     implForMethods :: [Located (FunctionDecl ann)]
   }
   deriving stock (Show, Eq, Generic)

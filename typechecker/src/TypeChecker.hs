@@ -15,7 +15,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertEnum, insertError, insertFunc, insertGenericBounds, insertGenericParams, insertInterface, insertStruct, lookupInterface)
+import TypeChecker.Env (Env, emptyEnv, envFuncs, envInterfaces, insertEnum, insertError, insertFunc, insertGenericBounds, insertGenericParams, insertIfaceAssocTypes, insertInterface, insertStruct, lookupInterface)
 import TypeChecker.Error
 import TypeChecker.Infer (TCState (..), checkDecl, initialTCState)
 
@@ -209,7 +209,10 @@ typeCheck prog =
       let raw =
             Map.fromList
               [ ( unLocated (ifaceDeclName idecl),
-                  (map unLocated (ifaceDeclExtends idecl), ifaceDeclMethods idecl)
+                  ( map unLocated (ifaceDeclExtends idecl),
+                    ifaceDeclMethods idecl,
+                    map unLocated (ifaceDeclAssocTypes idecl)
+                  )
                 )
                 | Located _ (DeclInterface _ idecl) <- ds
               ]
@@ -219,9 +222,16 @@ typeCheck prog =
           flatten visited n
             | n `Set.member` visited = []
             | otherwise = case Map.lookup n raw of
-                Just (parents, own) ->
+                Just (parents, own, _) ->
                   own ++ concatMap (flatten (Set.insert n visited)) parents
                 Nothing -> concat (lookupInterface n env0)
+          -- Associated types flatten the same way (child + inherited).
+          flattenAssoc visited n
+            | n `Set.member` visited = []
+            | otherwise = case Map.lookup n raw of
+                Just (parents, _, assocs) ->
+                  assocs ++ concatMap (flattenAssoc (Set.insert n visited)) parents
+                Nothing -> []
           dedupByName = go Set.empty
             where
               go _ [] = []
@@ -231,9 +241,20 @@ typeCheck prog =
                 where
                   nm = unLocated (ifaceMethodName sig)
        in Map.foldrWithKey
-            (\n _ e -> insertInterface n (dedupByName (flatten Set.empty n)) e)
+            ( \n _ e ->
+                insertIfaceAssocTypes n (nubOrd (flattenAssoc Set.empty n)) $
+                  insertInterface n (dedupByName (flatten Set.empty n)) e
+            )
             env0
             raw
+
+    nubOrd :: [TypeName] -> [TypeName]
+    nubOrd = go Set.empty
+      where
+        go _ [] = []
+        go seen (x : xs)
+          | x `Set.member` seen = go seen xs
+          | otherwise = x : go (Set.insert x seen) xs
 
     collectError :: Located (Decl ()) -> Env -> Env
     collectError (Located _ (DeclError _ ed)) env =

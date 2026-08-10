@@ -8,6 +8,8 @@ module TypeChecker.Env
     lookupError,
     lookupEnum,
     lookupInterface,
+    lookupIfaceAssocTypes,
+    insertIfaceAssocTypes,
     lookupGenericParams,
     lookupGenericBounds,
     insertVar,
@@ -52,11 +54,13 @@ data Env = Env
     -- | Bounds in scope in the current generic function body
     envCurrentBounds :: Map TypeName [TypeName],
     -- | Interface name -> full method signatures
-    envInterfaces :: Map TypeName [InterfaceMethodSig]
+    envInterfaces :: Map TypeName [InterfaceMethodSig],
+    -- | Interface name -> associated type names (flattened through extends)
+    envIfaceAssocTypes :: Map TypeName [TypeName]
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty Map.empty Map.empty Map.empty
+emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Map.empty Map.empty Nothing Set.empty Map.empty Map.empty Map.empty Map.empty Map.empty
 
 lookupVar :: VarName -> Env -> Maybe QualifiedType
 lookupVar v = Map.lookup v . envVars
@@ -128,6 +132,12 @@ lookupInterface t = Map.lookup t . envInterfaces
 
 insertInterface :: TypeName -> [InterfaceMethodSig] -> Env -> Env
 insertInterface t ms env = env {envInterfaces = Map.insert t ms (envInterfaces env)}
+
+lookupIfaceAssocTypes :: TypeName -> Env -> [TypeName]
+lookupIfaceAssocTypes t = Map.findWithDefault [] t . envIfaceAssocTypes
+
+insertIfaceAssocTypes :: TypeName -> [TypeName] -> Env -> Env
+insertIfaceAssocTypes t as env = env {envIfaceAssocTypes = Map.insert t as (envIfaceAssocTypes env)}
 
 setReturnType :: QualifiedType -> Env -> Env
 setReturnType qt env = env {envReturnType = Just qt}

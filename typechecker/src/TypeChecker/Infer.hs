@@ -92,6 +92,7 @@ import TypeChecker.Env
     lookupFunc,
     lookupGenericBounds,
     lookupGenericParams,
+    lookupIfaceAssocTypes,
     lookupInterface,
     lookupStruct,
     lookupVar,
@@ -354,7 +355,18 @@ inferExpr env (Located sp expr) = do
             case findBoundMethodSig tv (unFuncName methodFuncName) env of
               Just sig -> do
                 recordDynMethodCall methodSp (unFuncName methodFuncName)
-                return $ Just $ qualType $ unLocated $ ifaceMethodReturnType sig
+                -- A return type mentioning an associated type cannot be
+                -- resolved without a concrete receiver; degrade to unknown
+                -- instead of reporting a bogus mismatch downstream.
+                let assocNames =
+                      Set.fromList $
+                        concatMap
+                          (`lookupIfaceAssocTypes` env)
+                          (Map.findWithDefault [] tv (envCurrentBounds env))
+                    retT = qualType (unLocated (ifaceMethodReturnType sig))
+                if typeMentionsName assocNames retT
+                  then return Nothing
+                  else return (Just retT)
               Nothing -> inferCall sp methodSp qualFname args
           Nothing ->
             -- Module/qualified call fallback: sys.exit, math.sqrt, imported funcs, etc.
@@ -692,13 +704,23 @@ checkDecl env (Located declSpan decl) = case decl of
         typeName = unLocated (implForTypeName ifdecl)
     case lookupInterface ifaceName env of
       Nothing -> recordError (TCUndefinedInterface declSpan ifaceName)
-      Just requiredSigs ->
+      Just requiredSigs -> do
         forM_ requiredSigs $ \sig -> do
           let mname = unLocated (ifaceMethodName sig)
               qualName = FuncName (unTypeName typeName <> "." <> unFuncName mname)
           case lookupFunc qualName env of
             Nothing -> recordError (TCMissingInterfaceMethod declSpan ifaceName typeName mname)
             Just _ -> return ()
+        -- Associated types: every one the interface declares must be bound,
+        -- and the impl must not bind names the interface does not declare.
+        let requiredAssoc = lookupIfaceAssocTypes ifaceName env
+            boundAssoc = [unLocated a | (a, _) <- implForAssocTypes ifdecl]
+        forM_ requiredAssoc $ \aname ->
+          unless (aname `elem` boundAssoc) $
+            recordError (TCMissingAssocType declSpan ifaceName typeName aname)
+        forM_ (implForAssocTypes ifdecl) $ \(Located asp aname, _) ->
+          unless (aname `elem` requiredAssoc) $
+            recordError (TCUnknownAssocType asp ifaceName aname)
     mapM_ (checkFunction env . unLocated) (implForMethods ifdecl)
   DeclInterface _ idecl -> do
     forM_ (ifaceDeclExtends idecl) $ \(Located psp pname) ->
@@ -989,6 +1011,25 @@ typeImplementsBound concreteType ifaceName env =
 
 -- | Search the current function's generic bounds for an interface that declares
 -- the given method name on type variable @tv@, returning its signature.
+-- | Does the type mention any of the given (associated-type) names?
+typeMentionsName :: Set TypeName -> Type -> Bool
+typeMentionsName names = go
+  where
+    go (TypeStruct n) = n `Set.member` names
+    go (TypeNamed n) = n `Set.member` names
+    go (TypeVar n) = n `Set.member` names
+    go (TypeOption t) = go t
+    go (TypeTask t) = go t
+    go (TypeArray (ArrayType qt)) = go (qualType qt)
+    go (TypeDict k v) = go k || go v
+    go (TypeTuple qts) = any (go . qualType) qts
+    go (TypeGenericApp n qts) = n `Set.member` names || any (go . qualType) qts
+    go (TypeResult (ResultType t _)) = go t
+    go (TypeFunction ft) =
+      any (go . qualType . paramType . unLocated) (funcParams ft)
+        || go (qualType (unLocated (funcReturnType ft)))
+    go _ = False
+
 findBoundMethodSig :: TypeName -> T.Text -> Env -> Maybe InterfaceMethodSig
 findBoundMethodSig tv methodName env =
   case Map.lookup tv (envCurrentBounds env) of

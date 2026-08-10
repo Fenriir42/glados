@@ -44,6 +44,10 @@ data TypeCheckError
     TCEnumBindingUnknownField SourceSpan TypeName TypeName FieldName
   | -- | @await@ applied to an expression that is not a @task(T)@
     TCAwaitNonTask SourceSpan Type
+  | -- | impl does not bind an associated type declared by the interface
+    TCMissingAssocType SourceSpan TypeName TypeName TypeName
+  | -- | impl binds an associated type the interface does not declare
+    TCUnknownAssocType SourceSpan TypeName TypeName
   deriving stock (Show, Eq)
 
 tcErrSpan :: TypeCheckError -> SourceSpan
@@ -68,6 +72,8 @@ tcErrSpan (TCEnumVariantRequiresFields s _ _) = s
 tcErrSpan (TCEnumVariantUnknownField s _ _ _) = s
 tcErrSpan (TCEnumBindingUnknownField s _ _ _) = s
 tcErrSpan (TCAwaitNonTask s _) = s
+tcErrSpan (TCMissingAssocType s _ _ _) = s
+tcErrSpan (TCUnknownAssocType s _ _) = s
 
 tcErrMessage :: TypeCheckError -> String
 tcErrMessage (TCUndefinedVar _ v) =
@@ -152,3 +158,17 @@ tcErrMessage (TCEnumBindingUnknownField _ ename vname fname) =
     ++ "` to bind"
 tcErrMessage (TCAwaitNonTask _ t) =
   "`await` expects a `task(T)` value, got `" ++ show t ++ "`"
+tcErrMessage (TCMissingAssocType _ iface tname aname) =
+  "impl of `"
+    ++ T.unpack (unTypeName iface)
+    ++ "` for `"
+    ++ T.unpack (unTypeName tname)
+    ++ "` is missing associated type `"
+    ++ T.unpack (unTypeName aname)
+    ++ "`"
+tcErrMessage (TCUnknownAssocType _ iface aname) =
+  "interface `"
+    ++ T.unpack (unTypeName iface)
+    ++ "` does not declare an associated type `"
+    ++ T.unpack (unTypeName aname)
+    ++ "`"

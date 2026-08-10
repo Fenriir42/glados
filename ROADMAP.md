@@ -136,7 +136,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~`impl` on enums~~ | Done -- `impl Direction { fn is_horizontal(self) -> bool { ... } }` with `d.method()` call syntax; `impl Interface for Enum` also supported; see `tests/enum_impl.qa` |
 | ~~Interface inheritance~~ | Done -- `interface ReadWrite extends Read, Write { ... }`; impls must provide inherited methods; bounds on a child interface grant its inherited methods, and a child impl satisfies parent bounds; see `tests/interface_inherit.qa` |
 | ~~Default interface methods~~ | Done -- interface methods may carry a body; impls that omit the method get it instantiated as `T.method` from the default; overriding and inherited defaults (via `extends`) work; sibling calls on `self` use dynamic dispatch; see `tests/default_methods.qa` |
-| Associated types on interfaces | `interface Iterator { type Item; fn next(self) -> option(Item); }` -- type members on interfaces for more expressive abstractions |
+| ~~Associated types on interfaces~~ | Done -- `type Item;` in interfaces, `type Item = int;` in impl-for blocks; bindings validated for completeness both ways; inherited through `extends`; concrete method calls carry concrete signatures; see `tests/assoc_types.qa` |
 | FFI callbacks | C function pointer from a Quant lambda via libffi closure API (`ffi_closure_alloc` + `ffi_prep_closure_loc`) |
 | ~~Async / await~~ | Done -- `async fn f() -> T` returns `task(T)` at the call site; `await expr` unwraps it; cooperative green-task scheduler in the VM (`ISpawn`/`IAwait`); tasks advance only at await points; see `tests/async.qa` |
 | Multi-target codegen | LLVM IR or C emission as an alternative backend to the bytecode VM; enables AOT compilation and better performance |

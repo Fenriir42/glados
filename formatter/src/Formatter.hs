@@ -349,9 +349,13 @@ fmtInterfaceDecl cm opts n vis idecl =
         [] -> ""
         ps -> " extends " <> T.intercalate ", " (map (unTypeName . locValue) ps)
       header = [ind opts n <> fmtVis vis <> "interface " <> tname <> ext <> " {"]
+      assocs =
+        [ ind opts (n + 1) <> "type " <> unTypeName (locValue a) <> ";"
+          | a <- ifaceDeclAssocTypes idecl
+        ]
       sigs = concatMap (fmtInterfaceMethodSig cm opts (n + 1)) (ifaceDeclMethods idecl)
       footer = [ind opts n <> "}"]
-   in header ++ sigs ++ footer
+   in header ++ assocs ++ sigs ++ footer
 
 fmtInterfaceMethodSig :: CommentsMap -> FormatOptions -> Int -> InterfaceMethodSig -> Lines
 fmtInterfaceMethodSig cm opts n sig =
@@ -370,9 +374,13 @@ fmtImplForDecl cm opts n vis ifdecl =
   let ifaceName = unTypeName (locValue (implForIfaceName ifdecl))
       typeName = unTypeName (locValue (implForTypeName ifdecl))
       header = [ind opts n <> fmtVis vis <> "impl " <> ifaceName <> " for " <> typeName <> " {"]
+      assocs =
+        [ ind opts (n + 1) <> "type " <> unTypeName (locValue a) <> " = " <> fmtType (locValue t) <> ";"
+          | (a, t) <- implForAssocTypes ifdecl
+        ]
       methods = concatMap (fmtMethod cm opts (n + 1)) (implForMethods ifdecl)
       footer = [ind opts n <> "}"]
-   in header ++ methods ++ footer
+   in header ++ assocs ++ methods ++ footer
   where
     fmtMethod cm' opts' n' (Located _ fd) =
       fmtFuncDecl cm' opts' n' (spanLine (spanStart (blockSpan (funcDeclBody fd)))) Public fd

@@ -37,6 +37,7 @@ import AST.Types.Type
     StructField (..),
     Type (..),
   )
+import Data.Either (lefts, rights)
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -342,7 +343,12 @@ parseDeclInterface = do
     _ <- MP.satisfy isExtendsKw
     MP.sepBy1 parseParentIface (matchSymbol ",")
   _ <- matchSymbol "{"
-  methods <- MP.many parseInterfaceMethodSig
+  members <-
+    MP.many $
+      MP.choice
+        [ Left <$> parseAssocTypeDecl,
+          Right <$> parseInterfaceMethodSig
+        ]
   Located endSpan _ <- matchSymbol "}"
   let combinedSpan = case visibility of
         Static -> visSpan <> ifaceSpan <> endSpan
@@ -351,7 +357,8 @@ parseDeclInterface = do
         InterfaceDecl
           { ifaceDeclName = Located nameSpan (TypeName name),
             ifaceDeclExtends = fromMaybe [] mExtends,
-            ifaceDeclMethods = methods
+            ifaceDeclAssocTypes = lefts members,
+            ifaceDeclMethods = rights members
           }
   return $ Located combinedSpan (DeclInterface visibility idecl)
   where
@@ -362,6 +369,14 @@ parseDeclInterface = do
     parseParentIface = do
       Located pspan (TokIdentifier pname) <- MP.satisfy isIdentifier
       return $ Located pspan (TypeName pname)
+    -- @type Item;@
+    parseAssocTypeDecl = do
+      _ <- MP.satisfy isTypeKw
+      Located aspan (TokIdentifier aname) <- MP.satisfy isIdentifier
+      _ <- matchSymbol ";"
+      return $ Located aspan (TypeName aname)
+    isTypeKw (Located _ (TokIdentifier "type")) = True
+    isTypeKw _ = False
 
 -- | Parse @impl InterfaceName for TypeName { fn method(...) -> R { ... } ... }@.
 -- Each method's @self@ parameter is replaced with @TypeName@ at parse time (same as inherent impl).
@@ -374,7 +389,12 @@ parseDeclImplFor = do
   Located typeNameSpan (TokIdentifier typeName) <- MP.satisfy isIdentifier
   let tname = TypeName typeName
   _ <- matchSymbol "{"
-  methods <- MP.many (parseImplMethod tname)
+  members <-
+    MP.many $
+      MP.choice
+        [ Left <$> parseAssocTypeBinding,
+          Right <$> parseImplMethod tname
+        ]
   Located endSpan _ <- matchSymbol "}"
   let combinedSpan = case visibility of
         Static -> visSpan <> implSpan <> endSpan
@@ -383,9 +403,21 @@ parseDeclImplFor = do
         ImplForDecl
           { implForIfaceName = Located ifaceNameSpan (TypeName ifaceName),
             implForTypeName = Located typeNameSpan tname,
-            implForMethods = methods
+            implForAssocTypes = lefts members,
+            implForMethods = rights members
           }
   return $ Located combinedSpan (DeclImplFor visibility ifdecl)
+  where
+    -- @type Item = int;@
+    parseAssocTypeBinding = do
+      _ <- MP.satisfy isTypeKw
+      Located aspan (TokIdentifier aname) <- MP.satisfy isIdentifier
+      _ <- matchSymbol "="
+      boundType <- parseType
+      _ <- matchSymbol ";"
+      return (Located aspan (TypeName aname), boundType)
+    isTypeKw (Located _ (TokIdentifier "type")) = True
+    isTypeKw _ = False
 
 parseDeclFFI :: TokenParser (Located (Decl ann))
 parseDeclFFI = do

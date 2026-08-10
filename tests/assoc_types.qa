@@ -1,0 +1,81 @@
+// Associated types on interfaces showcase.
+// Demonstrates:
+//   1. type Item; declarations inside an interface.
+//   2. type Item = <concrete>; bindings inside impl-for blocks.
+//   3. Interface methods referencing the associated type.
+//   4. Different impls binding the same associated type differently.
+//   5. Associated types inherited through extends.
+
+interface Producer {
+    type Item;
+
+    fn produce(self) -> Item;
+    fn describe(self) -> str;
+}
+
+struct NumberSource { seed: int }
+struct WordSource { word: str }
+
+impl Producer for NumberSource {
+    type Item = int;
+
+    fn produce(self) -> int {
+        return self.seed * 2;
+    }
+
+    fn describe(self) -> str {
+        return "numbers";
+    }
+}
+
+impl Producer for WordSource {
+    type Item = str;
+
+    fn produce(self) -> str {
+        return self.word;
+    }
+
+    fn describe(self) -> str {
+        return "words";
+    }
+}
+
+// Associated types are inherited through extends like methods are.
+interface BufferedProducer extends Producer {
+    fn capacity(self) -> int;
+}
+
+struct Batch { size: int }
+
+impl BufferedProducer for Batch {
+    type Item = int;
+
+    fn produce(self) -> int {
+        return self.size;
+    }
+
+    fn describe(self) -> str {
+        return "batch";
+    }
+
+    fn capacity(self) -> int {
+        return self.size * 10;
+    }
+}
+
+fn main() -> void {
+    ns: NumberSource = NumberSource { seed: 21 };
+    ws: WordSource = WordSource { word: "quant" };
+    b: Batch = Batch { size: 4 };
+
+    n: int = ns.produce();
+    w: str = ws.produce();
+    c: int = b.capacity();
+
+    sn: str = string.to_str(n);
+    sc: str = string.to_str(c);
+
+    io.println(`{ns.describe()} -> {sn}`);
+    io.println(`{ws.describe()} -> {w}`);
+    io.println(`{b.describe()} capacity -> {sc}`);
+}
