@@ -2,7 +2,9 @@
 
 #include "quant_runtime.h"
 
+#include <ctype.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -994,6 +996,361 @@ static QtValue builtin_concat(size_t nargs, const QtValue *args) {
     return qt_string(out);
 }
 
+/* ------------------------------------------------------------------ */
+/* string.* and math.* builtins (see ROADMAP: Native backend stage 4)  */
+
+/* Bytes spanned by the UTF-8 codepoint starting at lead byte c. */
+static size_t utf8_seq_len(unsigned char c) {
+    if (c < 0x80) {
+        return 1;
+    }
+    if ((c >> 5) == 0x6) {
+        return 2;
+    }
+    if ((c >> 4) == 0xe) {
+        return 3;
+    }
+    if ((c >> 3) == 0x1e) {
+        return 4;
+    }
+    return 1; /* invalid lead byte: advance one to make progress */
+}
+
+/* Number of codepoints in a NUL-terminated UTF-8 string. */
+static size_t utf8_count(const char *s) {
+    size_t n = 0;
+    while (*s) {
+        s += utf8_seq_len((unsigned char)*s);
+        n++;
+    }
+    return n;
+}
+
+/* Byte offset of codepoint index cp (clamped to the terminating NUL). */
+static size_t utf8_offset(const char *s, int64_t cp) {
+    size_t off = 0;
+    while (cp > 0 && s[off]) {
+        off += utf8_seq_len((unsigned char)s[off]);
+        cp--;
+    }
+    return off;
+}
+
+/* Allocate an immortal copy of the byte range [start, end). */
+static QtValue string_slice(const char *s, size_t start, size_t end) {
+    size_t n = end - start;
+    char *out = qt_alloc(n + 1);
+    memcpy(out, s + start, n);
+    out[n] = '\0';
+    return qt_string(out);
+}
+
+/* Haskell `round`: round half to even. */
+static int64_t haskell_round(double f) {
+    double fl = floor(f);
+    double diff = f - fl;
+    int64_t lo = (int64_t)fl;
+    if (diff < 0.5) {
+        return lo;
+    }
+    if (diff > 0.5) {
+        return lo + 1;
+    }
+    return (lo % 2 == 0) ? lo : lo + 1; /* exactly .5 -> nearest even */
+}
+
+/* Codepoint index of the first/last occurrence of needle, or -1. */
+static int64_t string_index_of(const char *hay, const char *needle, int last) {
+    if (needle[0] == '\0') {
+        return 0;
+    }
+    int64_t found = -1;
+    size_t cp = 0;
+    for (const char *p = hay; *p; p += utf8_seq_len((unsigned char)*p), cp++) {
+        if (strncmp(p, needle, strlen(needle)) == 0) {
+            if (!last) {
+                return (int64_t)cp;
+            }
+            found = (int64_t)cp;
+        }
+    }
+    return found;
+}
+
+/* Replace occurrences of `from` with `to` (all, or just the first). */
+static QtValue string_replace(const char *s, const char *from, const char *to,
+                              int first_only) {
+    size_t flen = strlen(from);
+    if (flen == 0) {
+        return qt_string(qt_strdup(s));
+    }
+    size_t tlen = strlen(to);
+    /* Count matches to size the output buffer. */
+    size_t matches = 0;
+    for (const char *p = s; (p = strstr(p, from)) != NULL; p += flen) {
+        matches++;
+        if (first_only) {
+            break;
+        }
+    }
+    size_t slen = strlen(s);
+    size_t outlen = slen + matches * (tlen >= flen ? tlen - flen : 0);
+    char *out = qt_alloc(outlen + 1);
+    char *w = out;
+    const char *p = s;
+    size_t done = 0;
+    while (*p) {
+        if ((!first_only || done == 0) && strncmp(p, from, flen) == 0) {
+            memcpy(w, to, tlen);
+            w += tlen;
+            p += flen;
+            done++;
+        } else {
+            *w++ = *p++;
+        }
+    }
+    *w = '\0';
+    return qt_string(out);
+}
+
+static QtValue builtin_string(const char *fn, size_t nargs, const QtValue *args) {
+    if (strcmp(fn, "len") == 0 && nargs == 1) {
+        return qt_int((int64_t)utf8_count(qt_to_string(args[0])));
+    }
+    if (strcmp(fn, "is_empty") == 0 && nargs == 1) {
+        return qt_bool(qt_to_string(args[0])[0] == '\0');
+    }
+    if (strcmp(fn, "substring") == 0 && nargs == 3) {
+        const char *s = qt_to_string(args[0]);
+        int64_t i = qt_want_int(args[1], "string.substring");
+        int64_t j = qt_want_int(args[2], "string.substring");
+        size_t start = utf8_offset(s, i < 0 ? 0 : i);
+        size_t end = utf8_offset(s, j < 0 ? 0 : j);
+        if (end < start) {
+            end = start;
+        }
+        return string_slice(s, start, end);
+    }
+    if (strcmp(fn, "char_at") == 0 && nargs == 2) {
+        const char *s = qt_to_string(args[0]);
+        int64_t i = qt_want_int(args[1], "string.char_at");
+        size_t off = utf8_offset(s, i < 0 ? 0 : i);
+        if (s[off] == '\0') {
+            return qt_string("");
+        }
+        return string_slice(s, off, off + utf8_seq_len((unsigned char)s[off]));
+    }
+    if (strcmp(fn, "contains") == 0 && nargs == 2) {
+        return qt_bool(strstr(qt_to_string(args[0]), qt_to_string(args[1])) != NULL);
+    }
+    if (strcmp(fn, "starts_with") == 0 && nargs == 2) {
+        const char *s = qt_to_string(args[0]);
+        const char *pre = qt_to_string(args[1]);
+        return qt_bool(strncmp(s, pre, strlen(pre)) == 0);
+    }
+    if (strcmp(fn, "ends_with") == 0 && nargs == 2) {
+        const char *s = qt_to_string(args[0]);
+        const char *suf = qt_to_string(args[1]);
+        size_t sl = strlen(s);
+        size_t fl = strlen(suf);
+        return qt_bool(fl <= sl && strcmp(s + sl - fl, suf) == 0);
+    }
+    if (strcmp(fn, "index_of") == 0 && nargs == 2) {
+        return qt_int(string_index_of(qt_to_string(args[0]), qt_to_string(args[1]), 0));
+    }
+    if (strcmp(fn, "last_index_of") == 0 && nargs == 2) {
+        return qt_int(string_index_of(qt_to_string(args[0]), qt_to_string(args[1]), 1));
+    }
+    if (strcmp(fn, "to_upper") == 0 && nargs == 1) {
+        char *out = qt_strdup(qt_to_string(args[0]));
+        for (char *p = out; *p; p++) {
+            *p = (char)toupper((unsigned char)*p);
+        }
+        return qt_string(out);
+    }
+    if (strcmp(fn, "to_lower") == 0 && nargs == 1) {
+        char *out = qt_strdup(qt_to_string(args[0]));
+        for (char *p = out; *p; p++) {
+            *p = (char)tolower((unsigned char)*p);
+        }
+        return qt_string(out);
+    }
+    if ((strcmp(fn, "trim") == 0 || strcmp(fn, "trim_left") == 0 ||
+         strcmp(fn, "trim_right") == 0) &&
+        nargs == 1) {
+        const char *s = qt_to_string(args[0]);
+        size_t start = 0;
+        size_t end = strlen(s);
+        int is_trim = strcmp(fn, "trim") == 0;
+        int do_left = is_trim || strcmp(fn, "trim_left") == 0;
+        int do_right = is_trim || strcmp(fn, "trim_right") == 0;
+        if (do_left) {
+            while (s[start] && isspace((unsigned char)s[start])) {
+                start++;
+            }
+        }
+        if (do_right) {
+            while (end > start && isspace((unsigned char)s[end - 1])) {
+                end--;
+            }
+        }
+        return string_slice(s, start, end);
+    }
+    if (strcmp(fn, "reverse") == 0 && nargs == 1) {
+        const char *s = qt_to_string(args[0]);
+        size_t len = strlen(s);
+        char *out = qt_alloc(len + 1);
+        char *w = out + len;
+        *w = '\0';
+        for (const char *p = s; *p;) {
+            size_t cl = utf8_seq_len((unsigned char)*p);
+            w -= cl;
+            memcpy(w, p, cl);
+            p += cl;
+        }
+        return qt_string(out);
+    }
+    if (strcmp(fn, "replace") == 0 && nargs == 3) {
+        return string_replace(qt_to_string(args[0]), qt_to_string(args[1]),
+                              qt_to_string(args[2]), 0);
+    }
+    if (strcmp(fn, "replace_first") == 0 && nargs == 3) {
+        return string_replace(qt_to_string(args[0]), qt_to_string(args[1]),
+                              qt_to_string(args[2]), 1);
+    }
+    if (strcmp(fn, "repeat") == 0 && nargs == 2) {
+        const char *s = qt_to_string(args[0]);
+        int64_t n = qt_want_int(args[1], "string.repeat");
+        if (n < 0) {
+            n = 0;
+        }
+        size_t slen = strlen(s);
+        char *out = qt_alloc(slen * (size_t)n + 1);
+        char *w = out;
+        for (int64_t k = 0; k < n; k++) {
+            memcpy(w, s, slen);
+            w += slen;
+        }
+        *w = '\0';
+        return qt_string(out);
+    }
+    if (strcmp(fn, "to_int") == 0 && nargs == 1) {
+        const char *s = qt_to_string(args[0]);
+        char *end = NULL;
+        long long v = strtoll(s, &end, 10);
+        if (end == s || *end != '\0') {
+            return qt_int(0); /* matches VM: reads must consume the whole string */
+        }
+        return qt_int((int64_t)v);
+    }
+    if (strcmp(fn, "to_float") == 0 && nargs == 1) {
+        const char *s = qt_to_string(args[0]);
+        char *end = NULL;
+        double v = strtod(s, &end);
+        if (end == s || *end != '\0') {
+            return qt_float(0.0);
+        }
+        return qt_float(v);
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "string.%s: bad arguments", fn);
+    qt_panic(msg);
+}
+
+/* C11 does not guarantee M_PI; use the same value Haskell's `pi` yields. */
+static const double QT_PI = 3.141592653589793;
+
+static QtValue builtin_math(const char *fn, size_t nargs, const QtValue *args) {
+    if (nargs == 0) {
+        if (strcmp(fn, "pi") == 0) {
+            return qt_float(QT_PI);
+        }
+        if (strcmp(fn, "tau") == 0) {
+            return qt_float(2.0 * QT_PI);
+        }
+    }
+    if (nargs == 1) {
+        QtValue a = args[0];
+        double f = (a.tag == QT_INT) ? (double)a.as.i : a.as.f;
+        if (strcmp(fn, "sqrt") == 0) {
+            return qt_float(sqrt(f));
+        }
+        if (strcmp(fn, "abs") == 0) {
+            return a.tag == QT_INT ? qt_int(a.as.i < 0 ? -a.as.i : a.as.i)
+                                   : qt_float(fabs(f));
+        }
+        if (strcmp(fn, "fabs") == 0) {
+            return qt_float(fabs(f));
+        }
+        if (strcmp(fn, "floor") == 0) {
+            return qt_int((int64_t)floor(f));
+        }
+        if (strcmp(fn, "ceil") == 0) {
+            return qt_int((int64_t)ceil(f));
+        }
+        if (strcmp(fn, "round") == 0) {
+            return qt_int(haskell_round(f));
+        }
+        if (strcmp(fn, "exp") == 0) {
+            return qt_float(exp(f));
+        }
+        if (strcmp(fn, "log") == 0) {
+            return qt_float(log(f));
+        }
+        if (strcmp(fn, "log2") == 0) {
+            return qt_float(log(f) / log(2.0));
+        }
+        if (strcmp(fn, "log10") == 0) {
+            return qt_float(log(f) / log(10.0));
+        }
+        if (strcmp(fn, "sin") == 0) {
+            return qt_float(sin(f));
+        }
+        if (strcmp(fn, "cos") == 0) {
+            return qt_float(cos(f));
+        }
+        if (strcmp(fn, "tan") == 0) {
+            return qt_float(tan(f));
+        }
+        if (strcmp(fn, "asin") == 0) {
+            return qt_float(asin(f));
+        }
+        if (strcmp(fn, "acos") == 0) {
+            return qt_float(acos(f));
+        }
+        if (strcmp(fn, "atan") == 0) {
+            return qt_float(atan(f));
+        }
+    }
+    if (nargs == 2) {
+        QtValue a = args[0];
+        QtValue b = args[1];
+        double fa = (a.tag == QT_INT) ? (double)a.as.i : a.as.f;
+        double fb = (b.tag == QT_INT) ? (double)b.as.i : b.as.f;
+        if (strcmp(fn, "pow") == 0) {
+            return qt_float(pow(fa, fb));
+        }
+        if (strcmp(fn, "atan2") == 0) {
+            return qt_float(atan2(fa, fb));
+        }
+        if (strcmp(fn, "min") == 0) {
+            return qt_int(a.as.i < b.as.i ? a.as.i : b.as.i);
+        }
+        if (strcmp(fn, "max") == 0) {
+            return qt_int(a.as.i > b.as.i ? a.as.i : b.as.i);
+        }
+        if (strcmp(fn, "fmin") == 0) {
+            return qt_float(fa < fb ? fa : fb);
+        }
+        if (strcmp(fn, "fmax") == 0) {
+            return qt_float(fa > fb ? fa : fb);
+        }
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "math.%s: bad arguments", fn);
+    qt_panic(msg);
+}
+
 QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
     if (strcmp(name, "print") == 0 || strcmp(name, "io.print") == 0) {
         if (nargs > 0) {
@@ -1042,6 +1399,15 @@ QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
     if ((strcmp(name, "pop") == 0 || strcmp(name, "array.pop") == 0) &&
         nargs == 1) {
         return qt_array_pop(args[0]);
+    }
+    if (strcmp(name, "sys.exit") == 0 && nargs == 1) {
+        exit((int)qt_want_int(args[0], "sys.exit"));
+    }
+    if (strncmp(name, "string.", 7) == 0) {
+        return builtin_string(name + 7, nargs, args);
+    }
+    if (strncmp(name, "math.", 5) == 0) {
+        return builtin_math(name + 5, nargs, args);
     }
     char msg[256];
     snprintf(msg, sizeof(msg), "native backend: unsupported builtin `%s`",

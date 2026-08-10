@@ -180,22 +180,80 @@ pushConst expr = "  st[sp++] = " <> expr <> ";"
 -- differential harness can classify them as skips, not runtime diffs.
 supportedBuiltins :: Set.Set Text
 supportedBuiltins =
-  Set.fromList
+  Set.fromList $
     [ "print",
       "println",
       "io.print",
       "io.println",
-      "string.to_str",
-      "string.concat",
-      "string.from_int",
-      "string.from_float",
       "len",
       "array.len",
       "push",
       "array.push",
       "pop",
-      "array.pop"
+      "array.pop",
+      "sys.exit"
     ]
+      ++ map ("string." <>) stringBuiltins
+      ++ map ("math." <>) mathBuiltins
+
+-- | string.* builtins the C runtime implements (stage 4).  Excludes
+-- `hash`, whose VM definition folds over unbounded Integers.
+stringBuiltins :: [Text]
+stringBuiltins =
+  [ "to_str",
+    "concat",
+    "from_int",
+    "from_float",
+    "len",
+    "is_empty",
+    "substring",
+    "char_at",
+    "contains",
+    "starts_with",
+    "ends_with",
+    "index_of",
+    "last_index_of",
+    "to_upper",
+    "to_lower",
+    "trim",
+    "trim_left",
+    "trim_right",
+    "reverse",
+    "replace",
+    "replace_first",
+    "repeat",
+    "to_int",
+    "to_float"
+  ]
+
+-- | math.* builtins the C runtime implements (stage 4).
+mathBuiltins :: [Text]
+mathBuiltins =
+  [ "sqrt",
+    "abs",
+    "fabs",
+    "floor",
+    "ceil",
+    "round",
+    "exp",
+    "log",
+    "log2",
+    "log10",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "pow",
+    "atan2",
+    "min",
+    "max",
+    "fmin",
+    "fmax",
+    "pi",
+    "tau"
+  ]
 
 emitInstr :: FuncName -> Set.Set FuncName -> Text -> (Int, Instruction) -> Either String Text
 emitInstr fname userFns poolName (idx, instr) = case instr of

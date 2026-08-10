@@ -74,7 +74,7 @@ runtime: .build/libquant_runtime.a
 
 .PHONY: runtime-test
 runtime-test: .build/libquant_runtime.a
-	@ $(RUNTIME_CC) $(RUNTIME_CFLAGS) runtime/test_runtime.c .build/libquant_runtime.a -o .build/runtime-test
+	@ $(RUNTIME_CC) $(RUNTIME_CFLAGS) runtime/test_runtime.c .build/libquant_runtime.a -lm -o .build/runtime-test
 	@ .build/runtime-test
 	@ $(LOG_TIME) "Runtime tests $(C_GREEN)passed$(C_RESET)"
 

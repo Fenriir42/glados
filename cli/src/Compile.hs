@@ -108,6 +108,7 @@ buildNative bytecodes out = do
           "-I" ++ runtimeDir,
           cFile,
           runtimeDir </> "quant_runtime.c",
+          "-lm",
           "-o",
           out
         ]

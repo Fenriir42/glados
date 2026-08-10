@@ -1,0 +1,54 @@
+// Showcase for the native backend's string.* and math.* builtin coverage
+// (stage 4).  Every line must print identically under the VM and the
+// natively compiled binary -- `glados native-diff tests/native_builtins.qa`.
+
+fn main() -> int {
+    // --- string.* : length and emptiness ---
+    println("len(hello) = %d", string.len("hello"));
+    println("is_empty('') = %d", string.is_empty(""));
+    println("is_empty(x) = %d", string.is_empty("x"));
+
+    // --- slicing ---
+    println("substring = %s", string.substring("hello world", 0, 5));
+    println("char_at = %s", string.char_at("quant", 2));
+
+    // --- search predicates ---
+    println("contains = %d", string.contains("hello", "ell"));
+    println("starts_with = %d", string.starts_with("hello", "he"));
+    println("ends_with = %d", string.ends_with("hello", "lo"));
+    println("index_of = %d", string.index_of("hello", "l"));
+    println("last_index_of = %d", string.last_index_of("hello", "l"));
+
+    // --- case and whitespace ---
+    println("upper = %s", string.to_upper("Quant"));
+    println("lower = %s", string.to_lower("Quant"));
+    println("trim = [%s]", string.trim("  hi  "));
+    println("trim_left = [%s]", string.trim_left("  hi  "));
+    println("trim_right = [%s]", string.trim_right("  hi  "));
+
+    // --- transforms ---
+    println("reverse = %s", string.reverse("abcde"));
+    println("replace = %s", string.replace("a-b-c", "-", "+"));
+    println("replace_first = %s", string.replace_first("a-b-c", "-", "+"));
+    println("repeat = %s", string.repeat("ab", 3));
+
+    // --- parsing ---
+    println("to_int = %d", string.to_int("42"));
+    println("to_int(bad) = %d", string.to_int("4x2"));
+
+    // --- math.* : integer results ---
+    println("abs = %d", math.abs(-7));
+    println("floor = %d", math.floor(3.7));
+    println("ceil = %d", math.ceil(3.2));
+    println("round = %d", math.round(2.5));
+    println("min = %d", math.min(4, 9));
+    println("max = %d", math.max(4, 9));
+
+    // --- math.* : float results ---
+    println("sqrt = %f", math.sqrt(2.0));
+    println("pow = %f", math.pow(2.0, 10.0));
+    println("pi = %f", math.pi());
+    println("fmax = %f", math.fmax(1.5, 2.5));
+
+    return 0;
+}
