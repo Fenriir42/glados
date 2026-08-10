@@ -700,11 +700,34 @@ checkDecl env (Located declSpan decl) = case decl of
             Nothing -> recordError (TCMissingInterfaceMethod declSpan ifaceName typeName mname)
             Just _ -> return ()
     mapM_ (checkFunction env . unLocated) (implForMethods ifdecl)
-  DeclInterface _ idecl ->
+  DeclInterface _ idecl -> do
     forM_ (ifaceDeclExtends idecl) $ \(Located psp pname) ->
       case lookupInterface pname env of
         Nothing -> recordError (TCUndefinedInterface psp pname)
         Just _ -> return ()
+    -- Check each default body as a generic function whose receiver is a
+    -- bounded type variable (Self: ThisInterface): calls to sibling methods
+    -- on self go through the same dynamic-dispatch path as generic bounds.
+    let ifaceName = unLocated (ifaceDeclName idecl)
+        selfTv = TypeName "Self"
+        bindSelfTv p
+          | qualType (paramType p) == TypeStruct (TypeName "self") =
+              p {paramName = VarName "self", paramType = QualifiedType Mutable (TypeVar selfTv)}
+          | otherwise = p
+    forM_ (ifaceDeclMethods idecl) $ \sig ->
+      forM_ (ifaceMethodDefault sig) $ \body -> do
+        let nameLoc = ifaceMethodName sig
+            fd =
+              FunctionDecl
+                { funcDeclName = nameLoc,
+                  funcDeclTypeParams = [Located (locSpan nameLoc) selfTv],
+                  funcDeclTypeBounds = [(selfTv, [ifaceName])],
+                  funcDeclParams = map (fmap bindSelfTv) (ifaceMethodParams sig),
+                  funcDeclReturnType = ifaceMethodReturnType sig,
+                  funcDeclBody = body,
+                  funcDeclAsync = False
+                }
+        checkFunction env fd
   _ -> return ()
 
 checkFunction :: Env -> FunctionDecl () -> TC ()

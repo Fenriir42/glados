@@ -1,0 +1,73 @@
+// Default interface methods showcase.
+// Demonstrates:
+//   1. A default body in an interface; impls may omit the method.
+//   2. Overriding: an impl that provides the method wins.
+//   3. Defaults calling required methods on self (dynamic dispatch).
+//   4. Inherited defaults through interface inheritance.
+
+interface Greeter {
+    fn name(self) -> str;
+
+    // Default body: calls the required method through self.
+    fn greet(self) -> str {
+        n: str = self.name();
+        return `hello, {n}!`;
+    }
+}
+
+struct Person { who: str }
+struct Robot { id: str }
+
+// Person keeps the default greet.
+impl Greeter for Person {
+    fn name(self) -> str {
+        return self.who;
+    }
+}
+
+// Robot overrides it.
+impl Greeter for Robot {
+    fn name(self) -> str {
+        return self.id;
+    }
+
+    fn greet(self) -> str {
+        n: str = self.name();
+        return `BEEP BOOP {n}`;
+    }
+}
+
+// Inherited defaults: LoudGreeter adds a default that layers on greet().
+interface LoudGreeter extends Greeter {
+    fn shout(self) -> str {
+        g: str = self.greet();
+        return `{g}!!!`;
+    }
+}
+
+struct Announcer { title: str }
+
+impl LoudGreeter for Announcer {
+    fn name(self) -> str {
+        return self.title;
+    }
+}
+
+// Bounds see default methods like any other interface method.
+fn meet[T: Greeter](g: T) -> void {
+    io.println(g.greet());
+}
+
+fn main() -> void {
+    p: Person = Person { who: "ada" };
+    r: Robot = Robot { id: "r2" };
+    a: Announcer = Announcer { title: "mc" };
+
+    io.println(p.greet());   // default body
+    io.println(r.greet());   // override
+    io.println(a.greet());   // default inherited via extends
+    io.println(a.shout());   // default calling another default
+
+    meet(p);
+    meet(r);
+}

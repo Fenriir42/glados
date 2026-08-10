@@ -69,6 +69,39 @@ impl Describable for Circle {
 }
 ```
 
+## Default Methods
+
+An interface method can provide a default body instead of ending with `;`. A type implementing the interface may omit the method (the default is used) or provide its own body (the override wins):
+
+```quant
+interface Greeter {
+    fn name(self) -> str;
+
+    fn greet(self) -> str {
+        n: str = self.name();
+        return `hello, {n}!`;
+    }
+}
+
+struct Person { who: str }
+
+impl Greeter for Person {
+    fn name(self) -> str { return self.who; }
+    // greet() is inherited from the default body.
+}
+```
+
+Inside a default body, `self` behaves like a bounded type variable of the interface: it can call any method the interface declares (required or default), and the call dispatches to the concrete type's version at runtime. Defaults are also inherited through [interface inheritance](#interface-inheritance) -- an impl of a child interface picks up parent defaults it does not override.
+
+```quant
+interface LoudGreeter extends Greeter {
+    fn shout(self) -> str {
+        g: str = self.greet();
+        return `{g}!!!`;
+    }
+}
+```
+
 ## Interface Inheritance
 
 An interface can extend one or more parent interfaces with `extends`. The child's method set is its own methods plus everything inherited (transitively):

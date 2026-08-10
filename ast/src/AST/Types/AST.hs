@@ -140,7 +140,10 @@ data ImplDecl ann = ImplDecl
 data InterfaceMethodSig = InterfaceMethodSig
   { ifaceMethodName :: Located FuncName,
     ifaceMethodParams :: [Located Parameter],
-    ifaceMethodReturnType :: Located QualifiedType
+    ifaceMethodReturnType :: Located QualifiedType,
+    -- | Optional default body; the pipeline runs at @ann = ()@ so the body is
+    -- stored unannotated to keep InterfaceDecl out of the @ann@ parameter.
+    ifaceMethodDefault :: Maybe (Block ())
   }
   deriving stock (Show, Eq, Generic)
 

@@ -7,8 +7,8 @@ module TypeChecker
 where
 
 import AST.Types.AST (Decl (..), EnumDecl (..), EnumVariant (..), ErrorDecl (..), FFIDecl (..), FFIFuncDecl (..), FunctionDecl (..), ImplDecl (..), ImplForDecl (..), InterfaceDecl (..), InterfaceMethodSig (..), Program (..), StructDecl (..), programDecls)
-import AST.Types.Common (FuncName (..), Located (..), SourceSpan, TypeName (..), VarName, initialPos, locSpan, spanSingle, unLocated)
-import AST.Types.Type (Constness (..), EnumType (..), ErrorType (..), FunctionType (..), PrimitiveType (..), QualifiedType (..), StructType (..), Type (..))
+import AST.Types.Common (FuncName (..), Located (..), SourceSpan, TypeName (..), VarName (..), initialPos, locSpan, spanSingle, unLocated)
+import AST.Types.Type (Constness (..), EnumType (..), ErrorType (..), FunctionType (..), Parameter (..), PrimitiveType (..), QualifiedType (..), StructType (..), Type (..), paramName, paramType, qualType)
 import Control.Monad.State.Strict (execState)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -70,7 +70,8 @@ builtinInterfaces = Map.fromList (map mkEntry opTraits)
       InterfaceMethodSig
         { ifaceMethodName = Located builtinSpan fname,
           ifaceMethodParams = [],
-          ifaceMethodReturnType = Located builtinSpan (QualifiedType Mutable (TypePrimitive PrimNone))
+          ifaceMethodReturnType = Located builtinSpan (QualifiedType Mutable (TypePrimitive PrimNone)),
+          ifaceMethodDefault = Nothing
         }
     builtinSpan = spanSingle (initialPos "/builtin")
 
@@ -88,7 +89,8 @@ typeCheck prog =
       implForEnv = foldr collectImplFor implEnv decls
       ifaceEnv = collectInterfaces implForEnv decls
       enumEnv = foldr collectEnum ifaceEnv decls
-      fullEnv = foldr collectError enumEnv decls
+      errorEnv = foldr collectError enumEnv decls
+      fullEnv = registerDefaultMethods errorEnv decls
       finalState = execState (mapM_ (checkDecl fullEnv) decls) initialTCState
       defSites =
         Map.fromList $
@@ -173,6 +175,31 @@ typeCheck prog =
         env
         (implForMethods ifdecl)
     collectImplFor _ env = env
+
+    -- For every `impl Iface for T` that omits a default-bodied method, register
+    -- the synthesized `T.method` so completeness checks, call-site inference,
+    -- and structural bound checks treat it as provided.  The compiler emits the
+    -- matching bytecode from the same default body.
+    registerDefaultMethods :: Env -> [Located (Decl ())] -> Env
+    registerDefaultMethods = foldr addImpl
+      where
+        addImpl (Located _ (DeclImplFor _ ifdecl)) e =
+          let tname = unLocated (implForTypeName ifdecl)
+              sigs = concat (lookupInterface (unLocated (implForIfaceName ifdecl)) e)
+           in foldr (addDefault tname) e sigs
+        addImpl _ e = e
+        addDefault tname sig e =
+          let qualName = FuncName (unTypeName tname <> "." <> unFuncName (unLocated (ifaceMethodName sig)))
+           in case (ifaceMethodDefault sig, Map.lookup qualName (envFuncs e)) of
+                (Just _, Nothing) ->
+                  insertFunc qualName (FunctionType (map (fmap (bindSelf tname)) (ifaceMethodParams sig)) (ifaceMethodReturnType sig)) e
+                _ -> e
+        -- The parser leaves a bare @self@ parameter as an anonymous param of
+        -- type @TypeStruct "self"@; bind it to the implementing type.
+        bindSelf tname p
+          | qualType (paramType p) == TypeStruct (TypeName "self") =
+              p {paramName = VarName "self", paramType = QualifiedType Mutable (TypeStruct tname)}
+          | otherwise = p
 
     -- Interfaces are stored with their method lists already flattened through
     -- `extends` chains, so impl-for checking, bound satisfaction, and dynamic

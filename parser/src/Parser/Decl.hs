@@ -319,12 +319,17 @@ parseInterfaceMethodSig = do
   _ <- matchKeyword "fn"
   Located nameSpan (TokIdentifier mname) <- MP.satisfy isIdentifier
   Located _ funcType <- parseFunctionType
-  _ <- matchSymbol ";"
+  mDefault <-
+    MP.choice
+      [ Nothing <$ matchSymbol ";",
+        Just . unLocated <$> parseBlock
+      ]
   return $
     InterfaceMethodSig
       { ifaceMethodName = Located nameSpan (FuncName mname),
         ifaceMethodParams = funcParams funcType,
-        ifaceMethodReturnType = funcReturnType funcType
+        ifaceMethodReturnType = funcReturnType funcType,
+        ifaceMethodDefault = mDefault
       }
 
 -- | Parse @interface Name { fn method(...) -> R; ... }@.

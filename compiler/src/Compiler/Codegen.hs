@@ -19,6 +19,8 @@ import AST.Types.AST
     FunctionDecl (..),
     ImplDecl (..),
     ImplForDecl (..),
+    InterfaceDecl (..),
+    InterfaceMethodSig (..),
     LValue (..),
     MatchArm (..),
     MatchPattern (..),
@@ -49,7 +51,7 @@ import AST.Types.Literal
     StringLiteral (..),
   )
 import qualified AST.Types.Operator as Op
-import AST.Types.Type (FunctionType (..), PrimitiveType (..), QualifiedType (..), Type (..), paramName, paramVariadic, qualType)
+import AST.Types.Type (Constness (..), FunctionType (..), PrimitiveType (..), QualifiedType (..), Type (..), paramName, paramType, paramVariadic, qualType)
 import Compiler.Bytecode
   ( BinaryOp (..),
     Bytecode (..),
@@ -316,12 +318,18 @@ compileProgram methodCallMap enumVariantSpans dynMethodMap (Program decls) =
               ]
       -- First pass: register all user-defined function names so forward
       -- references and mutual recursion work.
-      let userNames = Set.fromList [unLocated (funcDeclName fd) | fd <- funcs]
+      let userNames =
+            Set.fromList (map (unLocated . funcDeclName) funcs)
+              <> Set.fromList (map (unLocated . funcDeclName) synthDefaultFds)
           funcTypes =
             Map.fromList
               [ (unLocated (funcDeclName fd), FunctionType (funcDeclParams fd) (funcDeclReturnType fd))
-                | fd <- funcs
+                | fd <- synthDefaultFds
               ]
+              <> Map.fromList
+                [ (unLocated (funcDeclName fd), FunctionType (funcDeclParams fd) (funcDeclReturnType fd))
+                  | fd <- funcs
+                ]
           -- Collect FFI declarations: name -> (lib, CRetType)
           ffiFuncMap =
             Map.fromList
@@ -341,8 +349,65 @@ compileProgram methodCallMap enumVariantSpans dynMethodMap (Program decls) =
             csAsyncFns = asyncNames
           }
       topLevelBcs <- mapM (`compileFunction` Set.empty) funcs
+      synthBcs <- mapM (`compileFunction` Set.empty) synthDefaultFds
       lambdaBcs <- gets csLambdaBytecodes
-      return (topLevelBcs ++ lambdaBcs)
+      return (topLevelBcs ++ synthBcs ++ lambdaBcs)
+
+    -- Instantiate interface default methods for impls that omit them: each
+    -- missing method compiles to @TypeName.method@ from the interface's
+    -- default body with self bound to the concrete type.  Sibling-method
+    -- calls inside the body were recorded as dynamic dispatch by the type
+    -- checker, so the shared body dispatches per receiver at runtime.
+    -- Interfaces are re-flattened here (same rules as the type checker: own
+    -- methods shadow inherited, extends cycles are guarded) so inherited
+    -- defaults instantiate too.
+    synthDefaultFds :: [FunctionDecl ()]
+    synthDefaultFds =
+      [ FunctionDecl
+          { funcDeclName = Located (locSpan (ifaceMethodName sig)) qualName,
+            funcDeclTypeParams = [],
+            funcDeclTypeBounds = [],
+            funcDeclParams = map (fmap (bindSelf tname)) (ifaceMethodParams sig),
+            funcDeclReturnType = ifaceMethodReturnType sig,
+            funcDeclBody = body,
+            funcDeclAsync = False
+          }
+        | Located _ (DeclImplFor _ ifdecl) <- decls,
+          let tname = unLocated (implForTypeName ifdecl)
+              provided =
+                Set.fromList
+                  [unLocated (funcDeclName fd) | Located _ fd <- implForMethods ifdecl],
+          sig <- dedupSigs (flattenIface Set.empty (unLocated (implForIfaceName ifdecl))),
+          let qualName = FuncName (unTypeName tname <> "." <> unFuncName (unLocated (ifaceMethodName sig))),
+          not (Set.member qualName provided),
+          Just body <- [ifaceMethodDefault sig]
+      ]
+      where
+        ifaceRaw =
+          Map.fromList
+            [ ( unLocated (ifaceDeclName idecl),
+                (map unLocated (ifaceDeclExtends idecl), ifaceDeclMethods idecl)
+              )
+              | Located _ (DeclInterface _ idecl) <- decls
+            ]
+        flattenIface visited n
+          | Set.member n visited = []
+          | otherwise = case Map.lookup n ifaceRaw of
+              Just (parents, own) ->
+                own ++ concatMap (flattenIface (Set.insert n visited)) parents
+              Nothing -> []
+        dedupSigs = dedup Set.empty
+          where
+            dedup _ [] = []
+            dedup seen (sig : rest)
+              | Set.member nm seen = dedup seen rest
+              | otherwise = sig : dedup (Set.insert nm seen) rest
+              where
+                nm = unLocated (ifaceMethodName sig)
+        bindSelf tname p
+          | qualType (paramType p) == TypeStruct (TypeName "self") =
+              p {paramName = VarName "self", paramType = QualifiedType Mutable (TypeStruct tname)}
+          | otherwise = p
 
 -- ---------------------------------------------------------------------------
 -- Function
