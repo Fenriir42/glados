@@ -1,5 +1,3 @@
-from std import print
-
 fn main() -> int {
     print("=== Quant Array Indexing Showcase ===\n\n");
 

@@ -17,7 +17,7 @@ fn nth_prime(k: int) -> int {
     n += 2;
     is_prime = True;
 
-    for (i: int = 3; i < int(math.sqrt(n)) + 1; i++) {
+    for (i: int = 3; i < int(math.sqrt(float(n))) + 1; i++) {
       if ((n%i) == 0) {
         is_prime = False ;
       };
