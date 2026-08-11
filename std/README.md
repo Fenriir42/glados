@@ -23,7 +23,7 @@ std/
 ├── csv.qa       # RFC 4180 CSV parse/encode
 ├── yaml.qa      # Flat "key: value" YAML maps
 ├── crypto.qa    # SHA-256, MD5, HMAC-SHA-256, CRC-32 (pure Quant)
-├── os.qa        # Subprocess exec/capture + environment
+├── os.qa        # Subprocess exec/capture/spawn/wait/kill + environment
 ├── sqlite.qa    # SQLite binding via FFI (open/exec/query)
 ├── test.qa      # Property-based testing (seeded generator + shrinking)
 └── README.md

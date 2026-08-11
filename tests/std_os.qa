@@ -1,6 +1,6 @@
 // Showcase / test for the std/os module.  Uses only deterministic commands
 // so VM and native output match byte-for-byte.
-from os import exec, capture, succeeds, getenv, setenv
+from os import exec, capture, succeeds, getenv, setenv, spawn, wait, kill, SIGKILL
 
 fn main() -> void {
     // capture stdout of a command
@@ -18,4 +18,16 @@ fn main() -> void {
     setenv("QUANT_OS_TEST", "42");
     println("env = %s", getenv("QUANT_OS_TEST"));
     println("env missing = [%s]", getenv("QUANT_DEFINITELY_UNSET_XYZ"));
+
+    // background spawn + wait: exit code propagates
+    p1: int = spawn("exit 5");
+    println("spawn/wait exit = %d", wait(p1));
+    p2: int = spawn("true");
+    println("spawn/wait ok = %d", wait(p2));
+
+    // spawn a long sleeper, kill it, and observe the non-normal status
+    p3: int = spawn("sleep 30");
+    killed: bool = kill(p3, SIGKILL());
+    println("kill ok = %d", killed);
+    println("waited killed = %d", wait(p3));
 }

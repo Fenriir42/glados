@@ -31,6 +31,8 @@ import System.IO (Handle, hFlush, stderr, stdin, stdout)
 import System.Info (os)
 import System.Posix.IO (OpenFileFlags (..), OpenMode (..), closeFd, defaultFileFlags, fdToHandle, fdWrite, openFd)
 import qualified System.Posix.IO.ByteString as PosixBS
+import System.Posix.Process (ProcessStatus (..), executeFile, forkProcess, getProcessStatus)
+import System.Posix.Signals (signalProcess)
 import System.Posix.Terminal (queryTerminal)
 import System.Posix.Types (ByteCount, Fd (..))
 import System.Process (readProcessWithExitCode, system)
@@ -323,6 +325,21 @@ callSys "capture" ss [cmd] = do
     try (readProcessWithExitCode "/bin/sh" ["-c", T.unpack (resolveStr ss cmd)] "") ::
       IO (Either SomeException (ExitCode, String, String))
   return $ VString (T.pack (either (const "") (\(_, out, _) -> out) r))
+-- Process control (raw POSIX, so the VM and native backend agree exactly).
+-- spawn runs a command in the background and returns its pid; wait blocks for
+-- a pid and returns its exit code (-1 if killed); kill sends a signal.
+callSys "spawn" ss [cmd] = do
+  pid <- forkProcess (executeFile "/bin/sh" False ["-c", T.unpack (resolveStr ss cmd)] Nothing)
+  return $ VInt (fromIntegral pid)
+callSys "wait" _ [VInt pid] = do
+  st <- try (getProcessStatus True False (fromIntegral pid)) :: IO (Either SomeException (Maybe ProcessStatus))
+  return $ VInt $ case st of
+    Right (Just (Exited ExitSuccess)) -> 0
+    Right (Just (Exited (ExitFailure n))) -> fromIntegral n
+    _ -> -1
+callSys "kill" _ [VInt pid, VInt sig] = do
+  r <- try (signalProcess (fromIntegral sig) (fromIntegral pid)) :: IO (Either SomeException ())
+  return $ VBool (either (const False) (const True) r)
 -- Raw fd write: flush GHC's buffer first to preserve ordering with print/println
 callSys "write" ss [VInt fd, s] = do
   let txt = T.unpack (resolveStr ss s)

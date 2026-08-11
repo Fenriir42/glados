@@ -16,11 +16,13 @@
 #include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <ucontext.h>
 #include <unistd.h>
@@ -1618,8 +1620,30 @@ static QtValue builtin_sys(const char *fn, size_t nargs, const QtValue *args) {
             buf[len] = '\0';
             return qt_string(buf);
         }
+        if (strcmp(fn, "spawn") == 0) {
+            const char *cmd = qt_to_string(args[0]);
+            pid_t pid = fork();
+            if (pid == 0) {
+                execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+                _exit(127);
+            }
+            return qt_int(pid < 0 ? -1 : (int64_t)pid);
+        }
+        if (strcmp(fn, "wait") == 0) {
+            int status;
+            pid_t r = waitpid((pid_t)qt_want_int(args[0], "sys.wait"), &status, 0);
+            if (r < 0) {
+                return qt_int(-1);
+            }
+            return qt_int(WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+        }
     }
     if (nargs == 2) {
+        if (strcmp(fn, "kill") == 0) {
+            int rc = kill((pid_t)qt_want_int(args[0], "sys.kill"),
+                          (int)qt_want_int(args[1], "sys.kill"));
+            return qt_bool(rc == 0);
+        }
         if (strcmp(fn, "write") == 0) {
             return qt_int(fd_write_str(qt_want_int(args[0], "sys.write"),
                                        qt_to_string(args[1])));

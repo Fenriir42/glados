@@ -1,9 +1,8 @@
 # Quant Standard Library - OS Module
 //
-// Process execution and environment access built on the sys.* builtins.
-// `exec` runs a shell command and returns its exit status; `capture` runs
-// one and returns its standard output.  (Lower-level spawn/wait/kill/pipe
-// and signal handling are not yet exposed.)
+// Process execution, control, and environment access built on the sys.*
+// builtins.  `exec`/`capture` run a command synchronously; `spawn`/`wait`
+// run one in the background and reap it; `kill` sends it a signal.
 
 // Runs `cmd` in the shell and returns its exit code (0 on success).
 fn exec(cmd: str) -> int {
@@ -18,6 +17,35 @@ fn capture(cmd: str) -> str {
 // Returns True if `cmd` exited successfully (status 0).
 fn succeeds(cmd: str) -> bool {
     return sys.system(cmd) == 0;
+}
+
+// Starts `cmd` in the background and returns its process id (-1 on failure).
+fn spawn(cmd: str) -> int {
+    return sys.spawn(cmd);
+}
+
+// Waits for process `pid` to finish and returns its exit code (-1 if the
+// process was killed by a signal).
+fn wait(pid: int) -> int {
+    return sys.wait(pid);
+}
+
+// Sends signal `sig` to process `pid`; returns True on success.
+fn kill(pid: int, sig: int) -> bool {
+    return sys.kill(pid, sig);
+}
+
+// Common signal numbers (Linux).
+fn SIGTERM() -> int {
+    return 15;
+}
+
+fn SIGKILL() -> int {
+    return 9;
+}
+
+fn SIGINT() -> int {
+    return 2;
 }
 
 // Reads an environment variable ("" if unset).

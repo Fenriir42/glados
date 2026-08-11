@@ -35,7 +35,7 @@ builtinReturnType (FuncName n)
   | n `elem` ["sys.env", "sys.platform", "sys.hostname", "sys.getcwd", "sys.capture"] = stringT
   | n == "sys.args" = Nothing -- returns [str]; unknown without generics
   | n == "sys.read" = stringT
-  | n `elem` ["sys.close", "sys.isatty"] = boolT
+  | n `elem` ["sys.close", "sys.isatty", "sys.kill"] = boolT
   -- sys.flush already in voidFuncs; remaining sys.* return int
   | "sys." `T.isPrefixOf` n = intT
   -- io.read
