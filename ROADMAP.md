@@ -222,4 +222,4 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 | `sqlite` | Planned | `open/close/exec/query/bind` via FFI to `libsqlite3`; returns `array(dict(str, str))` |
 | ~~`csv`~~ | Done | `parse/encode/rows/headers`; RFC 4180 quoting (embedded commas, quotes, newlines); `tests/std_csv.qa` |
 | `yaml` | Planned | `parse/encode`; maps to the same value tree as `json` |
-| `test` | Planned | Property-based testing: `forall(gen, fn)`; built-in generators for `int/str/array`; shrinking on failure |
+| ~~`test`~~ | Done | Property-based testing: `forall_int(seed, count, lo, hi, prop)` with a deterministic seeded LCG generator and binary-search shrinking of the counterexample; predicates are first-class `(int) -> bool` functions; `tests/std_test.qa` |

@@ -1,0 +1,59 @@
+# Quant Standard Library - Property Testing Module
+//
+// Deterministic property-based testing: a seeded generator drives a
+// predicate over many inputs, and on failure the counterexample is shrunk
+// toward the lower bound.  Because the generator is seeded, runs are
+// reproducible.
+
+// Linear congruential generator step; keeps state in [0, 2^31).
+fn lcg(state: int) -> int {
+    return (state * 1664525 + 1013904223) % 2147483648;
+}
+
+// A pseudo-random int in [lo, hi] derived from `state`.
+fn rand_range(state: int, lo: int, hi: int) -> int {
+    span: int = hi - lo + 1;
+    if (span <= 0) {
+        return lo;
+    };
+    return lo + (state % span);
+}
+
+// Shrinks a failing `x0` toward `lo` by binary search, returning the
+// smallest value in [lo, x0] that still fails `prop`.
+fn shrink_int(x0: int, lo: int, prop: (int) -> bool) -> int {
+    x: int = x0;
+    low: int = lo;
+    cont: bool = True;
+    while (cont) {
+        mid: int = low + (x - low) / 2;
+        if (mid == x) {
+            cont = False;
+        } else if (!prop(mid)) {
+            x = mid;
+        } else {
+            low = mid + 1;
+        };
+    };
+    return x;
+}
+
+// Runs `prop` on `count` generated ints in [lo, hi] starting from `seed`.
+// Returns True if every case passes; on the first failure it prints the
+// shrunk counterexample and returns False.
+fn forall_int(seed: int, count: int, lo: int, hi: int, prop: (int) -> bool) -> bool {
+    state: int = seed;
+    i: int = 0;
+    while (i < count) {
+        state = lcg(state);
+        x: int = rand_range(state, lo, hi);
+        if (!prop(x)) {
+            shrunk: int = shrink_int(x, lo, prop);
+            println("failed after %d cases, counterexample: %d", i + 1, shrunk);
+            return False;
+        };
+        i = i + 1;
+    };
+    println("ok, passed %d cases", count);
+    return True;
+}
