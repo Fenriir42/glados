@@ -322,7 +322,9 @@ stringBuiltins =
     "to_float",
     "split",
     "join",
-    "format"
+    "format",
+    "byte_len",
+    "byte_at"
   ]
 
 -- | math.* builtins the C runtime implements (stage 4).

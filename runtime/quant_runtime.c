@@ -1450,6 +1450,17 @@ static QtValue builtin_string(const char *fn, size_t nargs, const QtValue *args)
         QtArray *a = args[1].as.arr;
         return qt_string(qt_apply_format(qt_to_string(args[0]), a->len, a->items));
     }
+    if (strcmp(fn, "byte_len") == 0 && nargs == 1) {
+        return qt_int((int64_t)strlen(qt_to_string(args[0])));
+    }
+    if (strcmp(fn, "byte_at") == 0 && nargs == 2) {
+        const char *s = qt_to_string(args[0]);
+        int64_t i = qt_want_int(args[1], "string.byte_at");
+        if (i < 0 || (size_t)i >= strlen(s)) {
+            return qt_int(0);
+        }
+        return qt_int((unsigned char)s[i]);
+    }
     char msg[128];
     snprintf(msg, sizeof(msg), "string.%s: bad arguments", fn);
     qt_panic(msg);

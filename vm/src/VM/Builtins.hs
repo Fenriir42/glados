@@ -255,6 +255,18 @@ callString "hash" ss [s] =
       step acc c = (acc `xor` toInteger (fromEnum c)) * 16777619
       h = foldl step 2166136261 txt `mod` 2147483647
    in return $ VInt h
+-- Raw UTF-8 byte access (byte_len is the encoded length, byte_at the value
+-- at a byte index in [0, 255]); the primitives byte-oriented stdlib modules
+-- (crypto, ...) build on.
+callString "byte_len" ss [s] = return $ VInt (fromIntegral (BS.length (TE.encodeUtf8 (resolveStr ss s))))
+callString "byte_at" ss [s, VInt i] =
+  let bs = TE.encodeUtf8 (resolveStr ss s)
+   in return $
+        VInt
+          ( if i >= 0 && fromIntegral i < BS.length bs
+              then fromIntegral (BS.index bs (fromIntegral i))
+              else 0
+          )
 callString name _ _ = ioError $ userError $ "Unknown string function: string." ++ T.unpack name
 
 findFirst :: String -> String -> Maybe Int

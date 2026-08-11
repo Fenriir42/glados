@@ -217,7 +217,7 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 | `net/http` | In progress | `get/post/put/delete` client; `serve/handle/response` server-side API |
 | ~~`path`~~ | Done | `is_absolute/join/basename/dirname/ext/stem/normalize/exists`; pure string ops over `/`; `tests/std_path.qa` |
 | ~~`datetime`~~ | Done | `now/make/to_iso/from_iso/year/month/day/hour/minute/second/weekday/add/diff`; UTC, ISO-8601/RFC-3339, Hinnant civil-date algorithms; `tests/std_datetime.qa` |
-| `crypto` | Planned | `sha256/sha512/md5` (via libcrypto FFI); `rand_bytes/rand_int` (via `/dev/urandom`) |
+| ~~`crypto`~~ | Partial | `sha256_hex` -- a pure-Quant SHA-256 (FIPS 180-4), verified against NIST vectors, built on the new `string.byte_at`/`byte_len` builtins; runs byte-identically on VM and native. `sha512`/`md5` and `rand_*` (non-deterministic) not yet done; `tests/std_crypto.qa` |
 | `os` | Planned | `spawn/wait/kill` (child processes); `pipe/read/write` (anonymous pipes); `signal` handling |
 | `sqlite` | Planned | `open/close/exec/query/bind` via FFI to `libsqlite3`; returns `array(dict(str, str))` |
 | ~~`csv`~~ | Done | `parse/encode/rows/headers`; RFC 4180 quoting (embedded commas, quotes, newlines); `tests/std_csv.qa` |
