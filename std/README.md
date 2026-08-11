@@ -22,7 +22,7 @@ std/
 ├── datetime.qa  # UTC dates on Unix timestamps (ISO-8601, make, add, diff, …)
 ├── csv.qa       # RFC 4180 CSV parse/encode
 ├── yaml.qa      # Flat "key: value" YAML maps
-├── crypto.qa    # SHA-256 (pure Quant)
+├── crypto.qa    # SHA-256, MD5, HMAC-SHA-256, CRC-32 (pure Quant)
 ├── os.qa        # Subprocess exec/capture + environment
 ├── sqlite.qa    # SQLite binding via FFI (open/exec/query)
 ├── test.qa      # Property-based testing (seeded generator + shrinking)

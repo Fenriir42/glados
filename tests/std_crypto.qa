@@ -1,11 +1,22 @@
-// Showcase / test for the std/crypto module (SHA-256 known vectors).
-from crypto import sha256_hex
+// Showcase / test for the std/crypto module against published vectors.
+from crypto import sha256_hex, md5_hex, hmac_sha256, crc32
 
 fn main() -> void {
-    // NIST test vectors.
-    println("empty  = %s", sha256_hex(""));
-    println("abc    = %s", sha256_hex("abc"));
-    println("quick  = %s", sha256_hex("The quick brown fox jumps over the lazy dog"));
-    // Longer than one block (> 55 bytes) to exercise multi-block padding.
-    println("long   = %s", sha256_hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"));
+    // SHA-256 (NIST)
+    println("sha256 empty = %s", sha256_hex(""));
+    println("sha256 abc   = %s", sha256_hex("abc"));
+    println("sha256 fox   = %s", sha256_hex("The quick brown fox jumps over the lazy dog"));
+    println("sha256 long  = %s", sha256_hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"));
+
+    // MD5 (RFC 1321)
+    println("md5 empty = %s", md5_hex(""));
+    println("md5 abc   = %s", md5_hex("abc"));
+    println("md5 fox   = %s", md5_hex("The quick brown fox jumps over the lazy dog"));
+
+    // HMAC-SHA-256 (RFC 4231-style)
+    println("hmac = %s", hmac_sha256("key", "The quick brown fox jumps over the lazy dog"));
+
+    // CRC-32 (check value)
+    println("crc32 123456789 = %d", crc32("123456789"));
+    println("crc32 abc = %d", crc32("abc"));
 }

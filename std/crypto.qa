@@ -1,31 +1,63 @@
 # Quant Standard Library - Crypto Module
 //
-// Pure-Quant SHA-256 (FIPS 180-4).  Operates on the raw UTF-8 bytes of the
-// input string and returns the lowercase hex digest.  32-bit arithmetic is
-// emulated by masking with 0xFFFFFFFF.
+// Pure-Quant hashing and checksums operating on the raw UTF-8 bytes of the
+// input.  32-bit arithmetic is emulated by masking with 0xFFFFFFFF.
+//
+//   sha256_hex / md5_hex : hex digests of a string
+//   hmac_sha256          : keyed HMAC-SHA-256
+//   crc32                : CRC-32 (IEEE 802.3) checksum
+//
+// SHA-512 is intentionally omitted: its 64-bit unsigned words cannot be
+// represented consistently across the arbitrary-precision VM and the signed
+// 64-bit native backend.
 
-// Rotate a 32-bit word right by n bits.
+// ---------------------------------------------------------------------------
+// Shared helpers
+
 fn rotr(x: int, n: int) -> int {
     return ((x >> n) | (x << (32 - n))) & 0xFFFFFFFF;
+}
+
+fn rotl(x: int, n: int) -> int {
+    return ((x << n) | (x >> (32 - n))) & 0xFFFFFFFF;
 }
 
 fn hex_digit(d: int) -> str {
     return string.char_at("0123456789abcdef", d);
 }
 
-// Format a 32-bit word as 8 lowercase hex digits.
-fn to_hex8(w: int) -> str {
+fn byte_hex(v: int) -> str {
+    return string.concat(hex_digit((v >> 4) & 0xF), hex_digit(v & 0xF));
+}
+
+// Hex-encodes a byte array.
+fn bytes_to_hex(b: [int]) -> str {
     out: str = "";
-    i: int = 7;
-    while (i >= 0) {
-        out = string.concat(out, hex_digit((w >> (i * 4)) & 0xF));
-        i = i - 1;
+    i: int = 0;
+    while (i < len(b)) {
+        out = string.concat(out, byte_hex(b[i]));
+        i = i + 1;
     };
     return out;
 }
 
-// Returns the SHA-256 digest of `msg` as a 64-character hex string.
-fn sha256_hex(msg: str) -> str {
+// The raw UTF-8 bytes of a string as an int array.
+fn str_bytes(s: str) -> [int] {
+    out: [int] = [];
+    n: int = string.byte_len(s);
+    i: int = 0;
+    while (i < n) {
+        push(out, string.byte_at(s, i));
+        i = i + 1;
+    };
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// SHA-256 (FIPS 180-4)
+
+// Digest of a byte array as 32 raw bytes.
+fn sha256_raw(msg: [int]) -> [int] {
     h: [int] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
         0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
@@ -44,12 +76,11 @@ fn sha256_hex(msg: str) -> str {
         0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     ];
 
-    // Build the padded message as a byte array.
-    mlen: int = string.byte_len(msg);
+    mlen: int = len(msg);
     bytes: [int] = [];
     i: int = 0;
     while (i < mlen) {
-        push(bytes, string.byte_at(msg, i));
+        push(bytes, msg[i]);
         i = i + 1;
     };
     push(bytes, 0x80);
@@ -71,9 +102,8 @@ fn sha256_hex(msg: str) -> str {
         t: int = 0;
         while (t < 16) {
             off: int = base + t * 4;
-            word: int = (bytes[off] << 24) | (bytes[off + 1] << 16)
-                | (bytes[off + 2] << 8) | bytes[off + 3];
-            push(w, word & 0xFFFFFFFF);
+            push(w, ((bytes[off] << 24) | (bytes[off + 1] << 16)
+                | (bytes[off + 2] << 8) | bytes[off + 3]) & 0xFFFFFFFF);
             t = t + 1;
         };
         while (t < 64) {
@@ -121,11 +151,196 @@ fn sha256_hex(msg: str) -> str {
         b = b + 1;
     };
 
-    out: str = "";
+    out: [int] = [];
     i = 0;
     while (i < 8) {
-        out = string.concat(out, to_hex8(h[i]));
+        push(out, (h[i] >> 24) & 0xFF);
+        push(out, (h[i] >> 16) & 0xFF);
+        push(out, (h[i] >> 8) & 0xFF);
+        push(out, h[i] & 0xFF);
         i = i + 1;
     };
     return out;
+}
+
+// SHA-256 digest of a string as a 64-character hex string.
+fn sha256_hex(msg: str) -> str {
+    return bytes_to_hex(sha256_raw(str_bytes(msg)));
+}
+
+// ---------------------------------------------------------------------------
+// HMAC-SHA-256 (RFC 2104)
+
+fn hmac_sha256(key: str, msg: str) -> str {
+    kb: [int] = str_bytes(key);
+    // Keys longer than the block size are hashed first.
+    if (len(kb) > 64) {
+        kb = sha256_raw(kb);
+    };
+    // Pad the key to the 64-byte block size.
+    while (len(kb) < 64) {
+        push(kb, 0);
+    };
+
+    inner: [int] = [];
+    outer: [int] = [];
+    i: int = 0;
+    while (i < 64) {
+        push(inner, kb[i] ^ 0x36);
+        push(outer, kb[i] ^ 0x5c);
+        i = i + 1;
+    };
+    // inner = H((key ^ ipad) || msg)
+    mb: [int] = str_bytes(msg);
+    i = 0;
+    while (i < len(mb)) {
+        push(inner, mb[i]);
+        i = i + 1;
+    };
+    ihash: [int] = sha256_raw(inner);
+    // outer = H((key ^ opad) || inner)
+    i = 0;
+    while (i < len(ihash)) {
+        push(outer, ihash[i]);
+        i = i + 1;
+    };
+    return bytes_to_hex(sha256_raw(outer));
+}
+
+// ---------------------------------------------------------------------------
+// MD5 (RFC 1321)
+
+fn md5_raw(msg: [int]) -> [int] {
+    s: [int] = [
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+        5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+        4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+        6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+    ];
+    k: [int] = [
+        0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a,
+        0xa8304613, 0xfd469501, 0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be,
+        0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821, 0xf61e2562, 0xc040b340,
+        0x265e5a51, 0xe9b6c7aa, 0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+        0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 0xa9e3e905, 0xfcefa3f8,
+        0x676f02d9, 0x8d2a4c8a, 0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c,
+        0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70, 0x289b7ec6, 0xeaa127fa,
+        0xd4ef3085, 0x04881d05, 0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+        0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 0x655b59c3, 0x8f0ccc92,
+        0xffeff47d, 0x85845dd1, 0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
+        0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
+    ];
+    a0: int = 0x67452301;
+    b0: int = 0xefcdab89;
+    c0: int = 0x98badcfe;
+    d0: int = 0x10325476;
+
+    mlen: int = len(msg);
+    bytes: [int] = [];
+    i: int = 0;
+    while (i < mlen) {
+        push(bytes, msg[i]);
+        i = i + 1;
+    };
+    push(bytes, 0x80);
+    while (len(bytes) % 64 != 56) {
+        push(bytes, 0);
+    };
+    // 64-bit little-endian bit length
+    bitlen: int = mlen * 8;
+    j: int = 0;
+    while (j < 8) {
+        push(bytes, (bitlen >> (j * 8)) & 0xFF);
+        j = j + 1;
+    };
+
+    nblocks: int = len(bytes) / 64;
+    blk: int = 0;
+    while (blk < nblocks) {
+        base: int = blk * 64;
+        m: [int] = [];
+        t: int = 0;
+        while (t < 16) {
+            off: int = base + t * 4;
+            // little-endian words
+            push(m, (bytes[off] | (bytes[off + 1] << 8)
+                | (bytes[off + 2] << 16) | (bytes[off + 3] << 24)) & 0xFFFFFFFF);
+            t = t + 1;
+        };
+
+        a: int = a0;
+        b: int = b0;
+        c: int = c0;
+        d: int = d0;
+        i = 0;
+        while (i < 64) {
+            f: int = 0;
+            g: int = 0;
+            if (i < 16) {
+                f = (b & c) | ((~b & 0xFFFFFFFF) & d);
+                g = i;
+            } else if (i < 32) {
+                f = (d & b) | ((~d & 0xFFFFFFFF) & c);
+                g = (5 * i + 1) % 16;
+            } else if (i < 48) {
+                f = b ^ c ^ d;
+                g = (3 * i + 5) % 16;
+            } else {
+                f = c ^ (b | (~d & 0xFFFFFFFF));
+                g = (7 * i) % 16;
+            };
+            f = (f + a + k[i] + m[g]) & 0xFFFFFFFF;
+            a = d;
+            d = c;
+            c = b;
+            b = (b + rotl(f, s[i])) & 0xFFFFFFFF;
+            i = i + 1;
+        };
+        a0 = (a0 + a) & 0xFFFFFFFF;
+        b0 = (b0 + b) & 0xFFFFFFFF;
+        c0 = (c0 + c) & 0xFFFFFFFF;
+        d0 = (d0 + d) & 0xFFFFFFFF;
+        blk = blk + 1;
+    };
+
+    out: [int] = [];
+    words: [int] = [a0, b0, c0, d0];
+    i = 0;
+    while (i < 4) {
+        // little-endian output
+        push(out, words[i] & 0xFF);
+        push(out, (words[i] >> 8) & 0xFF);
+        push(out, (words[i] >> 16) & 0xFF);
+        push(out, (words[i] >> 24) & 0xFF);
+        i = i + 1;
+    };
+    return out;
+}
+
+// MD5 digest of a string as a 32-character hex string.
+fn md5_hex(msg: str) -> str {
+    return bytes_to_hex(md5_raw(str_bytes(msg)));
+}
+
+// ---------------------------------------------------------------------------
+// CRC-32 (IEEE 802.3, reflected, polynomial 0xEDB88320)
+
+fn crc32(msg: str) -> int {
+    crc: int = 0xFFFFFFFF;
+    n: int = string.byte_len(msg);
+    i: int = 0;
+    while (i < n) {
+        crc = crc ^ string.byte_at(msg, i);
+        j: int = 0;
+        while (j < 8) {
+            if ((crc & 1) == 1) {
+                crc = (crc >> 1) ^ 0xEDB88320;
+            } else {
+                crc = crc >> 1;
+            };
+            j = j + 1;
+        };
+        i = i + 1;
+    };
+    return crc ^ 0xFFFFFFFF;
 }
