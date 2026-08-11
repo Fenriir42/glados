@@ -216,7 +216,7 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 |--------|--------|-------------------|
 | `net/http` | In progress | `get/post/put/delete` client; `serve/handle/response` server-side API |
 | ~~`path`~~ | Done | `is_absolute/join/basename/dirname/ext/stem/normalize/exists`; pure string ops over `/`; `tests/std_path.qa` |
-| `datetime` | Planned | `now/parse/format/add/diff/unix`; ISO-8601 and RFC-3339 support |
+| ~~`datetime`~~ | Done | `now/make/to_iso/from_iso/year/month/day/hour/minute/second/weekday/add/diff`; UTC, ISO-8601/RFC-3339, Hinnant civil-date algorithms; `tests/std_datetime.qa` |
 | `crypto` | Planned | `sha256/sha512/md5` (via libcrypto FFI); `rand_bytes/rand_int` (via `/dev/urandom`) |
 | `os` | Planned | `spawn/wait/kill` (child processes); `pipe/read/write` (anonymous pipes); `signal` handling |
 | `sqlite` | Planned | `open/close/exec/query/bind` via FFI to `libsqlite3`; returns `array(dict(str, str))` |

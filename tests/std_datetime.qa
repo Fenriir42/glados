@@ -1,0 +1,26 @@
+// Showcase / test for the std/datetime module (deterministic: fixed
+// timestamps only, never now()).
+from datetime import to_iso, from_iso, make, year, month, day, weekday, add, diff
+
+fn main() -> void {
+    // Unix epoch and a couple of known instants.
+    println("epoch = %s", to_iso(0));
+    println("t1e9  = %s", to_iso(1000000000));
+    println("t17e8 = %s", to_iso(1700000000));
+
+    // Round-trip parse.
+    ts: int = from_iso("2023-11-14T22:13:20Z");
+    println("parsed = %d", ts);
+    println("reformat = %s", to_iso(ts));
+
+    // Field accessors on a fixed timestamp.
+    t: int = make(2024, 2, 29, 12, 30, 45);
+    println("leap day = %s", to_iso(t));
+    println("year=%d month=%d day=%d", year(t), month(t), day(t));
+    println("weekday = %d", weekday(t));
+
+    // Arithmetic.
+    day_later: int = add(t, 86400);
+    println("plus 1 day = %s", to_iso(day_later));
+    println("diff = %d", diff(day_later, t));
+}

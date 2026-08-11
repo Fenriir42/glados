@@ -1,0 +1,141 @@
+# Quant Standard Library - Datetime Module
+//
+// UTC date/time built on Unix timestamps (seconds since 1970-01-01).  The
+// civil <-> days conversions use Howard Hinnant's algorithms and are exact
+// for the proleptic Gregorian calendar; they assume non-negative results,
+// i.e. dates from 1970 onward.
+
+// Days since the Unix epoch for the civil date (y, m, d).
+fn days_from_civil(y0: int, m: int, d: int) -> int {
+    y: int = y0;
+    if (m <= 2) {
+        y = y - 1;
+    };
+    era: int = y / 400;
+    yoe: int = y - era * 400;
+    mp: int = m + 9;
+    if (m > 2) {
+        mp = m - 3;
+    };
+    doy: int = (153 * mp + 2) / 5 + d - 1;
+    doe: int = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
+
+// The civil date (year, month, day) for a day count since the epoch.
+fn civil_from_days(z0: int) -> (int, int, int) {
+    z: int = z0 + 719468;
+    era: int = z / 146097;
+    doe: int = z - era * 146097;
+    yoe: int = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    y: int = yoe + era * 400;
+    doy: int = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    mp: int = (5 * doy + 2) / 153;
+    d: int = doy - (153 * mp + 2) / 5 + 1;
+    m: int = mp + 3;
+    if (mp >= 10) {
+        m = mp - 9;
+    };
+    if (m <= 2) {
+        y = y + 1;
+    };
+    return (y, m, d);
+}
+
+// The current time as a Unix timestamp (seconds).  Non-deterministic.
+fn now() -> int {
+    return sys.time();
+}
+
+// Compose a Unix timestamp from UTC calendar fields.
+fn make(y: int, mo: int, d: int, h: int, mi: int, s: int) -> int {
+    return days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + s;
+}
+
+// Calendar-field accessors (all UTC).
+fn year(ts: int) -> int {
+    ymd: (int, int, int) = civil_from_days(ts / 86400);
+    return ymd.0;
+}
+
+fn month(ts: int) -> int {
+    ymd: (int, int, int) = civil_from_days(ts / 86400);
+    return ymd.1;
+}
+
+fn day(ts: int) -> int {
+    ymd: (int, int, int) = civil_from_days(ts / 86400);
+    return ymd.2;
+}
+
+fn hour(ts: int) -> int {
+    return (ts % 86400) / 3600;
+}
+
+fn minute(ts: int) -> int {
+    return (ts % 3600) / 60;
+}
+
+fn second(ts: int) -> int {
+    return ts % 60;
+}
+
+// Day of week, 0 = Sunday .. 6 = Saturday.
+fn weekday(ts: int) -> int {
+    return (ts / 86400 + 4) % 7;
+}
+
+// Add `secs` seconds to a timestamp, or the difference between two.
+fn add(ts: int, secs: int) -> int {
+    return ts + secs;
+}
+
+fn diff(a: int, b: int) -> int {
+    return a - b;
+}
+
+// Zero-padding helpers for ISO formatting.
+fn pad2(n: int) -> str {
+    s: str = string.from_int(n);
+    if (n < 10) {
+        return string.concat("0", s);
+    };
+    return s;
+}
+
+fn pad4(n: int) -> str {
+    s: str = string.from_int(n);
+    while (string.len(s) < 4) {
+        s = string.concat("0", s);
+    };
+    return s;
+}
+
+// Formats a timestamp as an ISO-8601 / RFC-3339 UTC string
+// "YYYY-MM-DDThh:mm:ssZ".
+fn to_iso(ts: int) -> str {
+    ymd: (int, int, int) = civil_from_days(ts / 86400);
+    out: str = pad4(ymd.0);
+    out = string.concat(out, "-");
+    out = string.concat(out, pad2(ymd.1));
+    out = string.concat(out, "-");
+    out = string.concat(out, pad2(ymd.2));
+    out = string.concat(out, "T");
+    out = string.concat(out, pad2(hour(ts)));
+    out = string.concat(out, ":");
+    out = string.concat(out, pad2(minute(ts)));
+    out = string.concat(out, ":");
+    out = string.concat(out, pad2(second(ts)));
+    return string.concat(out, "Z");
+}
+
+// Parses an ISO-8601 UTC string "YYYY-MM-DDThh:mm:ssZ" into a timestamp.
+fn from_iso(s: str) -> int {
+    y: int = string.to_int(string.substring(s, 0, 4));
+    mo: int = string.to_int(string.substring(s, 5, 7));
+    d: int = string.to_int(string.substring(s, 8, 10));
+    h: int = string.to_int(string.substring(s, 11, 13));
+    mi: int = string.to_int(string.substring(s, 14, 16));
+    sec: int = string.to_int(string.substring(s, 17, 19));
+    return make(y, mo, d, h, mi, sec);
+}
