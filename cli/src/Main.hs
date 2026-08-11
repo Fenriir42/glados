@@ -26,7 +26,7 @@ import System.Exit (exitFailure)
 
 data Command
   = CmdCompiler Compiler.Options
-  | CmdInit String
+  | CmdInit String (Maybe String)
   | CmdBuild Bool (Maybe String)
   | CmdRun
   | CmdTest (Maybe FilePath) Bool (Maybe Int) (Maybe FilePath)
@@ -103,7 +103,9 @@ commandParser =
 
 initParser :: Parser Command
 initParser =
-  CmdInit <$> argument str (metavar "NAME" <> help "project name and directory")
+  CmdInit
+    <$> argument str (metavar "NAME" <> help "project name and directory")
+    <*> optional (strOption (long "ci" <> metavar "SYSTEM" <> help "scaffold a CI workflow (systems: github)"))
 
 buildParser :: Parser Command
 buildParser =
@@ -174,7 +176,7 @@ main = execParser opts >>= dispatch
 
 dispatch :: Command -> IO ()
 dispatch (CmdCompiler o) = runCompiler o
-dispatch (CmdInit name) = runInit name
+dispatch (CmdInit name ci) = runInit name ci
 dispatch (CmdBuild rel target) = runBuild rel target
 dispatch CmdRun = runRun
 dispatch (CmdTest mf cov covMin covOut) = runTest mf cov covMin covOut

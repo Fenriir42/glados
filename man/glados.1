@@ -37,10 +37,13 @@ entry   = "src/main.qa"
 .fi
 .RE
 .TP
-.B init \fINAME\fR
+.B init \fINAME\fR [\-\-ci \fISYSTEM\fR]
 Scaffold a new project in a directory named \fINAME\fR. Creates
 \fBquant.toml\fR, \fBsrc/main.qa\fR (hello-world template), and
-\fBtests/\fR.
+\fBtests/\fR. With \fB\-\-ci github\fR, also writes
+\fB.github/workflows/quant.yml\fR, a GitHub Actions workflow that runs
+\fBglados build\fR, \fBglados test\fR, \fBglados lint\fR, and
+\fBglados fmt \-\-check\fR on push and pull request.
 .TP
 .B build [\-\-release] [\-\-target \fITARGET\fR]
 Compile the project entry point. With \fB\-\-release\fR, enable

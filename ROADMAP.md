@@ -216,7 +216,7 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 |------|---------|-------|
 | ~~File watcher~~ | `glados watch [CMD]` | Done -- re-runs `glados build` (or any subcommand, e.g. `glados watch test --cov`, with flags forwarded) whenever a `.qa` file under `src/` or the test dir changes. Polls modification times (~400 ms; portable, dependency-free) and runs once at startup; Ctrl-C stops. `man/glados.1` documents it |
 | ~~Benchmarking~~ | `glados bench [FILE]` | Done -- discovers `*_bench.qa` (in `benchmarks/` and the test dir) and runs each `bench_*` function; the `bench` stdlib module's `bench_fn` times a closure across samples via the new monotonic `sys.time_nanos` builtin and reports ns/op + standard deviation in a TAP-compatible line. Works on both VM and native; `benchmarks/fib_bench.qa` |
-| CI template | `glados init --ci github` | Adds `.github/workflows/quant.yml` to the scaffolded project; runs `glados build`, `glados test`, and `glados lint` on push |
+| ~~CI template~~ | `glados init --ci github` | Done -- `glados init NAME --ci github` also writes `.github/workflows/quant.yml`, a workflow running `glados build`/`test`/`lint`/`fmt --check` on push and PR (with a commented toolchain-install placeholder). Unknown CI systems are rejected before anything is created |
 | Package manager | `glados add <pkg>`, `glados publish` | `[dependencies]` section in `quant.toml`; resolves packages from a central registry; downloads, caches, and links `.qa` source trees |
 
 ### Standard library expansion

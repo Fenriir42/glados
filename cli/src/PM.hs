@@ -48,8 +48,11 @@ import System.Process (rawSystem)
 -- ---------------------------------------------------------------------------
 -- init
 
-runInit :: String -> IO ()
-runInit name = do
+runInit :: String -> Maybe String -> IO ()
+runInit name mCi = do
+  case mCi of
+    Just ci | ci /= "github" -> die ("unknown CI system `" ++ ci ++ "` (supported: github)")
+    _ -> return ()
   exists <- doesDirectoryExist name
   if exists
     then die ("directory `" ++ name ++ "` already exists")
@@ -62,7 +65,49 @@ runInit name = do
       printStep "created" (name </> "quant.toml")
       printStep "created" (name </> "src" </> "main.qa")
       printStep "created" (name </> "tests" </> "main_test.qa")
+      case mCi of
+        Just "github" -> do
+          let wf = name </> ".github" </> "workflows"
+          createDirectoryIfMissing True wf
+          writeFile (wf </> "quant.yml") ciGithubTemplate
+          printStep "created" (wf </> "quant.yml")
+        _ -> return ()
       printOk ("project `" ++ name ++ "` ready -- `cd " ++ name ++ " && glados test`")
+
+-- | GitHub Actions workflow: build, test, lint, and format-check on push.
+ciGithubTemplate :: String
+ciGithubTemplate =
+  unlines
+    [ "name: Quant CI",
+      "",
+      "on:",
+      "  push:",
+      "    branches: [ main, master ]",
+      "  pull_request:",
+      "",
+      "jobs:",
+      "  build:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/checkout@v4",
+      "",
+      "      # Install the Quant toolchain so `glados`, `quant-fmt`, and",
+      "      # `wheatley` are on PATH.  Adjust to your preferred method --",
+      "      # a release .deb, a Nix build, or building from source, e.g.:",
+      "      #   - run: sudo dpkg -i quant_*.deb",
+      "",
+      "      - name: Build",
+      "        run: glados build",
+      "",
+      "      - name: Test",
+      "        run: glados test",
+      "",
+      "      - name: Lint",
+      "        run: glados lint",
+      "",
+      "      - name: Format check",
+      "        run: glados fmt --check"
+    ]
 
 tomlTemplate :: String -> String
 tomlTemplate name =

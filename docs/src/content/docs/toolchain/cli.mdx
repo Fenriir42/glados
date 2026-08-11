@@ -58,7 +58,7 @@ version = "0.1.0"
 entry   = "src/main.qa"
 ```
 
-### `glados init NAME`
+### `glados init NAME [--ci github]`
 
 Scaffold a new project in a directory `NAME`: creates `quant.toml`, a
 hello-world `src/main.qa`, and a `tests/main_test.qa`.
@@ -68,6 +68,18 @@ glados init hello
 cd hello
 glados run
 ```
+
+With `--ci github`, it also writes `.github/workflows/quant.yml` -- a GitHub
+Actions workflow that runs `glados build`, `glados test`, `glados lint`, and
+`glados fmt --check` on every push and pull request:
+
+```bash
+glados init hello --ci github
+```
+
+The workflow includes a commented placeholder for installing the Quant
+toolchain (a release `.deb`, a Nix build, or building from source) so the
+`glados` commands are on `PATH`.
 
 ### `glados build [--release] [--target c]`
 
