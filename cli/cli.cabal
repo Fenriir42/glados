@@ -28,6 +28,7 @@ executable cli
   other-modules:
     Compile
     Display
+    Fuzz
     Manifest
     NativeDiff
     PM

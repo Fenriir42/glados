@@ -5,6 +5,7 @@ import qualified Compiler (Options (..), options, prologue)
 import Compiler.Disasm (disassemble)
 import Compiler.Serialize (decodeBytecodes, encodeBytecodes)
 import qualified Data.ByteString.Lazy as BSL
+import Fuzz (runFuzz)
 import NativeDiff (runNativeDiff)
 import Options.Applicative
 import PM
@@ -32,6 +33,7 @@ data Command
   | CmdTest (Maybe FilePath) Bool (Maybe Int) (Maybe FilePath)
   | CmdBench (Maybe FilePath)
   | CmdNativeDiff [FilePath]
+  | CmdFuzz Int Int
   | CmdLint
   | CmdWatch [String]
   | CmdFmt Bool
@@ -72,6 +74,10 @@ commandParser =
         "native-diff"
         nativeDiffParser
         "run .qa files under both VM and native binary, diff outputs"
+      <> cmd
+        "fuzz"
+        fuzzParser
+        "generate random programs and diff VM vs native output"
       <> cmd
         "lint"
         (pure CmdLint)
@@ -131,6 +137,12 @@ benchParser =
   CmdBench
     <$> optional (argument str (metavar "FILE" <> help "run only this benchmark file"))
 
+fuzzParser :: Parser Command
+fuzzParser =
+  CmdFuzz
+    <$> option auto (long "seed" <> metavar "N" <> value 1 <> showDefault <> help "starting seed")
+    <*> option auto (long "count" <> metavar "N" <> value 50 <> showDefault <> help "number of programs to generate")
+
 watchParser :: Parser Command
 watchParser =
   CmdWatch
@@ -182,6 +194,7 @@ dispatch CmdRun = runRun
 dispatch (CmdTest mf cov covMin covOut) = runTest mf cov covMin covOut
 dispatch (CmdBench mf) = runBench mf
 dispatch (CmdNativeDiff paths) = runNativeDiff paths
+dispatch (CmdFuzz seed count) = runFuzz seed count
 dispatch CmdLint = runLint
 dispatch (CmdWatch cmd) = runWatch cmd
 dispatch (CmdFmt check) = runFmt check

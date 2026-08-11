@@ -240,18 +240,23 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 
 Ideas beyond the V1 scope above, in rough priority order. (i really need to do a release because i'm spewing random things).
 
-### Differential fuzzer
+### ~~Differential fuzzer~~ (done)
 
-Auto-generate random *valid* Quant programs and run each under both the
-bytecode VM and the native binary, flagging any divergence in stdout or exit
-code. The hand-written `tests/*.qa` corpus is only ~40 files; a generator
-that explores arithmetic, control flow, strings, arrays, structs, enums,
-closures, and calls would exhaustively probe the byte-identical invariant the
-whole native backend depends on. Two real bugs were already found by hand
-(unresolved `VStringRef` stored in arrays; non-short-circuiting `&&`); a
-fuzzer would surface the long tail -- integer/float edge cases, formatting
-boundaries, deep recursion, operator precedence. Shrink any counterexample to
-a minimal reproducer. Could reuse the `native-diff` harness as the oracle.
+`glados fuzz [--seed N] [--count N]` generates random, type-correct,
+terminating Quant programs from a seeded LCG generator (arithmetic,
+comparisons, string builtins, `if`/bounded-`for`, non-recursive helper
+functions) and runs each under both the VM and a native binary, flagging any
+stdout/exit-code divergence. Programs are deterministic, so a divergence is a
+real bug; each failing case prints its seed for one-line reproduction. It
+found and led to fixing the **negative-zero formatting bug** (the VM's
+`formatFloat` dropped the sign of `-0.0`, rendering it `"0.0"` while native
+gave `"-0.0"`); `tests/native_negzero.qa` guards the fix. It also confirmed
+the known VM-`Integer` vs native-`int64` divergence (now documented in the
+Native Backend page). Hundreds of programs across several seed ranges
+otherwise agree.
+
+Future extension: shrink counterexamples to a minimal reproducer, and grow
+the grammar to structs/enums/closures/arrays.
 
 ### VM performance pass
 

@@ -116,6 +116,17 @@ a semantics difference). Native binaries are written to
 different output under the two engines. Requires a C compiler and
 the Quant C runtime (see ENVIRONMENT).
 .TP
+.B fuzz [\-\-seed \fIN\fR] [\-\-count \fIN\fR]
+Differential fuzzer. Generates \fB\-\-count\fR (default 50) random,
+type-correct, terminating Quant programs from a seeded generator
+(starting at \fB\-\-seed\fR, default 1) and runs each under both the
+bytecode VM and a natively compiled binary, reporting any divergence
+in stdout or exit code. Generated programs are deterministic, so any
+divergence is a real bug; each failing case prints its seed for
+one-line reproduction (\fBglados fuzz \-\-seed N \-\-count 1\fR). Exits
+with status 1 if any program diverges. Requires a C compiler and the
+Quant C runtime.
+.TP
 .B lint
 Run
 .BR wheatley (1)

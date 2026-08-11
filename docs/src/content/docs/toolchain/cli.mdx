@@ -209,6 +209,24 @@ whose output is inherently non-deterministic (network, wall-clock,
 randomness) can opt out with a `// native-diff: skip` comment. See
 [Native Backend](/system/native-backend/).
 
+## Fuzzing the backend: `glados fuzz [--seed N] [--count N]`
+
+Where `native-diff` checks a fixed corpus, `glados fuzz` *generates* it. It
+produces random, type-correct, terminating Quant programs from a seeded
+generator (arithmetic, comparisons, strings, control flow, non-recursive
+functions) and runs each under both engines, flagging any divergence in
+stdout or exit code. Because generated programs are deterministic, any
+divergence is a real bug.
+
+```bash
+glados fuzz --count 200          # 200 programs from seed 1
+glados fuzz --seed 500112 --count 1   # reproduce one reported case
+```
+
+Each failing case prints its seed, so it reproduces in one line. This is how
+the `-0.0` formatting bug (the VM dropped the sign of negative zero) was
+found and fixed.
+
 ## Other binaries
 
 The toolchain installs a few companion binaries that the subcommands above
