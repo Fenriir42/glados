@@ -8,17 +8,18 @@ fn exit(code: int) -> void {
     sys.exit(code);
 }
 
-// Returns the number of command-line arguments, including the program name.
+// Returns the number of command-line arguments passed to the program,
+// not counting the program name itself.
 //
-// `argc()` is always >= 1.
+// `argc()` is 0 when the program is invoked with no arguments.
 fn argc() -> int {
     return sys.argc();
 }
 
 // Returns the command-line arguments as an array of strings.
 //
-// `args()[0]` is the program name; subsequent elements are the arguments
-// passed by the caller.
+// The program name is not included: `args()[0]` is the first argument passed
+// by the caller, and `args()` has `argc()` elements.
 fn args() -> [str] {
     return sys.args();
 }

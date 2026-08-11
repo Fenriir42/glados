@@ -1,13 +1,21 @@
 module Manifest
   ( Manifest (..),
+    Section,
+    Pairs,
     loadManifest,
     manifestFileName,
+    look,
+    lookList,
+    lookInt,
+    lookDouble,
+    lookBool,
   )
 where
 
 import Data.Maybe (fromMaybe)
 import System.Directory (doesFileExist)
 import System.Exit (exitFailure)
+import Text.Read (readMaybe)
 
 data Manifest = Manifest
   { mName :: String,
@@ -16,7 +24,10 @@ data Manifest = Manifest
     mStdlib :: Maybe FilePath,
     mTestDir :: FilePath,
     mDocOut :: FilePath,
-    mCovIgnore :: [FilePath]
+    mCovIgnore :: [FilePath],
+    -- | Every parsed @(section, key) -> raw-value@ pair, so subcommands can
+    -- read their own sections (e.g. @[panik]@) without re-reading the file.
+    mRaw :: Pairs
   }
 
 manifestFileName :: FilePath
@@ -58,7 +69,8 @@ parseManifest content = do
         mStdlib = stdlib',
         mTestDir = testDir,
         mDocOut = docOut,
-        mCovIgnore = covIgnore
+        mCovIgnore = covIgnore,
+        mRaw = pairs
       }
 
 -- | Look up a single string value; strips surrounding quotes.
@@ -72,6 +84,21 @@ look pairs sec key = case lookup (sec, key) pairs of
 -- | Look up a TOML inline array (@["a", "b"]@) or a single quoted string.
 lookList :: Pairs -> Section -> String -> [String]
 lookList pairs sec key = maybe [] parseListValue (lookup (sec, key) pairs)
+
+-- | Look up an integer-valued key.
+lookInt :: Pairs -> Section -> String -> Maybe Int
+lookInt pairs sec key = look pairs sec key >>= readMaybe
+
+-- | Look up a floating-point-valued key.
+lookDouble :: Pairs -> Section -> String -> Maybe Double
+lookDouble pairs sec key = look pairs sec key >>= readMaybe
+
+-- | Look up a boolean-valued key (@true@/@false@).
+lookBool :: Pairs -> Section -> String -> Maybe Bool
+lookBool pairs sec key = case look pairs sec key of
+  Just "true" -> Just True
+  Just "false" -> Just False
+  _ -> Nothing
 
 require :: Pairs -> Section -> String -> Either String String
 require pairs sec key =

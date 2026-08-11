@@ -127,6 +127,19 @@ one-line reproduction (\fBglados fuzz \-\-seed N \-\-count 1\fR). Exits
 with status 1 if any program diverges. Requires a C compiler and the
 Quant C runtime.
 .TP
+.B panik [\-\-seed \fIN\fR] [\-\-batch \fIN\fR] [\-\-jobs \fIN\fR] [\-\-timeout\-ms \fIN\fR]
+AFL-style input stress tester. Compiles the project to a native binary and
+runs it many times, concurrently, with argument vectors generated from the
+\fB[panik]\fR section of \fBquant.toml\fR (see QUANT.TOML FIELDS), watching
+for crashes (a run killed by a signal), hangs (a run exceeding the timeout),
+and \fIoracle violations\fR: out-of-spec inputs the program wrongly accepts
+(exits 0) or in-spec inputs it wrongly rejects (exits non-zero). The
+\fB\-\-seed\fR (default 1) drives the generator; \fB\-\-batch\fR,
+\fB\-\-jobs\fR, and \fB\-\-timeout\-ms\fR override the corresponding manifest
+keys. Each finding is printed with a copy-pasteable command line that
+reproduces it. Exits with status 1 if any finding is reported. Requires a C
+compiler and the Quant C runtime (the program must be native-translatable).
+.TP
 .B lint
 Run
 .BR wheatley (1)
@@ -212,6 +225,31 @@ Example: \fBcov_ignore = ["src/main.qa", "src/generated.qa"]\fR
 .TP
 .B [doc] out
 Output directory for generated documentation (default: \fBdocs/api/\fR).
+.TP
+.B [panik] args
+Inline TOML array of positional argument specs for \fBglados panik\fR, one
+per program argument. Each spec is a compact type descriptor: \fBint\fR or
+\fBint:LO..HI\fR, \fBfloat\fR or \fBfloat:LO..HI\fR, \fBstr\fR or
+\fBstr:MIN..MAX\fR (string length range), \fBchoice:a,b,c\fR (one of the
+listed literals), or \fBbool\fR. Example:
+\fBargs = ["int:1..100", "choice:easy,hard"]\fR
+.TP
+.B [panik] batch
+Total number of runs per invocation (default: 500).
+.TP
+.B [panik] jobs
+Number of concurrent worker threads (default: CPU count).
+.TP
+.B [panik] timeout_ms
+Per-run timeout in milliseconds; a slower run is reported as a hang
+(default: 2000).
+.TP
+.B [panik] invalid
+Fraction (0.0 to 1.0) of runs fed deliberately out-of-spec arguments for the
+validity oracle (default: 0.25).
+.TP
+.B [panik] swap
+When \fBtrue\fR, argument positions may be permuted (default: \fBfalse\fR).
 .SH ENVIRONMENT
 .TP
 .B QUANT_STDLIB

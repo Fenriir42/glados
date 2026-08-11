@@ -24,6 +24,7 @@ executable cli
   import:         lang
   import:         warnings
   import:         release
+  ghc-options:    -threaded -with-rtsopts=-N
   main-is:        Main.hs
   other-modules:
     Compile
@@ -31,6 +32,7 @@ executable cli
     Fuzz
     Manifest
     NativeDiff
+    Panik
     PM
 
   hs-source-dirs: src

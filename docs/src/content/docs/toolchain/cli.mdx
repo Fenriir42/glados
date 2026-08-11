@@ -227,6 +227,60 @@ Each failing case prints its seed, so it reproduces in one line. This is how
 the `-0.0` formatting bug (the VM dropped the sign of negative zero) was
 found and fixed.
 
+## Stress-testing your program: `glados panik`
+
+Where `fuzz` tests *the backend*, `panik` tests *your program*. It is an
+AFL-style input stress tester: it compiles the project to a native binary and
+then throws a crapload of generated argument vectors at it, concurrently,
+hunting for three things:
+
+- **crashes** -- the binary dies on a signal (segfault, abort, `SIGFPE`, ...);
+- **hangs** -- a run exceeds the timeout;
+- **oracle violations** -- with the validity oracle, inputs the program
+  wrongly *accepts* (exits 0 on out-of-spec input) or wrongly *rejects*
+  (exits non-zero on in-spec input).
+
+The argument contract lives in a `[panik]` section of `quant.toml`:
+
+```toml
+[panik]
+batch      = 1000       # total runs
+jobs       = 8          # concurrency (default: CPU count)
+timeout_ms = 2000       # a run slower than this counts as a hang
+swap       = false      # if true, argument positions may be permuted
+invalid    = 0.25       # fraction of runs fed deliberately out-of-spec args
+# One entry per positional argument, on a single line (TOML inline array):
+args = ["int:1..100", "choice:easy,hard", "str:0..20", "bool"]
+```
+
+Each `args` entry is a compact type spec:
+
+| Spec | Generates |
+|------|-----------|
+| `int` / `int:LO..HI` | an integer (optionally range-bounded) |
+| `float` / `float:LO..HI` | a floating-point number |
+| `str` / `str:MIN..MAX` | a printable string of length in the range |
+| `choice:a,b,c` | one of the listed literal values |
+| `bool` | `true` or `false` |
+
+```bash
+glados panik                       # run the [panik] batch
+glados panik --batch 5000 --jobs 16   # override config from the CLI
+glados panik --seed 42             # reproduce a specific run set
+```
+
+`panik` exits non-zero if it finds any crash, hang, or oracle violation, and
+prints a copy-pasteable command line for each finding so it reproduces
+immediately. A worked example lives in
+[`examples/panik-demo/`](https://github.com/Sigmapitech/glados/tree/main/examples/panik-demo).
+
+<Aside type="note">
+`panik` builds through the C backend, so the program must be
+native-translatable (the same subset `native-diff` covers). Its inputs arrive
+as `sys.args()` -- which does **not** include the program name: `sys.args()[0]`
+is the first real argument and `sys.argc()` counts only real arguments.
+</Aside>
+
 ## Other binaries
 
 The toolchain installs a few companion binaries that the subcommands above

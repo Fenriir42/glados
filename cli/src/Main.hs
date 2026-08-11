@@ -20,6 +20,7 @@ import PM
     runTest,
     runWatch,
   )
+import Panik (runPanik)
 import System.Exit (exitFailure)
 
 -- ---------------------------------------------------------------------------
@@ -34,6 +35,7 @@ data Command
   | CmdBench (Maybe FilePath)
   | CmdNativeDiff [FilePath]
   | CmdFuzz Int Int
+  | CmdPanik Int (Maybe Int) (Maybe Int) (Maybe Int)
   | CmdLint
   | CmdWatch [String]
   | CmdFmt Bool
@@ -78,6 +80,10 @@ commandParser =
         "fuzz"
         fuzzParser
         "generate random programs and diff VM vs native output"
+      <> cmd
+        "panik"
+        panikParser
+        "stress-test the project binary with generated argument vectors"
       <> cmd
         "lint"
         (pure CmdLint)
@@ -143,6 +149,14 @@ fuzzParser =
     <$> option auto (long "seed" <> metavar "N" <> value 1 <> showDefault <> help "starting seed")
     <*> option auto (long "count" <> metavar "N" <> value 50 <> showDefault <> help "number of programs to generate")
 
+panikParser :: Parser Command
+panikParser =
+  CmdPanik
+    <$> option auto (long "seed" <> metavar "N" <> value 1 <> showDefault <> help "generator seed")
+    <*> optional (option auto (long "batch" <> metavar "N" <> help "override [panik] batch (total runs)"))
+    <*> optional (option auto (long "jobs" <> metavar "N" <> help "override [panik] jobs (concurrency)"))
+    <*> optional (option auto (long "timeout-ms" <> metavar "N" <> help "override [panik] timeout_ms"))
+
 watchParser :: Parser Command
 watchParser =
   CmdWatch
@@ -195,6 +209,7 @@ dispatch (CmdTest mf cov covMin covOut) = runTest mf cov covMin covOut
 dispatch (CmdBench mf) = runBench mf
 dispatch (CmdNativeDiff paths) = runNativeDiff paths
 dispatch (CmdFuzz seed count) = runFuzz seed count
+dispatch (CmdPanik seed b j t) = runPanik seed b j t
 dispatch CmdLint = runLint
 dispatch (CmdWatch cmd) = runWatch cmd
 dispatch (CmdFmt check) = runFmt check

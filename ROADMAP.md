@@ -258,6 +258,27 @@ otherwise agree.
 Future extension: shrink counterexamples to a minimal reproducer, and grow
 the grammar to structs/enums/closures/arrays.
 
+### ~~Input stress tester~~ (done)
+
+`glados panik [--seed N] [--batch N] [--jobs N] [--timeout-ms N]` is an
+AFL-style tester for *the user's own program* (as opposed to `fuzz`, which
+tests the backend). It compiles the project to a native binary and bombards it
+concurrently with argument vectors generated from a `[panik]` section of
+`quant.toml` -- a compact per-argument DSL (`int:LO..HI`, `float:LO..HI`,
+`str:MIN..MAX`, `choice:a,b,c`, `bool`) plus `batch`/`jobs`/`timeout_ms`/
+`swap`/`invalid` knobs. It classifies every run as a crash (signal), hang
+(timeout), or -- via a validity oracle that also generates deliberately
+out-of-spec inputs -- an oracle violation (out-of-spec input accepted, or
+in-spec input rejected). Findings print a copy-pasteable repro command; the
+command exits non-zero on any finding. Building it surfaced a documentation
+bug: `sys.args()`/`sys.argc()` were documented as including the program name,
+but both the VM and native runtime exclude it (now corrected in `std/sys.qa`).
+A worked example lives in `examples/panik-demo/`.
+
+Future extension: coverage-guided input mutation (feed back which inputs
+reached new code paths), and stdin/file-based input fuzzing in addition to
+argv.
+
 ### VM performance pass
 
 Profile and speed up the reference interpreter. Concrete targets: the string

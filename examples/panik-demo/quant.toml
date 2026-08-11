@@ -1,0 +1,15 @@
+[project]
+name    = "panik-demo"
+version = "0.1.0"
+entry   = "src/main.qa"
+
+# `glados panik` stress-tests the compiled binary by throwing generated
+# argument vectors at it and watching for crashes, hangs, and inputs the
+# program wrongly accepts or rejects.  Try:  cd examples/panik-demo && glados panik
+[panik]
+batch      = 400        # total runs
+timeout_ms = 1000       # a run slower than this counts as a hang
+invalid    = 0.3        # 30% of runs are deliberately out-of-spec
+swap       = false      # positions are fixed (level then mode)
+# `int:1..100` is a difficulty level, `choice:easy,hard` is a mode.
+args = ["int:1..100", "choice:easy,hard"]

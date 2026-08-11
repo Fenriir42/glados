@@ -1,0 +1,33 @@
+import io
+import sys
+import string
+
+// A tiny program that validates its command-line arguments and exits
+// non-zero on anything out of spec.  `glados panik` uses the [panik] section
+// in quant.toml to bombard it with both valid and deliberately malformed
+// argument vectors, checking that it never crashes and that its accept/reject
+// decisions match the declared contract.
+fn main() -> void {
+    // The program name is not counted; we expect exactly two arguments.
+    if (sys.argc() != 2) {
+        sys.exit(1);
+    };
+
+    args: [str] = sys.args();
+    level: int = string.to_int(args[0]);
+    mode: str = args[1];
+
+    // Reject anything outside the declared spec.
+    if (level < 1 || level > 100) {
+        sys.exit(1);
+    };
+    if (mode != "easy" && mode != "hard") {
+        sys.exit(1);
+    };
+
+    io.print("level ");
+    io.print(string.from_int(level));
+    io.print(" mode ");
+    io.print(mode);
+    io.print("\n");
+}
