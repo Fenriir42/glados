@@ -1539,6 +1539,11 @@ static QtValue builtin_sys(const char *fn, size_t nargs, const QtValue *args) {
         if (strcmp(fn, "time_millis") == 0) {
             return qt_int((int64_t)(clock() / (CLOCKS_PER_SEC / 1000)));
         }
+        if (strcmp(fn, "time_nanos") == 0) {
+            struct timespec ts;
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            return qt_int((int64_t)ts.tv_sec * 1000000000 + (int64_t)ts.tv_nsec);
+        }
         if (strcmp(fn, "argc") == 0) {
             return qt_int(qt_argc > 0 ? qt_argc - 1 : 0);
         }

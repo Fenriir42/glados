@@ -379,6 +379,7 @@ sysBuiltins =
     "o_append",
     "time",
     "time_millis",
+    "time_nanos",
     "sleep",
     "argc",
     "args",

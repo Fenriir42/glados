@@ -22,6 +22,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import Data.Time.Clock.POSIX (getPOSIXTime)
+import GHC.Clock (getMonotonicTimeNSec)
 import Network.HostName (getHostName)
 import System.CPUTime (getCPUTime)
 import System.Directory (doesFileExist, getCurrentDirectory, getFileSize, removeFile, renameFile, setCurrentDirectory)
@@ -299,6 +300,9 @@ callSys "time" _ [] = VInt . floor <$> getPOSIXTime
 callSys "time_millis" _ [] = do
   t <- getCPUTime
   return $ VInt (fromIntegral (t `div` 1000000000))
+-- Monotonic wall-clock in nanoseconds, for benchmarking (only differences
+-- are meaningful).
+callSys "time_nanos" _ [] = VInt . fromIntegral <$> getMonotonicTimeNSec
 callSys "sleep" _ [VInt ms] = do
   threadDelay (fromIntegral ms * 1000)
   return VUnit

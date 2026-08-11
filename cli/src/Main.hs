@@ -8,7 +8,8 @@ import qualified Data.ByteString.Lazy as BSL
 import NativeDiff (runNativeDiff)
 import Options.Applicative
 import PM
-  ( runBuild,
+  ( runBench,
+    runBuild,
     runClean,
     runDoc,
     runFmt,
@@ -29,6 +30,7 @@ data Command
   | CmdBuild Bool (Maybe String)
   | CmdRun
   | CmdTest (Maybe FilePath) Bool (Maybe Int) (Maybe FilePath)
+  | CmdBench (Maybe FilePath)
   | CmdNativeDiff [FilePath]
   | CmdLint
   | CmdWatch [String]
@@ -62,6 +64,10 @@ commandParser =
         "test"
         testParser
         "discover and run all *_test.qa files"
+      <> cmd
+        "bench"
+        benchParser
+        "discover and run microbenchmarks in *_bench.qa files"
       <> cmd
         "native-diff"
         nativeDiffParser
@@ -118,6 +124,11 @@ nativeDiffParser =
   CmdNativeDiff
     <$> many (argument str (metavar "PATH..." <> help "files or directories to diff (default: tests/)"))
 
+benchParser :: Parser Command
+benchParser =
+  CmdBench
+    <$> optional (argument str (metavar "FILE" <> help "run only this benchmark file"))
+
 watchParser :: Parser Command
 watchParser =
   CmdWatch
@@ -167,6 +178,7 @@ dispatch (CmdInit name) = runInit name
 dispatch (CmdBuild rel target) = runBuild rel target
 dispatch CmdRun = runRun
 dispatch (CmdTest mf cov covMin covOut) = runTest mf cov covMin covOut
+dispatch (CmdBench mf) = runBench mf
 dispatch (CmdNativeDiff paths) = runNativeDiff paths
 dispatch CmdLint = runLint
 dispatch (CmdWatch cmd) = runWatch cmd

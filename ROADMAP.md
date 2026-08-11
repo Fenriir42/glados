@@ -13,7 +13,7 @@ Current state of the `feat/revival` branch as of 2026-08-11.
 | Compiler / Codegen | Done | All control flow, structs, error handling, compound assignment |
 | VM Interpreter | Done | Stack-based; 46 VM tests; OOB and type errors throw correctly |
 | Import system | Done | `import M`, `from M import f`, `from M import *`; user `.qa` files resolved relative to the source file; transitive imports; visibility enforced; cycle detection |
-| Standard library | Done | 21 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket`, `regex`, `path`, `datetime`, `csv`, `yaml`, `toml`, `crypto`, `os`, `sqlite`, `test` (plus `net/http` in progress) |
+| Standard library | Done | 22 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket`, `regex`, `path`, `datetime`, `csv`, `yaml`, `toml`, `crypto`, `os`, `sqlite`, `test`, `bench` (plus `net/http` in progress) |
 | REPL | Done | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | Done | `--stdlib`, `--dump`, `--load`, `--output` flags; 27 integration tests |
 | Structs | Done | Declare, init, field access/assignment, nested structs, field compound assignment |
@@ -215,7 +215,7 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 | Tool | Command | Notes |
 |------|---------|-------|
 | ~~File watcher~~ | `glados watch [CMD]` | Done -- re-runs `glados build` (or any subcommand, e.g. `glados watch test --cov`, with flags forwarded) whenever a `.qa` file under `src/` or the test dir changes. Polls modification times (~400 ms; portable, dependency-free) and runs once at startup; Ctrl-C stops. `man/glados.1` documents it |
-| Benchmarking | `glados bench [FILE]` | Discovers `*_bench.qa`; `bench_fn` builtin wraps a closure and reports ns/op, iterations, and standard deviation; TAP-compatible output |
+| ~~Benchmarking~~ | `glados bench [FILE]` | Done -- discovers `*_bench.qa` (in `benchmarks/` and the test dir) and runs each `bench_*` function; the `bench` stdlib module's `bench_fn` times a closure across samples via the new monotonic `sys.time_nanos` builtin and reports ns/op + standard deviation in a TAP-compatible line. Works on both VM and native; `benchmarks/fib_bench.qa` |
 | CI template | `glados init --ci github` | Adds `.github/workflows/quant.yml` to the scaffolded project; runs `glados build`, `glados test`, and `glados lint` on push |
 | Package manager | `glados add <pkg>`, `glados publish` | `[dependencies]` section in `quant.toml`; resolves packages from a central registry; downloads, caches, and links `.qa` source trees |
 

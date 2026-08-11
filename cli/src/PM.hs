@@ -8,11 +8,12 @@ module PM
     runDoc,
     runClean,
     runWatch,
+    runBench,
   )
 where
 
 import AST.Types.Common (FuncName (..))
-import Compile (buildNative, compileSource, compileSourceWith, execute, executeFunctionLineCov, resolveStdlib)
+import Compile (buildNative, compileSource, compileSourceWith, execute, executeFunction, executeFunctionLineCov, resolveStdlib)
 import qualified Compiler (Bytecode)
 import Compiler.Bytecode (Instruction (ICovBranch, ICovMark), bytecodeFunction, bytecodeInstructions)
 import Compiler.Serialize (encodeBytecodes)
@@ -978,6 +979,62 @@ safeMtime :: FilePath -> IO (Maybe UTCTime)
 safeMtime f = do
   r <- try (getModificationTime f) :: IO (Either SomeException UTCTime)
   return (either (const Nothing) Just r)
+
+-- ---------------------------------------------------------------------------
+-- bench
+
+-- | Discover and run microbenchmarks.  With a FILE argument, run just that
+-- file's @bench_*@ functions; otherwise scan @benchmarks/@ and the test
+-- directory for @*_bench.qa@ files.  Each @bench_*@ function is expected to
+-- call @bench.bench_fn@, which prints its own timing line.
+runBench :: Maybe FilePath -> IO ()
+runBench (Just f) = do
+  stdlib <- resolveStdlib Nothing
+  n <- runBenchFile (takeDirectory f) stdlib f
+  putStrLn ""
+  printOk (show n ++ " benchmark(s) run")
+runBench Nothing = do
+  m <- loadManifest
+  stdlib <- resolveStdlib (mStdlib m)
+  let srcDir = takeDirectory (mEntry m)
+  files <- findBenchFiles ["benchmarks", mTestDir m]
+  if null files
+    then putStrLn "no benchmark files found (looked in benchmarks/ and the test dir)" >> exitSuccess
+    else do
+      counts <- mapM (runBenchFile srcDir stdlib) files
+      putStrLn ""
+      printOk (show (sum counts) ++ " benchmark(s) run")
+
+runBenchFile :: FilePath -> FilePath -> FilePath -> IO Int
+runBenchFile srcDir stdlib fp = do
+  src <- readFile fp
+  printColored $ dim ++ "benchmarking " ++ reset ++ fp ++ "\n"
+  bc <- compileSourceWith [srcDir, stdlib] fp
+  let fns = scanBenchFunctions src
+  mapM_ (runOneBench bc) fns
+  return (length fns)
+
+runOneBench :: [Compiler.Bytecode] -> String -> IO ()
+runOneBench bc fname = do
+  r <- executeFunction (FuncName (T.pack fname)) bc
+  case r of
+    Right () -> return ()
+    Left err -> printColored (bold ++ red ++ "  FAIL " ++ reset ++ fname ++ ": " ++ err ++ "\n")
+
+-- | Scan source text for @fn bench_*@ declarations; return their names.
+scanBenchFunctions :: String -> [String]
+scanBenchFunctions src =
+  [ name
+    | l <- lines src,
+      let s = dropWhile (== ' ') l,
+      "fn bench_" `isPrefixOf` s,
+      let name = takeWhile (\c -> isAlphaNum c || c == '_') (drop 3 s),
+      "bench_" `isPrefixOf` name
+  ]
+
+-- | Collect @*_bench.qa@ files under the given roots.
+findBenchFiles :: [FilePath] -> IO [FilePath]
+findBenchFiles roots = concat <$> mapM (findQaWith ("_bench.qa" `isSuffixOf`)) roots
 
 -- ---------------------------------------------------------------------------
 -- File discovery

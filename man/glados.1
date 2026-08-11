@@ -92,6 +92,15 @@ output.
 Exits with status 1 if any test fails or if \fB\-\-cov\-min\fR is set and
 the threshold is not met.
 .TP
+.B bench [\fIFILE\fR]
+Discover and run microbenchmarks. Without \fIFILE\fR, scans
+\fBbenchmarks/\fR and the test directory for \fI*_bench.qa\fR files;
+with \fIFILE\fR, runs only that file. Each parameterless function
+whose name begins with \fBbench_\fR is executed; such functions call
+\fBbench_fn\fR (from the \fBbench\fR standard-library module), which
+times a closure across several samples and prints its throughput
+(\fBns/op\fR) and standard deviation in a TAP-compatible line.
+.TP
 .B native\-diff [\fIPATH\fR...]
 Differential test harness for the native backend. Runs every
 \fI.qa\fR file found under the given paths (default: \fBtests/\fR)

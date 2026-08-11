@@ -1,0 +1,61 @@
+# Quant Standard Library - Benchmark Module
+//
+// Microbenchmark helpers built on the monotonic clock and first-class
+// functions.  `bench_fn` runs a closure many times across several samples
+// and reports throughput (ns/op) with a standard deviation, in a
+// TAP-compatible line.  Discover and run `*_bench.qa` files with
+// `glados bench`.
+
+// Runs `f` `iters` times per sample across `samples` samples, returning the
+// per-sample ns/op figures.
+fn measure(iters: int, samples: int, f: () -> void) -> [int] {
+    vals: [int] = [];
+    s: int = 0;
+    while (s < samples) {
+        start: int = sys.time_nanos();
+        i: int = 0;
+        while (i < iters) {
+            f();
+            i = i + 1;
+        };
+        elapsed: int = sys.time_nanos() - start;
+        push(vals, elapsed / iters);
+        s = s + 1;
+    };
+    return vals;
+}
+
+fn mean_of(vals: [int]) -> int {
+    total: int = 0;
+    i: int = 0;
+    while (i < len(vals)) {
+        total = total + vals[i];
+        i = i + 1;
+    };
+    return total / len(vals);
+}
+
+fn stddev_of(vals: [int], mean: int) -> int {
+    acc: float = 0.0;
+    i: int = 0;
+    while (i < len(vals)) {
+        d: float = float(vals[i] - mean);
+        acc = acc + d * d;
+        i = i + 1;
+    };
+    return int(math.sqrt(acc / float(len(vals))));
+}
+
+// Benchmarks `f`, printing "ok bench <label>: <iters> iters/sample,
+// <ns/op> ns/op (+/- <stddev>)".
+fn bench_fn(label: str, iters: int, f: () -> void) -> void {
+    vals: [int] = measure(iters, 5, f);
+    m: int = mean_of(vals);
+    sd: int = stddev_of(vals, m);
+    println("ok bench %s: %d iters/sample, %d ns/op (+/- %d)", label, iters, m, sd);
+}
+
+// Like `bench_fn` but returns the mean ns/op instead of printing it.
+fn bench_ns(iters: int, f: () -> void) -> int {
+    return mean_of(measure(iters, 5, f));
+}

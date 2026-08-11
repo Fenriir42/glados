@@ -27,6 +27,7 @@ std/
 ├── os.qa        # Subprocess exec/capture/spawn/wait/kill + environment
 ├── sqlite.qa    # SQLite binding via FFI (open/exec/query)
 ├── test.qa      # Property-based testing (seeded generator + shrinking)
+├── bench.qa     # Microbenchmark helpers (bench_fn: ns/op + std dev)
 └── README.md
 ```
 

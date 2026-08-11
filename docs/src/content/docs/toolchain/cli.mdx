@@ -107,6 +107,36 @@ glados test --cov-min 80    # fail if function coverage < 80%
 glados test --cov-out cov.json   # write a JSON coverage report
 ```
 
+### `glados bench [FILE]`
+
+Discover and run microbenchmarks. Without an argument it scans
+`benchmarks/` and the test directory for `*_bench.qa` files; with a `FILE`
+it runs just that one. Every parameterless `bench_*` function is executed,
+and inside it you call `bench_fn` from the `bench` standard-library module
+to time a closure across several samples:
+
+```quant
+from bench import bench_fn
+
+fn fib(n: int) -> int {
+    if (n < 2) { return n; };
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn bench_fib20() -> void {
+    bench_fn("fib(20)", 50, fn() -> void { fib(20); });
+}
+```
+
+```bash
+glados bench benchmarks/fib_bench.qa
+# ok bench fib(20): 50 iters/sample, 17531061 ns/op (+/- 220076)
+```
+
+`bench_fn` reports throughput (`ns/op`) and a standard deviation across
+samples, in a TAP-compatible line. (This is distinct from `make bench`,
+which times the whole VM against the native backend.)
+
 ### `glados watch [CMD...]`
 
 Re-run a subcommand whenever a `.qa` file under `src/` or the test directory
