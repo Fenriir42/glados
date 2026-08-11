@@ -1,0 +1,23 @@
+// Showcase / test for the std/path module.
+from path import join, basename, dirname, ext, stem, is_absolute, normalize
+
+fn main() -> void {
+    println("join = %s", join("usr/local", "bin"));
+    println("join abs = %s", join("usr", "/etc"));
+    println("join slash = %s", join("usr/", "bin"));
+    println("basename = %s", basename("/usr/local/bin/glados"));
+    println("basename bare = %s", basename("glados"));
+    println("dirname = %s", dirname("/usr/local/bin/glados"));
+    println("dirname root = %s", dirname("/foo"));
+    println("dirname none = %s", dirname("foo"));
+    println("ext = %s", ext("archive.tar.gz"));
+    println("ext none = %s", ext("README"));
+    println("ext dotfile = %s", ext(".bashrc"));
+    println("stem = %s", stem("/a/b/photo.png"));
+    println("is_absolute = %d", is_absolute("/x/y"));
+    println("is_absolute rel = %d", is_absolute("x/y"));
+    println("normalize = %s", normalize("/usr/./local/../bin/"));
+    println("normalize rel = %s", normalize("a/b/../../c"));
+    println("normalize up = %s", normalize("../a/./b"));
+    println("normalize dot = %s", normalize("./"));
+}

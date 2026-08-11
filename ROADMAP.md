@@ -215,11 +215,11 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 | Module | Status | Planned additions |
 |--------|--------|-------------------|
 | `net/http` | In progress | `get/post/put/delete` client; `serve/handle/response` server-side API |
-| `path` | Planned | `join/basename/dirname/ext/absolute/relative/exists/is_dir/is_file` |
+| ~~`path`~~ | Done | `is_absolute/join/basename/dirname/ext/stem/normalize/exists`; pure string ops over `/`; `tests/std_path.qa` |
 | `datetime` | Planned | `now/parse/format/add/diff/unix`; ISO-8601 and RFC-3339 support |
 | `crypto` | Planned | `sha256/sha512/md5` (via libcrypto FFI); `rand_bytes/rand_int` (via `/dev/urandom`) |
 | `os` | Planned | `spawn/wait/kill` (child processes); `pipe/read/write` (anonymous pipes); `signal` handling |
 | `sqlite` | Planned | `open/close/exec/query/bind` via FFI to `libsqlite3`; returns `array(dict(str, str))` |
-| `csv` | Planned | `parse/encode/rows/headers`; RFC 4180 compliant |
+| ~~`csv`~~ | Done | `parse/encode/rows/headers`; RFC 4180 quoting (embedded commas, quotes, newlines); `tests/std_csv.qa` |
 | `yaml` | Planned | `parse/encode`; maps to the same value tree as `json` |
 | `test` | Planned | Property-based testing: `forall(gen, fn)`; built-in generators for `int/str/array`; shrinking on failure |

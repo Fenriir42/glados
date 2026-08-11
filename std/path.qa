@@ -1,0 +1,121 @@
+# Quant Standard Library - Path Module
+//
+// Filesystem path manipulation using '/' as the separator.  The parsing
+// functions are pure string operations; `exists` consults the filesystem.
+
+// Returns True if `p` is an absolute path (begins with '/').
+fn is_absolute(p: str) -> bool {
+    return string.starts_with(p, "/");
+}
+
+// Joins two path segments with a single '/'.  If `b` is absolute it is
+// returned unchanged; a trailing '/' on `a` is not duplicated.
+fn join(a: str, b: str) -> str {
+    if (string.is_empty(a)) {
+        return b;
+    };
+    if (is_absolute(b)) {
+        return b;
+    };
+    if (string.ends_with(a, "/")) {
+        return string.concat(a, b);
+    };
+    return string.concat(a, string.concat("/", b));
+}
+
+// Returns the final component of `p` (the part after the last '/').
+fn basename(p: str) -> str {
+    i: int = string.last_index_of(p, "/");
+    if (i < 0) {
+        return p;
+    };
+    return string.substring(p, i + 1, string.len(p));
+}
+
+// Returns the directory portion of `p` (everything before the last '/').
+// A path with no '/' yields ".", and "/foo" yields "/".
+fn dirname(p: str) -> str {
+    i: int = string.last_index_of(p, "/");
+    if (i < 0) {
+        return ".";
+    };
+    if (i == 0) {
+        return "/";
+    };
+    return string.substring(p, 0, i);
+}
+
+// Returns the extension of `p` without the leading dot, or "" if none.
+// A leading-dot name like ".bashrc" is treated as having no extension.
+fn ext(p: str) -> str {
+    b: str = basename(p);
+    i: int = string.last_index_of(b, ".");
+    if (i <= 0) {
+        return "";
+    };
+    return string.substring(b, i + 1, string.len(b));
+}
+
+// Returns the final component of `p` with its extension removed.
+fn stem(p: str) -> str {
+    b: str = basename(p);
+    i: int = string.last_index_of(b, ".");
+    if (i <= 0) {
+        return b;
+    };
+    return string.substring(b, 0, i);
+}
+
+// Collapses '.' and '..' components and redundant separators in `p`,
+// preserving whether the path is absolute.
+fn normalize(p: str) -> str {
+    abs: bool = is_absolute(p);
+    parts: [str] = string.split(p, "/");
+    stack: [str] = [];
+    i: int = 0;
+    while (i < len(parts)) {
+        seg: str = parts[i];
+        if (string.is_empty(seg)) {
+            i = i + 1;
+        } else {
+            if (seg == ".") {
+                i = i + 1;
+            } else {
+                if (seg == "..") {
+                    // NB: Quant's && is not short-circuiting, so the empty
+                    // check and the top-of-stack check must be nested.
+                    can_pop: bool = False;
+                    if (len(stack) > 0) {
+                        if (stack[len(stack) - 1] != "..") {
+                            can_pop = True;
+                        };
+                    };
+                    if (can_pop) {
+                        pop(stack);
+                    } else {
+                        if (!abs) {
+                            push(stack, seg);
+                        };
+                    };
+                    i = i + 1;
+                } else {
+                    push(stack, seg);
+                    i = i + 1;
+                };
+            };
+        };
+    };
+    body: str = string.join(stack, "/");
+    if (abs) {
+        return string.concat("/", body);
+    };
+    if (string.is_empty(body)) {
+        return ".";
+    };
+    return body;
+}
+
+// Returns True if a file or directory exists at `p`.
+fn exists(p: str) -> bool {
+    return file.exists(p);
+}

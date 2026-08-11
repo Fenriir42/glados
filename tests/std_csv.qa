@@ -1,0 +1,45 @@
+// Showcase / test for the std/csv module.
+from csv import parse, encode, headers, rows
+
+fn show(data: [[str]]) -> void {
+    i: int = 0;
+    while (i < len(data)) {
+        row: [str] = data[i];
+        line: str = "";
+        j: int = 0;
+        while (j < len(row)) {
+            if (j > 0) {
+                line = string.concat(line, " | ");
+            };
+            line = string.concat(line, row[j]);
+            j = j + 1;
+        };
+        println("row %d: %s", i, line);
+        i = i + 1;
+    };
+}
+
+fn main() -> void {
+    src: str = "name,age,city\nAda,36,\"London, UK\"\n\"quote\"\"d\",7,\"line\nbreak\"\n";
+
+    println("-- parse --");
+    show(parse(src));
+
+    println("-- headers --");
+    h: [str] = headers(src);
+    println("%s / %s / %s", h[0], h[1], h[2]);
+
+    println("-- data rows --");
+    show(rows(src));
+
+    println("-- encode round-trip --");
+    out: [[str]] = [];
+    r1: [str] = ["a", "b,c", "d\"e"];
+    r2: [str] = ["1", "2", "3"];
+    push(out, r1);
+    push(out, r2);
+    encoded: str = encode(out);
+    print(encoded);
+    println("-- reparse --");
+    show(parse(encoded));
+}
