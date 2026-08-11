@@ -13,7 +13,7 @@ Current state of the `feat/revival` branch as of 2026-08-11.
 | Compiler / Codegen | Done | All control flow, structs, error handling, compound assignment |
 | VM Interpreter | Done | Stack-based; 46 VM tests; OOB and type errors throw correctly |
 | Import system | Done | `import M`, `from M import f`, `from M import *`; user `.qa` files resolved relative to the source file; transitive imports; visibility enforced; cycle detection |
-| Standard library | Done | 13 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket`, `regex` (~120 functions) |
+| Standard library | Done | 20 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket`, `regex`, `path`, `datetime`, `csv`, `yaml`, `crypto`, `os`, `sqlite`, `test` (plus `net/http` in progress) |
 | REPL | Done | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | Done | `--stdlib`, `--dump`, `--load`, `--output` flags; 27 integration tests |
 | Structs | Done | Declare, init, field access/assignment, nested structs, field compound assignment |
@@ -61,6 +61,14 @@ Current state of the `feat/revival` branch as of 2026-08-11.
 | `socket` | Done | `connect/listen/accept/send/recv/close/peer_addr` |
 | `varargs` | Done | variadic helper utilities |
 | `regex` | Done | `match/find/find_all/replace/split` (POSIX ERE via `regex-tdfa`) |
+| `path` | Done | `is_absolute/join/basename/dirname/ext/stem/normalize/exists` |
+| `datetime` | Done | `now/make/to_iso/from_iso/year/month/day/hour/minute/second/weekday/add/diff` |
+| `csv` | Done | `parse/encode/rows/headers` (RFC 4180) |
+| `yaml` | Done | `parse_map/encode_map` (flat maps) |
+| `crypto` | Done | `sha256_hex` (pure Quant) |
+| `os` | Done | `exec/succeeds/capture/getenv/setenv/cwd/platform` |
+| `sqlite` | Done | `open/close/exec/query/columns` (libsqlite3 FFI) |
+| `test` | Done | `forall_int` (seeded property testing with shrinking) |
 | `net/http` | **In progress** | `get/post/put/delete`; response struct with `status`, `body`, `headers`, colleague's work |
 
 ### LSP feature coverage
