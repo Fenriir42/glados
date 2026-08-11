@@ -46,6 +46,7 @@ executable cli
     , parser
     , process
     , text
+    , time
     , typechecker
     , vm
 

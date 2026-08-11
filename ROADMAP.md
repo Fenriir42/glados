@@ -205,7 +205,7 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 
 | Tool | Command | Notes |
 |------|---------|-------|
-| File watcher | `glados watch [CMD]` | Re-runs `glados build` (or an arbitrary subcommand) whenever a `.qa` file changes; uses `inotify`/`kqueue`; similar to `cargo watch` |
+| ~~File watcher~~ | `glados watch [CMD]` | Done -- re-runs `glados build` (or any subcommand, e.g. `glados watch test --cov`, with flags forwarded) whenever a `.qa` file under `src/` or the test dir changes. Polls modification times (~400 ms; portable, dependency-free) and runs once at startup; Ctrl-C stops. `man/glados.1` documents it |
 | Benchmarking | `glados bench [FILE]` | Discovers `*_bench.qa`; `bench_fn` builtin wraps a closure and reports ns/op, iterations, and standard deviation; TAP-compatible output |
 | CI template | `glados init --ci github` | Adds `.github/workflows/quant.yml` to the scaffolded project; runs `glados build`, `glados test`, and `glados lint` on push |
 | Package manager | `glados add <pkg>`, `glados publish` | `[dependencies]` section in `quant.toml`; resolves packages from a central registry; downloads, caches, and links `.qa` source trees |

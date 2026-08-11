@@ -7,6 +7,7 @@ module PM
     runFmt,
     runDoc,
     runClean,
+    runWatch,
   )
 where
 
@@ -15,28 +16,32 @@ import Compile (buildNative, compileSource, compileSourceWith, execute, executeF
 import qualified Compiler (Bytecode)
 import Compiler.Bytecode (Instruction (ICovBranch, ICovMark), bytecodeFunction, bytecodeInstructions)
 import Compiler.Serialize (encodeBytecodes)
-import Control.Exception (try)
+import Control.Concurrent (threadDelay)
+import Control.Exception (SomeException, try)
 import Control.Monad (when)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Char (isAlphaNum)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef)
-import Data.List (intercalate, isPrefixOf, isSuffixOf)
+import Data.List (intercalate, isPrefixOf, isSuffixOf, sort)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import qualified Data.Text as T
+import Data.Time.Clock (UTCTime)
 import Display (bold, dim, green, printColored, printOk, printStep, red, reset)
 import Manifest (Manifest (..), loadManifest)
 import System.Directory
   ( createDirectoryIfMissing,
     doesDirectoryExist,
     doesFileExist,
+    getModificationTime,
     listDirectory,
     removeDirectoryRecursive,
   )
+import System.Environment (getExecutablePath)
 import System.Exit (ExitCode (..), exitFailure, exitSuccess, exitWith)
 import System.FilePath (takeBaseName, takeDirectory, takeExtension, (</>))
-import System.IO (hPutStrLn, stderr)
+import System.IO (BufferMode (LineBuffering), hPutStrLn, hSetBuffering, stderr, stdout)
 import System.Process (rawSystem)
 
 -- ---------------------------------------------------------------------------
@@ -932,6 +937,47 @@ runClean = do
       printStep "removed" ".build/"
       printOk "clean"
     else printOk "nothing to clean"
+
+-- ---------------------------------------------------------------------------
+-- watch
+
+-- | Re-run a glados subcommand whenever a source `.qa` file changes.  Polls
+-- modification times of every `.qa` file under `src/` and the test directory
+-- (~400 ms); portable and dependency-free.  @rawArgs@ is the subcommand to
+-- run (default: @build@); Ctrl-C stops the loop.
+runWatch :: [String] -> IO ()
+runWatch rawArgs = do
+  hSetBuffering stdout LineBuffering
+  m <- loadManifest
+  self <- getExecutablePath
+  let cmd = if null rawArgs then ["build"] else rawArgs
+      roots = ["src", mTestDir m]
+      runOnce = do
+        printColored (bold ++ green ++ "  run     " ++ reset ++ "glados " ++ unwords cmd ++ "\n")
+        ec <- rawSystem self cmd
+        case ec of
+          ExitSuccess -> printOk "up to date"
+          ExitFailure c ->
+            printColored (bold ++ red ++ "  FAILED  " ++ reset ++ "exit " ++ show c ++ "\n")
+      snapshot = do
+        files <- concat <$> mapM (findQaWith (const True)) roots
+        mapM (\f -> (,) f <$> safeMtime f) (sort files)
+      loop prev = do
+        threadDelay 400000
+        cur <- snapshot
+        if cur /= prev
+          then printStep "watch" "change detected" >> runOnce >> loop cur
+          else loop prev
+  printStep "watch" ("watching " ++ intercalate " and " roots ++ " for .qa changes (Ctrl-C to stop)")
+  runOnce
+  snapshot >>= loop
+
+-- | Modification time of a file, or 'Nothing' if it vanished mid-scan (which
+-- itself counts as a change).
+safeMtime :: FilePath -> IO (Maybe UTCTime)
+safeMtime f = do
+  r <- try (getModificationTime f) :: IO (Either SomeException UTCTime)
+  return (either (const Nothing) Just r)
 
 -- ---------------------------------------------------------------------------
 -- File discovery

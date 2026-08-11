@@ -16,6 +16,7 @@ import PM
     runLint,
     runRun,
     runTest,
+    runWatch,
   )
 import System.Exit (exitFailure)
 
@@ -30,6 +31,7 @@ data Command
   | CmdTest (Maybe FilePath) Bool (Maybe Int) (Maybe FilePath)
   | CmdNativeDiff [FilePath]
   | CmdLint
+  | CmdWatch [String]
   | CmdFmt Bool
   | CmdDoc String FilePath
   | CmdClean
@@ -68,6 +70,15 @@ commandParser =
         "lint"
         (pure CmdLint)
         "run wheatley over all project source files"
+      <> command
+        "watch"
+        ( info
+            (watchParser <**> helper)
+            ( progDesc "re-run a subcommand (default: build) when a .qa file changes"
+                <> fullDesc
+                <> forwardOptions
+            )
+        )
       <> cmd
         "fmt"
         fmtParser
@@ -106,6 +117,11 @@ nativeDiffParser :: Parser Command
 nativeDiffParser =
   CmdNativeDiff
     <$> many (argument str (metavar "PATH..." <> help "files or directories to diff (default: tests/)"))
+
+watchParser :: Parser Command
+watchParser =
+  CmdWatch
+    <$> many (strArgument (metavar "CMD..." <> help "glados subcommand to run on change (default: build)"))
 
 fmtParser :: Parser Command
 fmtParser =
@@ -153,6 +169,7 @@ dispatch CmdRun = runRun
 dispatch (CmdTest mf cov covMin covOut) = runTest mf cov covMin covOut
 dispatch (CmdNativeDiff paths) = runNativeDiff paths
 dispatch CmdLint = runLint
+dispatch (CmdWatch cmd) = runWatch cmd
 dispatch (CmdFmt check) = runFmt check
 dispatch (CmdDoc fmt out) = runDoc fmt out
 dispatch CmdClean = runClean

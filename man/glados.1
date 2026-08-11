@@ -109,6 +109,15 @@ Run
 .BR wheatley (1)
 over all source files in the project.
 .TP
+.B watch [\fICMD\fR...]
+Watch the project's \fI.qa\fR source files (under \fIsrc/\fR and the
+test directory) and re-run a subcommand whenever one changes. \fICMD\fR
+is the subcommand to run, defaulting to \fBbuild\fR; any flags are
+forwarded to it (for example \fBglados watch test \-\-cov\fR). The
+command runs once at startup and then after every change; file
+modification times are polled roughly every 400 ms. Runs until
+interrupted with Ctrl-C.
+.TP
 .B fmt [\-\-check]
 Run
 .BR quant\-fmt (1)
