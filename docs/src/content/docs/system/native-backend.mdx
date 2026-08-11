@@ -92,6 +92,17 @@ wall-clock, randomness) cannot be compared byte-for-byte; mark it with a
 than running it.
 </Aside>
 
+## Integer width
+
+The one deliberate semantic gap: the VM represents integers with
+arbitrary-precision `Integer`, while the native backend uses 64-bit `int64_t`.
+For values within the 64-bit range the two agree exactly; beyond it they
+diverge (the VM keeps growing, native wraps two's-complement). For example
+`9000000000 * 9000000000` prints `81000000000000000000` under the VM and
+`7213023705161793536` natively. Programs that stay within 64-bit integer
+range -- essentially all real code -- are unaffected. (`glados fuzz` bounds
+its generated literals to keep clear of this so it can hunt for other bugs.)
+
 ## Environment
 
 | Variable | Meaning |

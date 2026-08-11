@@ -1,0 +1,19 @@
+// Regression: IEEE negative zero must format identically on the VM and the
+// native backend.  `glados fuzz` found that `formatFloat` dropped the sign
+// (rendering -0.0 as "0.0") while native preserved it ("-0.0").
+fn main() -> void {
+    negone: float = 0.0 - 1.0;
+
+    // negative * +0.0 == -0.0
+    println(negone * 0.0);
+    // +0.0 stays positive
+    println(0.0 - 0.0);
+
+    nz: float = negone * 0.0;
+    println(nz);
+    println(string.to_str(nz));
+    println(string.concat("nz=", string.from_float(nz)));
+
+    // -0.0 compares equal to +0.0
+    println(nz == 0.0);
+}

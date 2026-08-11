@@ -136,6 +136,10 @@ renderValue _ VUnit _ = ""
 
 formatFloat :: Double -> String
 formatFloat f
+  -- Negative zero renders "-0.0" (matching Haskell's show and the native
+  -- backend); the integral branch below would otherwise drop the sign,
+  -- because truncate (-0.0) == 0.
+  | isNegativeZero f = "-0.0"
   | f == fromIntegral (truncate f :: Integer) = show (truncate f :: Integer) ++ ".0"
   | otherwise = show f
 
