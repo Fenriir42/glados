@@ -6,7 +6,6 @@ module Compile
     emitCFile,
     execute,
     executeFunction,
-    executeFunctionCov,
     executeFunctionLineCov,
     collectStdlibFuncNames,
     displayTypeError,
@@ -54,7 +53,7 @@ import System.Process (readProcessWithExitCode)
 import Text.Megaparsec (errorBundlePretty, many, runParser)
 import TypeChecker (TypeCheckResult (..), tcAllCallMap, tcErrors, typeCheck)
 import TypeChecker.Error (TypeCheckError (..), tcErrMessage, tcErrSpan)
-import VM (runFunction, runFunctionCov, runFunctionLineCov, runProgram)
+import VM (runFunction, runFunctionLineCov, runProgram)
 import VM.Interpreter (VMError (..))
 
 -- ---------------------------------------------------------------------------
@@ -194,15 +193,7 @@ executeFunction fname bytecodes = do
     Right _ -> Right ()
     Left err -> Left (prettyVMError err)
 
--- | Like 'executeFunction' but records called user-functions into @covRef@.
-executeFunctionCov :: IORef (Set.Set FuncName) -> FuncName -> [Compiler.Bytecode] -> IO (Either String ())
-executeFunctionCov covRef fname bytecodes = do
-  result <- runFunctionCov covRef fname bytecodes
-  return $ case result of
-    Right _ -> Right ()
-    Left err -> Left (prettyVMError err)
-
--- | Like 'executeFunctionCov' but also records per-function hit line numbers
+-- | Like 'executeFunction' but also records per-function hit line numbers
 -- via 'ICovMark' instructions and per-branch outcomes via 'ICovBranch'.
 executeFunctionLineCov ::
   IORef (Set.Set FuncName) ->

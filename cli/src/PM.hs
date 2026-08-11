@@ -657,10 +657,9 @@ scanDocEntries = go []
       | otherwise = go [] ls
 
 isTopLevelDecl :: String -> Bool
-isTopLevelDecl l =
-  not (null l)
-    && head l /= ' '
-    && any (`isPrefixOf` l) ["fn ", "struct ", "error "]
+isTopLevelDecl l = case l of
+  (c : _) | c /= ' ' -> any (`isPrefixOf` l) ["fn ", "struct ", "error "]
+  _ -> False
 
 extractDeclName :: String -> String
 extractDeclName l
@@ -682,10 +681,9 @@ collectSig ls =
    in (clean, after)
 
 isDocComment :: String -> Bool
-isDocComment l =
-  not (null l)
-    && head l /= ' '
-    && ("// " `isPrefixOf` l || l == "//")
+isDocComment l = case l of
+  (c : _) | c /= ' ' -> "// " `isPrefixOf` l || l == "//"
+  _ -> False
 
 stripDocPrefix :: String -> String
 stripDocPrefix "//" = ""

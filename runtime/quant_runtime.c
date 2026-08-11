@@ -53,6 +53,31 @@ char *qt_strdup(const char *s) {
     return p;
 }
 
+/* Read an entire stream into a NUL-terminated, arena-allocated buffer;
+ * *out_len (when non-NULL) receives the byte count.  Shared by file.read,
+ * file.lines, and sys.capture. */
+static char *read_all(FILE *fp, size_t *out_len) {
+    size_t cap = 256;
+    size_t len = 0;
+    char *buf = qt_alloc(cap);
+    size_t got;
+    while ((got = fread(buf + len, 1, cap - len, fp)) > 0) {
+        len += got;
+        if (len == cap) {
+            size_t ncap = cap * 2;
+            char *nb = qt_alloc(ncap);
+            memcpy(nb, buf, len);
+            buf = nb;
+            cap = ncap;
+        }
+    }
+    buf[len] = '\0';
+    if (out_len) {
+        *out_len = len;
+    }
+    return buf;
+}
+
 /* ------------------------------------------------------------------ */
 /* Constructors                                                        */
 
@@ -1607,22 +1632,8 @@ static QtValue builtin_sys(const char *fn, size_t nargs, const QtValue *args) {
             if (!p) {
                 return qt_string("");
             }
-            size_t cap = 256;
-            size_t len = 0;
-            char *buf = qt_alloc(cap);
-            size_t got;
-            while ((got = fread(buf + len, 1, cap - len, p)) > 0) {
-                len += got;
-                if (len == cap) {
-                    size_t ncap = cap * 2;
-                    char *nb = qt_alloc(ncap);
-                    memcpy(nb, buf, len);
-                    buf = nb;
-                    cap = ncap;
-                }
-            }
+            char *buf = read_all(p, NULL);
             pclose(p);
-            buf[len] = '\0';
             return qt_string(buf);
         }
         if (strcmp(fn, "spawn") == 0) {
@@ -1715,22 +1726,9 @@ static QtValue builtin_file(const char *fn, size_t nargs, const QtValue *args) {
         if (!fp) {
             return strcmp(fn, "read") == 0 ? qt_string("") : qt_array_new();
         }
-        size_t cap = 4096;
-        size_t len = 0;
-        char *buf = qt_alloc(cap);
-        size_t got;
-        while ((got = fread(buf + len, 1, cap - len, fp)) > 0) {
-            len += got;
-            if (len == cap) {
-                size_t ncap = cap * 2;
-                char *nb = qt_alloc(ncap);
-                memcpy(nb, buf, len);
-                buf = nb;
-                cap = ncap;
-            }
-        }
+        size_t len;
+        char *buf = read_all(fp, &len);
         fclose(fp);
-        buf[len] = '\0';
         if (strcmp(fn, "read") == 0) {
             return qt_string(buf);
         }

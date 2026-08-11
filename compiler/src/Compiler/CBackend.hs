@@ -122,22 +122,20 @@ arityFn bcs =
          ""
        ]
 
--- | C identifier for a Quant function name ('.' becomes "__").
+-- | Map one Quant identifier character to a C-safe fragment ('.' -> "__",
+-- other non-alphanumerics -> "_x<ord>_").
+mangleChar :: Char -> Text
+mangleChar '.' = "__"
+mangleChar c
+  | isAscii c && isAlphaNum c = T.singleton c
+  | otherwise = "_x" <> T.pack (show (ord c)) <> "_"
+
+-- | C identifier for a Quant function name.
 mangle :: FuncName -> Text
 mangle (FuncName n) = "qf_" <> T.concatMap mangleChar n
-  where
-    mangleChar '.' = "__"
-    mangleChar c
-      | isAscii c && isAlphaNum c = T.singleton c
-      | otherwise = "_x" <> T.pack (show (ord c)) <> "_"
 
 localName :: VarName -> Text
 localName (VarName n) = "l_" <> T.concatMap mangleChar n
-  where
-    mangleChar '.' = "__"
-    mangleChar c
-      | isAscii c && isAlphaNum c = T.singleton c
-      | otherwise = "_x" <> T.pack (show (ord c)) <> "_"
 
 -- | C string literal with octal escapes for anything non-printable.
 cString :: Text -> Text
@@ -261,6 +259,16 @@ unOpName UOpBitNot = "QT_UOP_BITNOT"
 
 pushConst :: Text -> Text
 pushConst expr = "  st[sp++] = " <> expr <> ";"
+
+-- | C snippet declaring @ca@ and popping @argc@ operands into it (@ca[0]@ is
+-- the topmost, i.e. the first argument).  Shared by every call-like emitter.
+gatherArgs :: Int -> Text
+gatherArgs argc =
+  "QtValue ca["
+    <> T.pack (show (max 1 argc))
+    <> "]; for (size_t qi = 0; qi < "
+    <> T.pack (show argc)
+    <> "; qi++) { ca[qi] = st[--sp]; }"
 
 -- | Builtins qt_call_builtin implements (keep in sync with the runtime).
 -- Calls to any other non-user function fail at translation time so the
@@ -544,19 +552,11 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
             ++ "`"
     emitCall target argc =
       let nText = T.pack (show argc)
-          bufLen = T.pack (show (max 1 argc))
-          gather =
-            "QtValue ca["
-              <> bufLen
-              <> "];"
-              <> " for (size_t qi = 0; qi < "
-              <> nText
-              <> "; qi++) { ca[qi] = st[--sp]; }"
           callExpr
             | Set.member target userFns = mangle target <> "(" <> nText <> ", ca)"
             | otherwise =
                 "qt_call_builtin(" <> cString (unFuncName target) <> ", " <> nText <> ", ca)"
-       in "  { " <> gather <> " st[sp++] = " <> callExpr <> "; }"
+       in "  { " <> gatherArgs argc <> " st[sp++] = " <> callExpr <> "; }"
     -- Build a VErrorVal: field values were pushed in fnames order, so the
     -- last field's value is on top -- pop and assign in reverse.
     emitNewError ename fnames =
@@ -572,20 +572,15 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
     -- Dynamic dispatch: the receiver (self) was pushed last, so it is ca[0].
     -- Its struct type plus the method name resolve the concrete function.
     emitDynCall mname argc =
-      let nText = T.pack (show argc)
-          bufLen = T.pack (show (max 1 argc))
-       in "  { QtValue ca["
-            <> bufLen
-            <> "]; for (size_t qi = 0; qi < "
-            <> nText
-            <> "; qi++) { ca[qi] = st[--sp]; }"
-            <> " char qn[256];"
-            <> " snprintf(qn, sizeof(qn), \"%s."
-            <> mname
-            <> "\", qt_struct_type(ca[0]));"
-            <> " st[sp++] = qf_dispatch(qn, "
-            <> nText
-            <> ", ca); }"
+      "  { "
+        <> gatherArgs argc
+        <> " char qn[256];"
+        <> " snprintf(qn, sizeof(qn), \"%s."
+        <> mname
+        <> "\", qt_struct_type(ca[0]));"
+        <> " st[sp++] = qf_dispatch(qn, "
+        <> T.pack (show argc)
+        <> ", ca); }"
     -- Package a lambda's captured locals (in capture order) into a closure.
     emitMakeClosure target capVars =
       let nCaps = T.pack (show (length capVars))
@@ -605,34 +600,24 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
             <> ", qc); }"
     -- Indirect call: the callable sits just below the argc arguments.
     emitCallIndirect argc =
-      let nText = T.pack (show argc)
-          bufLen = T.pack (show (max 1 argc))
-       in "  { QtValue ca["
-            <> bufLen
-            <> "]; for (size_t qi = 0; qi < "
-            <> nText
-            <> "; qi++) { ca[qi] = st[--sp]; }"
-            <> " QtValue qcl = st[--sp];"
-            <> " qt_callable_bind(qcl);"
-            <> " st[sp++] = qf_dispatch(qt_callable_name(qcl), "
-            <> nText
-            <> ", ca); }"
+      "  { "
+        <> gatherArgs argc
+        <> " QtValue qcl = st[--sp];"
+        <> " qt_callable_bind(qcl);"
+        <> " st[sp++] = qf_dispatch(qt_callable_name(qcl), "
+        <> T.pack (show argc)
+        <> ", ca); }"
     -- Foreign call: marshal args, then dispatch through the runtime FFI shim.
     emitFFI lib sym retTy argc =
-      let nText = T.pack (show argc)
-          bufLen = T.pack (show (max 1 argc))
-          retCode = case retTy of
+      let retCode = case retTy of
             CRetVoid -> "0"
             CRetInt -> "1"
             CRetFloat -> "2"
             CRetStr -> "3"
             CRetBool -> "4"
             CRetPtr -> "5"
-       in "  { QtValue ca["
-            <> bufLen
-            <> "]; for (size_t qi = 0; qi < "
-            <> nText
-            <> "; qi++) { ca[qi] = st[--sp]; }"
+       in "  { "
+            <> gatherArgs argc
             <> " st[sp++] = qt_ffi_call("
             <> cString lib
             <> ", "
@@ -640,19 +625,14 @@ emitInstr fname userFns poolName (idx, instr) = case instr of
             <> ", "
             <> retCode
             <> ", "
-            <> nText
+            <> T.pack (show argc)
             <> ", ca); }"
     -- Spawn an async task: queue the function without transferring control.
     emitSpawn target argc =
-      let nText = T.pack (show argc)
-          bufLen = T.pack (show (max 1 argc))
-       in "  { QtValue ca["
-            <> bufLen
-            <> "]; for (size_t qi = 0; qi < "
-            <> nText
-            <> "; qi++) { ca[qi] = st[--sp]; }"
-            <> " st[sp++] = qt_spawn("
-            <> cString (unFuncName target)
-            <> ", "
-            <> nText
-            <> ", ca); }"
+      "  { "
+        <> gatherArgs argc
+        <> " st[sp++] = qt_spawn("
+        <> cString (unFuncName target)
+        <> ", "
+        <> T.pack (show argc)
+        <> ", ca); }"
