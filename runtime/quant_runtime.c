@@ -8,14 +8,18 @@
 
 #include "quant_runtime.h"
 
+#include <arpa/inet.h>
 #include <ctype.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <math.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <ucontext.h>
@@ -2063,6 +2067,112 @@ QtValue qt_ffi_call(const char *lib, const char *sym, int ret, size_t argc,
 }
 
 /* ------------------------------------------------------------------ */
+/* socket.* TCP builtins.  The socket id handed back to Quant is the raw   */
+/* file descriptor (the VM uses a heap index instead, but programs only    */
+/* pass the id back to socket.* calls, so the two are interchangeable).    */
+
+static QtValue builtin_socket(const char *fn, size_t nargs, const QtValue *args) {
+    if (strcmp(fn, "connect") == 0 && nargs == 2) {
+        const char *host = qt_to_string(args[0]);
+        char port[16];
+        snprintf(port, sizeof(port), "%" PRId64,
+                 qt_want_int(args[1], "socket.connect"));
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_socktype = SOCK_STREAM;
+        struct addrinfo *res = NULL;
+        if (getaddrinfo(host, port, &hints, &res) != 0 || !res) {
+            return qt_int(-1);
+        }
+        int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        int ok = (fd >= 0) && (connect(fd, res->ai_addr, res->ai_addrlen) == 0);
+        freeaddrinfo(res);
+        if (!ok) {
+            if (fd >= 0) {
+                close(fd);
+            }
+            return qt_int(-1);
+        }
+        return qt_int(fd);
+    }
+    if (strcmp(fn, "listen") == 0 && nargs == 2) {
+        char port[16];
+        snprintf(port, sizeof(port), "%" PRId64,
+                 qt_want_int(args[0], "socket.listen"));
+        int backlog = (int)qt_want_int(args[1], "socket.listen");
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_flags = AI_PASSIVE;
+        struct addrinfo *res = NULL;
+        if (getaddrinfo(NULL, port, &hints, &res) != 0 || !res) {
+            return qt_int(-1);
+        }
+        int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        int one = 1;
+        int ok = (fd >= 0) &&
+                 (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) == 0) &&
+                 (bind(fd, res->ai_addr, res->ai_addrlen) == 0) &&
+                 (listen(fd, backlog) == 0);
+        freeaddrinfo(res);
+        if (!ok) {
+            if (fd >= 0) {
+                close(fd);
+            }
+            return qt_int(-1);
+        }
+        return qt_int(fd);
+    }
+    if (strcmp(fn, "accept") == 0 && nargs == 1) {
+        int c = accept((int)qt_want_int(args[0], "socket.accept"), NULL, NULL);
+        return qt_int(c);
+    }
+    if (strcmp(fn, "send") == 0 && nargs == 2) {
+        int fd = (int)qt_want_int(args[0], "socket.send");
+        const char *s = qt_to_string(args[1]);
+        ssize_t n = send(fd, s, strlen(s), 0);
+        return qt_int(n < 0 ? -1 : (int64_t)n);
+    }
+    if (strcmp(fn, "recv") == 0 && nargs == 2) {
+        int fd = (int)qt_want_int(args[0], "socket.recv");
+        int64_t n = qt_want_int(args[1], "socket.recv");
+        if (n < 0) {
+            n = 0;
+        }
+        char *buf = qt_alloc((size_t)n + 1);
+        ssize_t r = recv(fd, buf, (size_t)n, 0);
+        buf[r < 0 ? 0 : r] = '\0';
+        return qt_string(buf);
+    }
+    if (strcmp(fn, "close") == 0 && nargs == 1) {
+        return qt_bool(close((int)qt_want_int(args[0], "socket.close")) == 0);
+    }
+    if (strcmp(fn, "peer_addr") == 0 && nargs == 1) {
+        int fd = (int)qt_want_int(args[0], "socket.peer_addr");
+        struct sockaddr_storage ss;
+        socklen_t len = sizeof(ss);
+        if (getpeername(fd, (struct sockaddr *)&ss, &len) != 0) {
+            return qt_string("");
+        }
+        char host[INET6_ADDRSTRLEN];
+        char out[INET6_ADDRSTRLEN + 8];
+        if (ss.ss_family == AF_INET) {
+            struct sockaddr_in *a = (struct sockaddr_in *)&ss;
+            inet_ntop(AF_INET, &a->sin_addr, host, sizeof(host));
+            snprintf(out, sizeof(out), "%s:%d", host, ntohs(a->sin_port));
+        } else {
+            struct sockaddr_in6 *a = (struct sockaddr_in6 *)&ss;
+            inet_ntop(AF_INET6, &a->sin6_addr, host, sizeof(host));
+            snprintf(out, sizeof(out), "%s:%d", host, ntohs(a->sin6_port));
+        }
+        return qt_string(qt_strdup(out));
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "socket.%s: bad arguments", fn);
+    qt_panic(msg);
+}
+
+/* ------------------------------------------------------------------ */
 /* Async / await: cooperative ucontext scheduler (stage 9).             */
 /*                                                                      */
 /* Each task runs on its own stack.  Spawning queues a task without     */
@@ -2247,6 +2357,9 @@ QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
     }
     if (strncmp(name, "ptr.", 4) == 0) {
         return builtin_ptr(name + 4, nargs, args);
+    }
+    if (strncmp(name, "socket.", 7) == 0) {
+        return builtin_socket(name + 7, nargs, args);
     }
     char msg[256];
     snprintf(msg, sizeof(msg), "native backend: unsupported builtin `%s`",

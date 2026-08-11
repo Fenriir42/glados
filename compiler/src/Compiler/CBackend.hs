@@ -288,6 +288,7 @@ supportedBuiltins =
       ++ map ("file." <>) fileBuiltins
       ++ map ("buf." <>) bufBuiltins
       ++ map ("ptr." <>) ptrBuiltins
+      ++ map ("socket." <>) socketBuiltins
 
 -- | string.* builtins the C runtime implements (stage 4).  Excludes
 -- `hash`, whose VM definition folds over unbounded Integers.
@@ -413,6 +414,18 @@ ptrBuiltins =
     "write_int64",
     "read_float64",
     "write_float64"
+  ]
+
+-- | socket.* TCP builtins the C runtime implements.
+socketBuiltins :: [Text]
+socketBuiltins =
+  [ "connect",
+    "listen",
+    "accept",
+    "send",
+    "recv",
+    "close",
+    "peer_addr"
   ]
 
 -- | buf.* builtins the C runtime implements (stage 4).

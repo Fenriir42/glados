@@ -73,17 +73,25 @@ listQaFiles p = do
       isFile <- doesFileExist p
       return [p | isFile, ".qa" `isSuffixOf` p]
 
--- | Run one file under both engines and report the outcome.
+-- | Run one file under both engines and report the outcome.  A file may
+-- opt out with a @native-diff: skip@ marker comment when its behaviour is
+-- inherently non-deterministic (external network, wall-clock, randomness)
+-- and so cannot be compared byte-for-byte.
 diffFile :: FilePath -> FilePath -> FilePath -> IO DiffResult
 diffFile self outDir file = do
-  let bin = outDir </> takeBaseName file
-  (bc, bo, be) <- readProcessWithExitCode self ["compiler", file, "--native", bin] ""
-  result <- case bc of
-    ExitFailure _ -> return (classifyBuildFailure (bo ++ be))
-    ExitSuccess -> do
-      (vmCode, vmOut, _) <- readProcessWithExitCode self ["compiler", file] ""
-      (natCode, natOut, _) <- readProcessWithExitCode bin [] ""
-      return (compareRuns vmCode vmOut natCode natOut)
+  src <- readFile file
+  result <-
+    if "native-diff: skip" `isInfixOf` src
+      then return (Skip "annotated non-deterministic")
+      else do
+        let bin = outDir </> takeBaseName file
+        (bc, bo, be) <- readProcessWithExitCode self ["compiler", file, "--native", bin] ""
+        case bc of
+          ExitFailure _ -> return (classifyBuildFailure (bo ++ be))
+          ExitSuccess -> do
+            (vmCode, vmOut, _) <- readProcessWithExitCode self ["compiler", file] ""
+            (natCode, natOut, _) <- readProcessWithExitCode bin [] ""
+            return (compareRuns vmCode vmOut natCode natOut)
   report file result
   return result
 

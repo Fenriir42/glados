@@ -78,12 +78,17 @@ dynamic method dispatch, closures and first-class functions, `extern` FFI
 calls (via `dlopen`, including callbacks of any arity 0-4 with pointer args
 and int-class return, e.g. `qsort` and `qsort_r`), raw pointers,
 casts, the printing builtins, and the full `string.*` (except `hash`),
-`math.*`, `sys.*`, `file.*`, `buf.*`, and `ptr.*` builtin families (plus
-`dict.has`/`len`/`delete`), and async `spawn`/`await` (a cooperative
-`ucontext` scheduler). The `dict.keys`/`values`, `json.*`, `regex.*`, and
-`socket.*` builtins are not yet translated -- programs using them fail at
+`math.*`, `sys.*`, `file.*`, `buf.*`, `ptr.*`, and `socket.*` builtin
+families (plus `dict.has`/`len`/`delete`), and async `spawn`/`await` (a
+cooperative `ucontext` scheduler). The `dict.keys`/`values`, `json.*`, and
+`regex.*` builtins are not yet translated -- programs using them fail at
 compile time with a message naming the unsupported instruction or builtin.
 Coverage grows stage by stage; see ROADMAP.md.
+
+A program whose output is inherently non-deterministic (external network,
+wall-clock, randomness) cannot be compared byte-for-byte; mark it with a
+`// native-diff: skip` comment and the harness reports it as a skip rather
+than running it.
 </Aside>
 
 ## Environment

@@ -171,12 +171,15 @@ Stages 1-3 form the minimum credible milestone (a native hello world validated
 against the VM); each later stage widens the subset of `tests/*.qa` that passes
 under `--native` until the corpus is green end-to-end.
 
-**All ten stages are complete.** `glados native-diff` reports 26 of the
-showcase programs matching the VM byte-for-byte; the only skips are three
-files that do not compile under the plain VM either and the `socket.*`
-network builtins (out of scope for the native backend). The remaining
-unported builtins are `dict.keys`/`values` (need VM `Ord` key ordering),
-`json.*` (needs a C encoder/parser), and `regex.*` (needs a regex engine).
+**All ten stages are complete.** `glados native-diff` reports 31 of the
+showcase programs matching the VM byte-for-byte, with a single skip:
+`socket_http.qa`, which is annotated `native-diff: skip` because it talks to
+an external host (its response varies between runs and cannot be diffed).
+The `socket.*` TCP builtins are ported (`socket_echo.qa` matches
+byte-identically). The only unported builtins are `dict.keys`/`values` (need
+VM `Ord` key ordering), `json.*` (needs a C encoder/parser), `regex.*`
+(needs a regex engine), and `string.hash` (its VM definition folds over
+unbounded Integers).
 
 ### Debugger (DAP) -- done
 

@@ -2,6 +2,10 @@
 // Connects to httpbin.org, fetches /ip, and prints the response.
 //
 // Run: glados compiler run tests/socket_http.qa
+//
+// native-diff: skip -- talks to an external host; the response body and
+// Date headers vary between runs, so VM and native output cannot be
+// compared byte-for-byte.
 
 fn send_request(sock: int, host: str, path: str) -> void {
     req: str = "GET ";
