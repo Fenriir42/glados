@@ -281,6 +281,10 @@ QtValue qt_ffi_call(const char *lib, const char *sym, int ret, size_t argc,
                     const QtValue *args);
 void qt_set_dispatch(QtValue (*fn)(const char *, size_t, const QtValue *));
 
+/* Register a name -> parameter-count lookup so the FFI layer can pick the
+ * right callback trampoline arity for a function passed to C. */
+void qt_set_arity(int (*fn)(const char *));
+
 /* Async / await (stage 9). qt_spawn queues a task running @name@ with a copy
  * of @args@ and returns its handle; qt_await yields to the cooperative
  * scheduler until the awaited task finishes and returns its result;

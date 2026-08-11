@@ -75,7 +75,8 @@ The native backend currently covers a broad subset of the language:
 functions, recursion, control flow, int/float/bool/string scalars, arrays,
 dicts, structs, enums, error/option values (`try`/`must`), interfaces with
 dynamic method dispatch, closures and first-class functions, `extern` FFI
-calls (via `dlopen`, including `(ptr,ptr)->int` callbacks), raw pointers,
+calls (via `dlopen`, including callbacks of any arity 0-4 with pointer args
+and int-class return, e.g. `qsort` and `qsort_r`), raw pointers,
 casts, the printing builtins, and the full `string.*` (except `hash`),
 `math.*`, `sys.*`, `file.*`, `buf.*`, and `ptr.*` builtin families (plus
 `dict.has`/`len`/`delete`), and async `spawn`/`await` (a cooperative

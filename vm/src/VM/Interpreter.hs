@@ -59,7 +59,7 @@ import Foreign.LibFFI
     retVoid,
     retWord32,
   )
-import Foreign.Ptr (FunPtr, Ptr, castFunPtrToPtr, freeHaskellFunPtr, ptrToWordPtr, wordPtrToPtr)
+import Foreign.Ptr (FunPtr, Ptr, castFunPtr, castFunPtrToPtr, freeHaskellFunPtr, ptrToWordPtr, wordPtrToPtr)
 import Foreign.Storable (peekByteOff, pokeByteOff)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
@@ -911,6 +911,7 @@ execInstr = \case
         -- IORef so heap mutations made by callbacks survive; the first
         -- callback error is rethrown once the C call returns.
         st <- S.get
+        funcs <- gets vmFunctions
         stRef <- S.liftIO $ newIORef st
         errRef <- S.liftIO $ newIORef Nothing
         wrapped <-
@@ -919,7 +920,7 @@ execInstr = \case
               ( \v ->
                   if isFunVal v
                     then do
-                      fp <- wrapCallback stRef errRef v
+                      fp <- wrapCallback stRef errRef v (callbackArity funcs v)
                       return (VPointer (fromIntegral (ptrToWordPtr (castFunPtrToPtr fp))), Just fp)
                     else return (v, Nothing)
               )
@@ -1570,10 +1571,28 @@ resolveValue _ _ = ""
 
 -- | The supported C callback shape: two opaque pointers in, int out
 -- (the qsort/bsearch comparator signature).
-type CCompareFn = Ptr () -> Ptr () -> IO CInt
+-- Callback wrappers by arity (all pointer args, int-class return).  A C
+-- callback expecting `void` simply ignores the returned rax, so a single
+-- CInt-returning family covers both int- and void-returning callbacks.
+type CFn0 = IO CInt
 
-foreign import ccall "wrapper"
-  mkCompareCallback :: CCompareFn -> IO (FunPtr CCompareFn)
+type CFn1 = Ptr () -> IO CInt
+
+type CFn2 = Ptr () -> Ptr () -> IO CInt
+
+type CFn3 = Ptr () -> Ptr () -> Ptr () -> IO CInt
+
+type CFn4 = Ptr () -> Ptr () -> Ptr () -> Ptr () -> IO CInt
+
+foreign import ccall "wrapper" mkCb0 :: CFn0 -> IO (FunPtr CFn0)
+
+foreign import ccall "wrapper" mkCb1 :: CFn1 -> IO (FunPtr CFn1)
+
+foreign import ccall "wrapper" mkCb2 :: CFn2 -> IO (FunPtr CFn2)
+
+foreign import ccall "wrapper" mkCb3 :: CFn3 -> IO (FunPtr CFn3)
+
+foreign import ccall "wrapper" mkCb4 :: CFn4 -> IO (FunPtr CFn4)
 
 -- | Run a Quant function value to completion in a state derived from @st@:
 -- fresh stack/locals/task machinery, shared heaps and function table.
@@ -1604,26 +1623,50 @@ invokeQuantValue st fnVal cbArgs = do
         Left err -> Left err
         Right v -> Right (v, st')
 
--- | Wrap a Quant function value as a C function pointer.  The callback
--- re-enters the interpreter against the shared state ref; heap mutations
--- persist across invocations.  The first callback error is captured in
--- @errRef@ (a C caller cannot unwind a Haskell exception) and rethrown
--- by the FFI call site afterwards.
-wrapCallback :: IORef VMState -> IORef (Maybe VMError) -> Value -> IO (FunPtr CCompareFn)
-wrapCallback stRef errRef fnVal = mkCompareCallback $ \pa pb -> do
-  st <- readIORef stRef
-  let toVal p = VPointer (fromIntegral (ptrToWordPtr p))
-  r <- invokeQuantValue st fnVal [toVal pa, toVal pb]
-  case r of
-    Left err -> do
-      modifyIORef errRef (\case Nothing -> Just err; je -> je)
-      return 0
-    Right (v, st') -> do
-      writeIORef stRef st'
-      return $ case v of
-        VInt n -> fromIntegral n
-        VBool True -> 1
-        _ -> 0
+-- | Number of leading parameters a function takes, read from its prologue
+-- (codegen emits one @IStore@ per parameter before the body).  Used to pick
+-- the right callback wrapper arity for a function passed to C.
+callbackArity :: Map FuncName Bytecode -> Value -> Int
+callbackArity funcs v =
+  case Map.lookup fname funcs of
+    Just bc -> length (takeWhile isStore (bytecodeInstructions bc))
+    Nothing -> 2
+  where
+    fname = case v of
+      VFunction fn -> fn
+      VClosure fn _ -> fn
+      _ -> FuncName ""
+    isStore (IStore _) = True
+    isStore _ = False
+
+-- | Wrap a Quant function value as a C function pointer of the given arity
+-- (all pointer args, int-class return).  The callback re-enters the
+-- interpreter against the shared state ref; heap mutations persist across
+-- invocations.  The first callback error is captured in @errRef@ (a C caller
+-- cannot unwind a Haskell exception) and rethrown by the FFI call site.
+wrapCallback :: IORef VMState -> IORef (Maybe VMError) -> Value -> Int -> IO (FunPtr ())
+wrapCallback stRef errRef fnVal arity =
+  case arity of
+    0 -> castFunPtr <$> mkCb0 (run [])
+    1 -> castFunPtr <$> mkCb1 (\a -> run [a])
+    3 -> castFunPtr <$> mkCb3 (\a b c -> run [a, b, c])
+    4 -> castFunPtr <$> mkCb4 (\a b c d -> run [a, b, c, d])
+    _ -> castFunPtr <$> mkCb2 (\a b -> run [a, b])
+  where
+    toVal p = VPointer (fromIntegral (ptrToWordPtr p))
+    run ptrs = do
+      st <- readIORef stRef
+      r <- invokeQuantValue st fnVal (map toVal ptrs)
+      case r of
+        Left err -> do
+          modifyIORef errRef (\case Nothing -> Just err; je -> je)
+          return 0
+        Right (v, st') -> do
+          writeIORef stRef st'
+          return $ case v of
+            VInt n -> fromIntegral n
+            VBool True -> 1
+            _ -> 0
 
 -- ---------------------------------------------------------------------------
 -- FFI dispatch

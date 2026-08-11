@@ -1876,18 +1876,28 @@ void qt_set_dispatch(QtValue (*fn)(const char *, size_t, const QtValue *)) {
     g_dispatch = fn;
 }
 
-/* The Quant callable currently installed as a C comparator callback. */
+/* The Quant callable currently installed as a C callback. */
 static QtValue g_ffi_cb;
 
-/* Comparator trampoline matching qsort's (const void*, const void*) -> int;
- * re-enters Quant through the registered dispatcher.  Matches the VM's sole
- * supported callback shape. */
-static int qt_ffi_cmp(const void *a, const void *b) {
-    QtValue cargs[2];
-    cargs[0] = qt_ptr((uint64_t)(uintptr_t)a);
-    cargs[1] = qt_ptr((uint64_t)(uintptr_t)b);
+/* Arity lookup by function name, registered by generated code. */
+static int (*g_arity)(const char *) = NULL;
+
+void qt_set_arity(int (*fn)(const char *)) {
+    g_arity = fn;
+}
+
+/* Shared callback body: wrap up to four pointer args as QtValue pointers,
+ * re-enter Quant through the registered dispatcher, and return an int-class
+ * result (a callback declared void simply has its result ignored). */
+static int cb_invoke(size_t n, const void *p0, const void *p1, const void *p2,
+                     const void *p3) {
+    const void *ps[4] = {p0, p1, p2, p3};
+    QtValue cargs[4];
+    for (size_t i = 0; i < n; i++) {
+        cargs[i] = qt_ptr((uint64_t)(uintptr_t)ps[i]);
+    }
     qt_callable_bind(g_ffi_cb);
-    QtValue r = g_dispatch(qt_callable_name(g_ffi_cb), 2, cargs);
+    QtValue r = g_dispatch(qt_callable_name(g_ffi_cb), n, cargs);
     if (r.tag == QT_INT) {
         return (int)r.as.i;
     }
@@ -1895,6 +1905,31 @@ static int qt_ffi_cmp(const void *a, const void *b) {
         return r.as.i ? 1 : 0;
     }
     return 0;
+}
+
+/* Fixed-arity trampolines with C-visible pointer signatures (arity 0-4). */
+static int qt_ffi_cb0(void) { return cb_invoke(0, 0, 0, 0, 0); }
+static int qt_ffi_cb1(const void *a) { return cb_invoke(1, a, 0, 0, 0); }
+static int qt_ffi_cb2(const void *a, const void *b) {
+    return cb_invoke(2, a, b, 0, 0);
+}
+static int qt_ffi_cb3(const void *a, const void *b, const void *c) {
+    return cb_invoke(3, a, b, c, 0);
+}
+static int qt_ffi_cb4(const void *a, const void *b, const void *c,
+                      const void *d) {
+    return cb_invoke(4, a, b, c, d);
+}
+
+/* Select the trampoline whose arity matches the Quant callback. */
+static void *cb_trampoline(int arity) {
+    switch (arity) {
+        case 0: return (void *)&qt_ffi_cb0;
+        case 1: return (void *)&qt_ffi_cb1;
+        case 3: return (void *)&qt_ffi_cb3;
+        case 4: return (void *)&qt_ffi_cb4;
+        default: return (void *)&qt_ffi_cb2;
+    }
 }
 
 /* One marshalled argument: either an integer/pointer slot or a double. */
@@ -1937,10 +1972,12 @@ QtValue qt_ffi_call(const char *lib, const char *sym, int ret, size_t argc,
                 s[i].u = v.as.ptr;
                 break;
             case QT_FN:
-            case QT_CLOSURE:
+            case QT_CLOSURE: {
                 g_ffi_cb = v;
-                s[i].u = (uint64_t)(uintptr_t)&qt_ffi_cmp;
+                int ar = g_arity ? g_arity(qt_callable_name(v)) : 2;
+                s[i].u = (uint64_t)(uintptr_t)cb_trampoline(ar);
                 break;
+            }
             default:
                 s[i].u = (uint64_t)v.as.i;
                 break;

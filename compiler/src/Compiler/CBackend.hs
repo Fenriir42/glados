@@ -49,10 +49,12 @@ emitC bcs
             ++ map protoLine bcs
             ++ [""]
             ++ dispatchFn bcs
+            ++ arityFn bcs
             ++ funcs
             ++ [ "int main(int argc, char **argv) {",
                  "    qt_set_args(argc, argv);",
                  "    qt_set_dispatch(qf_dispatch);",
+                 "    qt_set_arity(qf_arity);",
                  mainCall,
                  "    return 0;",
                  "}"
@@ -91,6 +93,31 @@ dispatchFn bcs =
          | f <- map bytecodeFunction bcs
        ]
     ++ [ "    qt_panic(\"native backend: no method for dynamic dispatch\");",
+         "}",
+         ""
+       ]
+
+-- | Parameter count of a compiled function, read from its prologue: codegen
+-- emits one @IStore@ per parameter before the body.  The FFI layer uses this
+-- to pick the matching callback trampoline arity for a function passed to C.
+funcArity :: Bytecode -> Int
+funcArity = length . takeWhile isStore . bytecodeInstructions
+  where
+    isStore (IStore _) = True
+    isStore _ = False
+
+-- | Generate the name -> arity lookup registered with @qt_set_arity@.
+arityFn :: [Bytecode] -> [Text]
+arityFn bcs =
+  ["static int qf_arity(const char *name) {"]
+    ++ [ "    if (strcmp(name, "
+           <> cString (unFuncName (bytecodeFunction bc))
+           <> ") == 0) return "
+           <> T.pack (show (funcArity bc))
+           <> ";"
+         | bc <- bcs
+       ]
+    ++ [ "    return 0;",
          "}",
          ""
        ]

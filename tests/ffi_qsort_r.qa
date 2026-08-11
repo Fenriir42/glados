@@ -1,0 +1,57 @@
+// FFI callback-shape showcase: qsort_r passes a 3-argument comparator
+// (a, b, arg) -> int, exercising a callback arity beyond qsort's 2.
+// The `arg` pointer carries the sort direction, read back inside the
+// comparator.  Demonstrates that native trampolines and the VM agree on
+// callback shapes of differing arity.
+
+extern "libc.so.6" {
+    fn malloc(size: int) -> ptr
+    fn free(p: ptr) -> void
+    fn qsort_r(base: ptr, nmemb: int, size: int,
+               compar: (ptr, ptr, ptr) -> int, arg: ptr) -> void
+}
+
+// compar(a, b, arg): arg points to an int direction (+1 asc, -1 desc).
+fn cmp_dir(a: ptr, b: ptr, arg: ptr) -> int {
+    x: int = ptr.read_int32(a);
+    y: int = ptr.read_int32(b);
+    dir: int = ptr.read_int32(arg);
+    return dir * (x - y);
+}
+
+fn print_buf(buf: ptr, n: int) -> void {
+    line: str = "";
+    for (i: int = 0; i < n; i++) {
+        v: int = ptr.read_int32(ptr.add(buf, i * 4));
+        if (i > 0) {
+            line = string.concat(line, " ");
+        };
+        line = string.concat(line, string.to_str(v));
+    };
+    io.println(line);
+}
+
+fn main() -> void {
+    n: int = 6;
+    buf: ptr = malloc(n * 4);
+    vals: [int] = [42, 7, 19, 3, 88, 1];
+    for (i: int = 0; i < n; i++) {
+        ptr.write_int32(ptr.add(buf, i * 4), vals[i]);
+    };
+
+    // direction lives in its own heap cell so the comparator can read it
+    dir: ptr = malloc(4);
+
+    ptr.write_int32(dir, 1);
+    qsort_r(buf, n, 4, cmp_dir, dir);
+    io.println("ascending:");
+    print_buf(buf, n);
+
+    ptr.write_int32(dir, 0 - 1);
+    qsort_r(buf, n, 4, cmp_dir, dir);
+    io.println("descending:");
+    print_buf(buf, n);
+
+    free(dir);
+    free(buf);
+}

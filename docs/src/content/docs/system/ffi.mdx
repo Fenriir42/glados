@@ -129,7 +129,14 @@ fn main() -> void {
 
 The callback may read and write the VM's heaps (arrays, dicts, structs); mutations persist across invocations and after the C call returns. A runtime error raised inside a callback is re-thrown once the C function returns.
 
-**Current limitation**: the callback's C-side shape is fixed to `(ptr, ptr) -> int` -- the comparator signature used by `qsort` and `bsearch`. The Quant function receives each C argument as a `ptr` and must return an `int` (a `bool` is converted to 0/1).
+Callbacks may take any number of arguments from zero up to four -- for
+example `qsort`'s 2-argument comparator or `qsort_r`'s 3-argument
+`(a, b, arg) -> int`. Each C argument is delivered to the Quant function as a
+`ptr`, and the function returns an `int` (a `bool` is converted to 0/1); a C
+callback declared to return `void` simply ignores the returned value. All
+callback arguments are passed as pointer-sized values, so callbacks whose C
+signature takes floating-point or narrower-than-pointer integer arguments are
+not yet supported.
 
 ### Raw memory access
 
