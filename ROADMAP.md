@@ -221,5 +221,5 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 | `os` | Planned | `spawn/wait/kill` (child processes); `pipe/read/write` (anonymous pipes); `signal` handling |
 | `sqlite` | Planned | `open/close/exec/query/bind` via FFI to `libsqlite3`; returns `array(dict(str, str))` |
 | ~~`csv`~~ | Done | `parse/encode/rows/headers`; RFC 4180 quoting (embedded commas, quotes, newlines); `tests/std_csv.qa` |
-| `yaml` | Planned | `parse/encode`; maps to the same value tree as `json` |
+| ~~`yaml`~~ | Partial | `parse_map`/`encode_map` for flat `key: value` maps (the config-file subset) into `dict(str, str)`; comments, quoted values. Nested maps and sequences are not yet handled; `tests/std_yaml.qa` |
 | ~~`test`~~ | Done | Property-based testing: `forall_int(seed, count, lo, hi, prop)` with a deterministic seeded LCG generator and binary-search shrinking of the counterexample; predicates are first-class `(int) -> bool` functions; `tests/std_test.qa` |

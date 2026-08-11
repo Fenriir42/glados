@@ -1,0 +1,103 @@
+# Quant Standard Library - YAML Module
+//
+// A pragmatic subset of YAML: flat "key: value" maps, the form used by most
+// configuration files.  Blank lines and '#' comments are ignored; values may
+// be single- or double-quoted.  (Nested maps, block/flow sequences, and
+// multi-document streams are not handled.)
+
+// Removes a matching pair of surrounding single or double quotes from `v`.
+fn strip_quotes(v: str) -> str {
+    n: int = string.len(v);
+    if (n < 2) {
+        return v;
+    };
+    first: str = string.char_at(v, 0);
+    last: str = string.char_at(v, n - 1);
+    dq: bool = False;
+    if (first == "\"") {
+        if (last == "\"") {
+            dq = True;
+        };
+    };
+    sq: bool = False;
+    if (first == "'") {
+        if (last == "'") {
+            sq = True;
+        };
+    };
+    if (dq) {
+        return string.substring(v, 1, n - 1);
+    };
+    if (sq) {
+        return string.substring(v, 1, n - 1);
+    };
+    return v;
+}
+
+// Parses a flat YAML document into a string-to-string map.
+fn parse_map(text: str) -> dict(str, str) {
+    result: dict(str, str) = {};
+    lines: [str] = string.split(text, "\n");
+    i: int = 0;
+    while (i < len(lines)) {
+        line: str = string.trim(lines[i]);
+        skip: bool = False;
+        if (string.is_empty(line)) {
+            skip = True;
+        };
+        if (string.starts_with(line, "#")) {
+            skip = True;
+        };
+        if (!skip) {
+            ci: int = string.index_of(line, ":");
+            if (ci >= 0) {
+                key: str = string.trim(string.substring(line, 0, ci));
+                val: str = string.trim(string.substring(line, ci + 1, string.len(line)));
+                result[key] = strip_quotes(val);
+            };
+        };
+        i = i + 1;
+    };
+    return result;
+}
+
+// True if `v` needs quoting to survive a round trip (empty, or containing a
+// colon, hash, or leading/trailing space that would confuse the parser).
+fn needs_quote(v: str) -> bool {
+    if (string.is_empty(v)) {
+        return True;
+    };
+    if (string.contains(v, ":")) {
+        return True;
+    };
+    if (string.contains(v, "#")) {
+        return True;
+    };
+    if (string.trim(v) != v) {
+        return True;
+    };
+    return False;
+}
+
+fn quote_if_needed(v: str) -> str {
+    if (needs_quote(v)) {
+        return string.concat("\"", string.concat(v, "\""));
+    };
+    return v;
+}
+
+// Encodes a string-to-string map as a flat YAML document.  Keys come out in
+// the map's key order (see dict.keys).
+fn encode_map(d: dict(str, str)) -> str {
+    ks: [str] = dict.keys(d);
+    out: str = "";
+    i: int = 0;
+    while (i < len(ks)) {
+        out = string.concat(out, ks[i]);
+        out = string.concat(out, ": ");
+        out = string.concat(out, quote_if_needed(d[ks[i]]));
+        out = string.concat(out, "\n");
+        i = i + 1;
+    };
+    return out;
+}

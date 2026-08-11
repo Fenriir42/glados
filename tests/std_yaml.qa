@@ -1,0 +1,17 @@
+// Showcase / test for the std/yaml module (flat map subset).
+from yaml import parse_map, encode_map
+
+fn main() -> void {
+    src: str = "# a config file\nname: quant\nversion: \"1.0.0\"\nport: 8080\n\ngreeting: 'hello: world'\n";
+
+    d: dict(str, str) = parse_map(src);
+    println("name = %s", d["name"]);
+    println("version = %s", d["version"]);
+    println("port = %s", d["port"]);
+    println("greeting = %s", d["greeting"]);
+    println("has name = %d", dict.has(d, "name"));
+    println("len = %d", dict.len(d));
+
+    println("-- re-encode (keys sorted) --");
+    print(encode_map(d));
+}
