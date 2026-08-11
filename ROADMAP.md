@@ -218,7 +218,7 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 | ~~`path`~~ | Done | `is_absolute/join/basename/dirname/ext/stem/normalize/exists`; pure string ops over `/`; `tests/std_path.qa` |
 | ~~`datetime`~~ | Done | `now/make/to_iso/from_iso/year/month/day/hour/minute/second/weekday/add/diff`; UTC, ISO-8601/RFC-3339, Hinnant civil-date algorithms; `tests/std_datetime.qa` |
 | ~~`crypto`~~ | Partial | `sha256_hex` -- a pure-Quant SHA-256 (FIPS 180-4), verified against NIST vectors, built on the new `string.byte_at`/`byte_len` builtins; runs byte-identically on VM and native. `sha512`/`md5` and `rand_*` (non-deterministic) not yet done; `tests/std_crypto.qa` |
-| `os` | Planned | `spawn/wait/kill` (child processes); `pipe/read/write` (anonymous pipes); `signal` handling |
+| ~~`os`~~ | Partial | `exec`/`succeeds` (run a shell command, get its exit code), `capture` (get its stdout, via the new `sys.capture` popen builtin), plus `getenv`/`setenv`/`cwd`/`platform`. Low-level `spawn/wait/kill/pipe/signal` are not yet exposed; `tests/std_os.qa` |
 | `sqlite` | Planned | `open/close/exec/query/bind` via FFI to `libsqlite3`; returns `array(dict(str, str))` |
 | ~~`csv`~~ | Done | `parse/encode/rows/headers`; RFC 4180 quoting (embedded commas, quotes, newlines); `tests/std_csv.qa` |
 | ~~`yaml`~~ | Partial | `parse_map`/`encode_map` for flat `key: value` maps (the config-file subset) into `dict(str, str)`; comments, quoted values. Nested maps and sequences are not yet handled; `tests/std_yaml.qa` |

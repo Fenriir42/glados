@@ -1,0 +1,21 @@
+// Showcase / test for the std/os module.  Uses only deterministic commands
+// so VM and native output match byte-for-byte.
+from os import exec, capture, succeeds, getenv, setenv
+
+fn main() -> void {
+    // capture stdout of a command
+    println("capture = %s", capture("echo hello from shell"));
+    println("capture math = %s", capture("printf '%s' $((6 * 7))"));
+
+    // exit codes
+    println("exec true = %d", exec("true"));
+    println("exec false = %d", exec("false"));
+    println("exec exit7 = %d", exec("exit 7"));
+    println("succeeds true = %d", succeeds("true"));
+    println("succeeds false = %d", succeeds("false"));
+
+    // environment round-trip
+    setenv("QUANT_OS_TEST", "42");
+    println("env = %s", getenv("QUANT_OS_TEST"));
+    println("env missing = [%s]", getenv("QUANT_DEFINITELY_UNSET_XYZ"));
+}

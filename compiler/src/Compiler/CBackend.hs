@@ -388,7 +388,8 @@ sysBuiltins =
     "hostname",
     "getcwd",
     "chdir",
-    "system"
+    "system",
+    "capture"
   ]
 
 -- | file.* builtins the C runtime implements (stage 4).

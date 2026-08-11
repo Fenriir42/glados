@@ -32,7 +32,7 @@ builtinReturnType (FuncName n)
   | n `elem` mathIntFuncs = intT
   | "math." `T.isPrefixOf` n = floatT
   -- sys: specific return types before the int catch-all
-  | n `elem` ["sys.env", "sys.platform", "sys.hostname", "sys.getcwd"] = stringT
+  | n `elem` ["sys.env", "sys.platform", "sys.hostname", "sys.getcwd", "sys.capture"] = stringT
   | n == "sys.args" = Nothing -- returns [str]; unknown without generics
   | n == "sys.read" = stringT
   | n `elem` ["sys.close", "sys.isatty"] = boolT

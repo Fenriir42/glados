@@ -1,0 +1,41 @@
+# Quant Standard Library - OS Module
+//
+// Process execution and environment access built on the sys.* builtins.
+// `exec` runs a shell command and returns its exit status; `capture` runs
+// one and returns its standard output.  (Lower-level spawn/wait/kill/pipe
+// and signal handling are not yet exposed.)
+
+// Runs `cmd` in the shell and returns its exit code (0 on success).
+fn exec(cmd: str) -> int {
+    return sys.system(cmd);
+}
+
+// Runs `cmd` in the shell and returns everything it writes to stdout.
+fn capture(cmd: str) -> str {
+    return sys.capture(cmd);
+}
+
+// Returns True if `cmd` exited successfully (status 0).
+fn succeeds(cmd: str) -> bool {
+    return sys.system(cmd) == 0;
+}
+
+// Reads an environment variable ("" if unset).
+fn getenv(name: str) -> str {
+    return sys.env(name);
+}
+
+// Sets an environment variable for this process and its children.
+fn setenv(name: str, val: str) -> bool {
+    return sys.set_env(name, val);
+}
+
+// The current working directory.
+fn cwd() -> str {
+    return sys.getcwd();
+}
+
+// The operating-system name ("linux", "macos", or "windows").
+fn platform() -> str {
+    return sys.platform();
+}

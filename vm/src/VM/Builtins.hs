@@ -33,7 +33,7 @@ import System.Posix.IO (OpenFileFlags (..), OpenMode (..), closeFd, defaultFileF
 import qualified System.Posix.IO.ByteString as PosixBS
 import System.Posix.Terminal (queryTerminal)
 import System.Posix.Types (ByteCount, Fd (..))
-import System.Process (system)
+import System.Process (readProcessWithExitCode, system)
 
 -- | True if the function is a pure builtin (no heap access needed).
 isBuiltin :: Text -> Bool
@@ -316,6 +316,13 @@ callSys "chdir" ss [path] = do
 callSys "system" ss [cmd] = do
   code <- system (T.unpack (resolveStr ss cmd))
   return $ VInt (case code of ExitSuccess -> 0; ExitFailure n -> fromIntegral n)
+-- Run a shell command and capture its stdout (exit code is ignored, matching
+-- popen); a missing shell yields "".
+callSys "capture" ss [cmd] = do
+  r <-
+    try (readProcessWithExitCode "/bin/sh" ["-c", T.unpack (resolveStr ss cmd)] "") ::
+      IO (Either SomeException (ExitCode, String, String))
+  return $ VString (T.pack (either (const "") (\(_, out, _) -> out) r))
 -- Raw fd write: flush GHC's buffer first to preserve ordering with print/println
 callSys "write" ss [VInt fd, s] = do
   let txt = T.unpack (resolveStr ss s)

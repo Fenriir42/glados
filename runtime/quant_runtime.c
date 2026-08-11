@@ -1595,6 +1595,29 @@ static QtValue builtin_sys(const char *fn, size_t nargs, const QtValue *args) {
             int code = system(qt_to_string(args[0]));
             return qt_int(code == -1 ? -1 : (int64_t)((code >> 8) & 0xff));
         }
+        if (strcmp(fn, "capture") == 0) {
+            FILE *p = popen(qt_to_string(args[0]), "r");
+            if (!p) {
+                return qt_string("");
+            }
+            size_t cap = 256;
+            size_t len = 0;
+            char *buf = qt_alloc(cap);
+            size_t got;
+            while ((got = fread(buf + len, 1, cap - len, p)) > 0) {
+                len += got;
+                if (len == cap) {
+                    size_t ncap = cap * 2;
+                    char *nb = qt_alloc(ncap);
+                    memcpy(nb, buf, len);
+                    buf = nb;
+                    cap = ncap;
+                }
+            }
+            pclose(p);
+            buf[len] = '\0';
+            return qt_string(buf);
+        }
     }
     if (nargs == 2) {
         if (strcmp(fn, "write") == 0) {
