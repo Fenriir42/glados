@@ -51,6 +51,12 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Toolchain',
+					items: [
+						{ label: 'CLI & Project Commands', slug: 'toolchain/cli' },
+					],
+				},
+				{
 					label: 'Data & Collections',
 					items: [
 						{ label: 'Arrays', slug: 'data/arrays' },

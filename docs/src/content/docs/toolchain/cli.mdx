@@ -1,0 +1,183 @@
+---
+title: CLI & Project Commands
+description: The glados command line -- running single files, managing projects, building native binaries, testing, and the rest of the toolchain
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The `glados` binary is the whole Quant toolchain: a compiler/runner for single
+files, a project manager, a test runner, a formatter and linter driver, and a
+native-binary builder. It comes in **two layers**:
+
+- **`glados compiler`** works on a *single source file* -- no project needed.
+- Every other subcommand (`build`, `run`, `test`, `watch`, ...) works on a
+  *project*: a directory with a `quant.toml` manifest.
+
+<Aside type="tip" title="The mistake everyone makes first">
+`glados compiler` takes **one source file, given first**, and `--native`
+names the *output binary*:
+
+```bash
+glados compiler src/main.qa --native ./hello   # correct
+glados compiler --native hello                 # wrong: no source file
+glados compiler src/ --native hello            # wrong: not a single file
+```
+
+To build a whole project instead, use `glados build --target c` (below).
+</Aside>
+
+## Single files: `glados compiler`
+
+```
+glados compiler [FILE] [--dump] [--output FILE] [--load FILE]
+                [--stdlib DIR] [--native BIN] [--emit-c FILE]
+```
+
+| Invocation | What it does |
+|------------|--------------|
+| `glados compiler prog.qa` | Compile and **run** `prog.qa` on the bytecode VM |
+| `glados compiler prog.qa --dump` | Print the bytecode disassembly instead of running |
+| `glados compiler prog.qa --output prog.qbc` | Write compiled bytecode to a `.qbc` file |
+| `glados compiler --load prog.qbc` | Load and run a pre-compiled `.qbc` file |
+| `glados compiler prog.qa --native ./prog` | Compile to a **standalone native binary** at `./prog` (via the C backend) |
+| `glados compiler prog.qa --emit-c prog.c` | Emit the generated C without compiling it |
+| `glados compiler prog.qa --stdlib DIR` | Use a specific standard-library directory |
+
+The native backend links against a small C runtime; see
+[Native Backend](/system/native-backend/) for details and the
+`QUANT_RUNTIME_DIR` / `QUANT_CC` environment variables.
+
+## Projects
+
+A project is any directory containing a `quant.toml` manifest:
+
+```toml
+[project]
+name    = "my-project"
+version = "0.1.0"
+entry   = "src/main.qa"
+```
+
+### `glados init NAME`
+
+Scaffold a new project in a directory `NAME`: creates `quant.toml`, a
+hello-world `src/main.qa`, and a `tests/main_test.qa`.
+
+```bash
+glados init hello
+cd hello
+glados run
+```
+
+### `glados build [--release] [--target c]`
+
+Compile the entry point. By default writes bytecode to `.build/main.qbc`.
+With `--target c`, translate the compiled bytecode to C and produce a
+**native binary** at `.build/main` (the generated C is kept at
+`.build/main.c`):
+
+```bash
+glados build              # -> .build/main.qbc  (bytecode)
+glados build --target c   # -> .build/main       (native binary)
+./.build/main
+```
+
+<Aside type="note">
+`glados build --target c` is the project-level equivalent of
+`glados compiler <entry> --native <out>`. Use `build` for projects,
+`compiler --native` for one-off files.
+</Aside>
+
+### `glados run`
+
+Compile the entry point and immediately execute it on the VM.
+
+### `glados test [FILE] [--cov] [--cov-min PCT] [--cov-out FILE]`
+
+Discover and run every `*_test.qa` file under the test directory. Any
+parameterless function named `test_*` is a test case; use the
+`assert`/`assert_eq`/`assert_ne`/`assert_true`/`assert_false`/`assert_panic`
+builtins inside them.
+
+```bash
+glados test                 # run all tests
+glados test tests/foo_test.qa   # run one file
+glados test --cov           # print function/line/branch coverage
+glados test --cov-min 80    # fail if function coverage < 80%
+glados test --cov-out cov.json   # write a JSON coverage report
+```
+
+### `glados watch [CMD...]`
+
+Re-run a subcommand whenever a `.qa` file under `src/` or the test directory
+changes -- the fast inner dev loop. `CMD` defaults to `build`, and any flags
+are forwarded to it. Runs once at startup and then after every change;
+Ctrl-C stops.
+
+```bash
+glados watch                # rebuild on every save
+glados watch test           # re-run the test suite on every save
+glados watch test --cov     # ...with coverage
+glados watch run            # recompile and re-run the program
+```
+
+<Aside type="note">
+The watcher polls file modification times (~400 ms), so it has no native
+dependencies and works the same on every platform.
+</Aside>
+
+### `glados fmt [--check]`
+
+Format all source files with the comment-preserving formatter. With
+`--check`, exit non-zero if any file would change (useful in CI):
+
+```bash
+glados fmt            # rewrite files in place
+glados fmt --check    # CI gate: fail if anything is unformatted
+```
+
+### `glados lint`
+
+Run the `wheatley` linter over all project sources (unused variables,
+unreachable code, missing returns, naming conventions, and more).
+
+### `glados doc [--format html|md] [--out DIR]`
+
+Generate API documentation from `//` doc comments above `fn`, `struct`, and
+`error` declarations. Defaults to HTML in `docs/api/`.
+
+### `glados clean`
+
+Remove build artefacts (the `.build/` directory).
+
+## Verifying the native backend: `glados native-diff [PATH...]`
+
+Runs every `.qa` file (default: `tests/`) under **both** the bytecode VM and
+a freshly built native binary, then diffs their stdout and exit codes. It is
+the backend's correctness gate -- if the two engines ever disagree, it fails.
+
+```bash
+glados native-diff            # check tests/
+glados native-diff examples/  # check another directory
+```
+
+Each file is reported as `ok` (byte-identical), `skip` (not translatable
+yet, or annotated non-deterministic), or `DIFF` (a real mismatch). A program
+whose output is inherently non-deterministic (network, wall-clock,
+randomness) can opt out with a `// native-diff: skip` comment. See
+[Native Backend](/system/native-backend/).
+
+## Other binaries
+
+The toolchain installs a few companion binaries that the subcommands above
+dispatch to, and which you can also run directly:
+
+| Binary | Purpose |
+|--------|---------|
+| `quant-lsp` | Language server (diagnostics, hover, completion, ...) |
+| `quant-fmt` | The formatter (`glados fmt` wraps it) |
+| `wheatley` | The linter (`glados lint` wraps it) |
+| `quant-dap` | Debug Adapter Protocol server for step debugging |
+| `glados-repl` | Interactive REPL |
+
+Each ships with a man page (`man glados`, `man quant-lsp`, ...).
