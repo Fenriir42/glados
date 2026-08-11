@@ -1,6 +1,6 @@
 # Quant Language - Roadmap
 
-Current state of the `feat/revival` branch as of 2026-07-23.
+Current state of the `feat/revival` branch as of 2026-08-11.
 
 ---
 
@@ -138,9 +138,9 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~Default interface methods~~ | Done -- interface methods may carry a body; impls that omit the method get it instantiated as `T.method` from the default; overriding and inherited defaults (via `extends`) work; sibling calls on `self` use dynamic dispatch; see `tests/default_methods.qa` |
 | ~~Associated types on interfaces~~ | Done -- `type Item;` in interfaces, `type Item = int;` in impl-for blocks; bindings validated for completeness both ways; inherited through `extends`; concrete method calls carry concrete signatures; see `tests/assoc_types.qa` |
 | ~~FFI callbacks~~ | Done -- extern fns may take function-typed params: `fn qsort(..., compar: (ptr, ptr) -> int)`; a Quant function passed there becomes a C function pointer (GHC wrapper import) that re-enters the VM; `ptr.add`/`ptr.read_*`/`ptr.write_*` builtins for raw memory; see `tests/ffi_callback.qa` |
-| Generalized FFI callback shapes | Lift the fixed `(ptr, ptr) -> int` comparator restriction: thread the extern's declared function type into `ICallFFI` so the VM can pick (or synthesize) a matching C wrapper -- e.g. `(int) -> void` for signal handlers, `(ptr) -> void` for iterators, `(float, float) -> float` for numeric kernels |
+| ~~Generalized FFI callback shapes~~ | Done -- callbacks of any arity 0-4 (pointer args, int-class return) on both engines. The callback's parameter count is recovered from its prologue and used to select the matching trampoline natively and the matching `foreign import "wrapper"` in the VM; `tests/ffi_qsort_r.qa` exercises a 3-argument comparator. Callbacks with float or narrower-than-pointer args remain unsupported (the bytecode does not preserve extern argument types) |
 | ~~Async / await~~ | Done -- `async fn f() -> T` returns `task(T)` at the call site; `await expr` unwraps it; cooperative green-task scheduler in the VM (`ISpawn`/`IAwait`); tasks advance only at await points; see `tests/async.qa` |
-| Native backend | Transpile to C for an optimized standalone binary; staged plan below |
+| ~~Native backend~~ | Done -- transpiles compiled bytecode to C for an optimized standalone binary (60-100x the VM); all ten stages below complete; `glados native-diff` gates it in CI |
 
 ### Native backend: transpile to C
 
@@ -171,7 +171,7 @@ Stages 1-3 form the minimum credible milestone (a native hello world validated
 against the VM); each later stage widens the subset of `tests/*.qa` that passes
 under `--native` until the corpus is green end-to-end.
 
-**All ten stages are complete.** `glados native-diff` reports 31 of the
+**All ten stages are complete.** `glados native-diff` reports 32 of the
 showcase programs matching the VM byte-for-byte, with a single skip:
 `socket_http.qa`, which is annotated `native-diff: skip` because it talks to
 an external host (its response varies between runs and cannot be diffed).
