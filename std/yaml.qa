@@ -8,34 +8,7 @@
 // single- or double-quoted.  (Sequences of maps and flow style are not
 // handled.)
 
-// Removes a matching pair of surrounding single or double quotes from `v`.
-fn strip_quotes(v: str) -> str {
-    n: int = string.len(v);
-    if (n < 2) {
-        return v;
-    };
-    first: str = string.char_at(v, 0);
-    last: str = string.char_at(v, n - 1);
-    dq: bool = False;
-    if (first == "\"") {
-        if (last == "\"") {
-            dq = True;
-        };
-    };
-    sq: bool = False;
-    if (first == "'") {
-        if (last == "'") {
-            sq = True;
-        };
-    };
-    if (dq) {
-        return string.substring(v, 1, n - 1);
-    };
-    if (sq) {
-        return string.substring(v, 1, n - 1);
-    };
-    return v;
-}
+from string import strip_quotes
 
 // Parses a flat YAML document into a string-to-string map.
 fn parse_map(text: str) -> dict(str, str) {

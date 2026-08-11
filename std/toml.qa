@@ -8,41 +8,14 @@
 // quotes are stripped.  (Multi-line strings, arrays of tables, and inline
 // tables are not handled.)
 
+from string import strip_quotes
+
 // Appends `k` to a dotted `prefix` (no leading dot when prefix is empty).
 fn join_key(prefix: str, k: str) -> str {
     if (string.is_empty(prefix)) {
         return k;
     };
     return string.concat(prefix, string.concat(".", k));
-}
-
-// Removes a matching pair of surrounding single or double quotes.
-fn strip_quotes(v: str) -> str {
-    n: int = string.len(v);
-    if (n < 2) {
-        return v;
-    };
-    first: str = string.char_at(v, 0);
-    last: str = string.char_at(v, n - 1);
-    dq: bool = False;
-    if (first == "\"") {
-        if (last == "\"") {
-            dq = True;
-        };
-    };
-    sq: bool = False;
-    if (first == "'") {
-        if (last == "'") {
-            sq = True;
-        };
-    };
-    if (dq) {
-        return string.substring(v, 1, n - 1);
-    };
-    if (sq) {
-        return string.substring(v, 1, n - 1);
-    };
-    return v;
 }
 
 // Cuts an inline `#` comment from a line, ignoring `#` inside quotes.
