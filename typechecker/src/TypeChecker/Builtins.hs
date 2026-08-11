@@ -82,6 +82,7 @@ builtinReturnType (FuncName n)
   | n == "ptr.add" = ptrT
   | n `elem` ["ptr.read_int32", "ptr.read_int64"] = intT
   | n == "ptr.read_float64" = floatT
+  | n == "ptr.read_str" = stringT
   | n `elem` ["ptr.write_int32", "ptr.write_int64", "ptr.write_float64"] = voidT
   | otherwise = Nothing
   where

@@ -1,0 +1,33 @@
+// Showcase / test for the std/sqlite module using an in-memory database
+// (deterministic: no files, fixed data).
+from sqlite import open, close, exec, query, columns
+
+fn main() -> void {
+    db: ptr = open(":memory:");
+    if (ptr.is_null(db)) {
+        println("open failed");
+        return;
+    };
+
+    exec(db, "CREATE TABLE people (id INTEGER, name TEXT)");
+    exec(db, "INSERT INTO people VALUES (1, 'ada')");
+    exec(db, "INSERT INTO people VALUES (2, 'grace')");
+    exec(db, "INSERT INTO people VALUES (3, 'linus')");
+
+    cols: [str] = columns(db, "SELECT id, name FROM people");
+    println("columns = %s, %s", cols[0], cols[1]);
+
+    rows: [[str]] = query(db, "SELECT id, name FROM people ORDER BY id DESC");
+    i: int = 0;
+    while (i < len(rows)) {
+        r: [str] = rows[i];
+        println("row: %s -> %s", r[0], r[1]);
+        i = i + 1;
+    };
+    println("count = %d", len(rows));
+
+    one: [[str]] = query(db, "SELECT count(*) FROM people WHERE id > 1");
+    println("filtered count = %s", one[0][0]);
+
+    close(db);
+}

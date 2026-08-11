@@ -266,6 +266,11 @@ prefixModule modName decls =
   [ Located sp (DeclFunction vis (renameFuncDecl modNames modName fd))
     | Located sp (DeclFunction vis fd) <- decls
   ]
+    -- Carry any `extern` (FFI) blocks through unchanged: their names are C
+    -- symbols (never prefixed), and the module's prefixed functions still call
+    -- them by their bare name.  Without this the externs would be dropped and
+    -- the calls would dangle.
+    ++ [loc | loc@(Located _ (DeclFFI _)) <- decls]
   where
     modNames =
       Set.fromList

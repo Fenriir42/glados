@@ -44,6 +44,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
+import Foreign.C.String (peekCString)
 import Foreign.C.Types (CInt (..))
 import Foreign.LibFFI
   ( argCDouble,
@@ -1381,6 +1382,11 @@ callHeapBuiltin name args = case (name, args) of
   ("ptr.write_float64", [VPointer addr, VFloat d]) -> do
     S.liftIO (pokeByteOff (wordPtrToPtr (fromIntegral addr)) 0 d)
     return VUnit
+  -- ptr.read_str : ptr -> str  (NUL-terminated C string; "" for NULL)
+  ("ptr.read_str", [VPointer addr]) ->
+    if addr == 0
+      then return (VString "")
+      else S.liftIO (VString . T.pack <$> peekCString (wordPtrToPtr (fromIntegral addr)))
   -- assert : bool -> str -> void
   ("assert", rawArgs@[_, _]) -> do
     strings <- gets vmStrings

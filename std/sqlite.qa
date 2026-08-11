@@ -1,0 +1,104 @@
+# Quant Standard Library - SQLite Module
+//
+// A thin binding to libsqlite3 via the FFI.  `open` returns a database
+// handle (a raw pointer), `exec` runs a statement with no result set, and
+// `query` returns the result rows as arrays of text columns.  Use
+// ":memory:" for a transient in-process database.
+
+extern "libsqlite3.so.0" {
+    fn sqlite3_open(filename: str, ppDb: ptr) -> int
+    fn sqlite3_close(db: ptr) -> int
+    fn sqlite3_prepare_v2(db: ptr, sql: str, nbyte: int, ppStmt: ptr, pzTail: ptr) -> int
+    fn sqlite3_step(stmt: ptr) -> int
+    fn sqlite3_finalize(stmt: ptr) -> int
+    fn sqlite3_column_count(stmt: ptr) -> int
+    fn sqlite3_column_text(stmt: ptr, col: int) -> ptr
+    fn sqlite3_column_name(stmt: ptr, col: int) -> ptr
+}
+
+extern "libc.so.6" {
+    fn malloc(size: int) -> ptr
+    fn free(p: ptr) -> void
+}
+
+// Opens a database at `path` (":memory:" for a transient one), returning a
+// handle, or the null pointer on failure.
+fn open(path: str) -> ptr {
+    cell: ptr = malloc(8);
+    rc: int = sqlite3_open(path, cell);
+    db: ptr = ptr.from_int(ptr.read_int64(cell));
+    free(cell);
+    if (rc != 0) {
+        return ptr.null();
+    };
+    return db;
+}
+
+// Closes a database handle; returns the sqlite result code.
+fn close(db: ptr) -> int {
+    return sqlite3_close(db);
+}
+
+// Prepares `sql` into a statement, returning its pointer (or null on error).
+fn prepare(db: ptr, sql: str) -> ptr {
+    cell: ptr = malloc(8);
+    rc: int = sqlite3_prepare_v2(db, sql, -1, cell, ptr.null());
+    stmt: ptr = ptr.from_int(ptr.read_int64(cell));
+    free(cell);
+    if (rc != 0) {
+        return ptr.null();
+    };
+    return stmt;
+}
+
+// Runs a statement that returns no rows (CREATE, INSERT, ...); returns the
+// sqlite step result code (101 = DONE on success).
+fn exec(db: ptr, sql: str) -> int {
+    stmt: ptr = prepare(db, sql);
+    if (ptr.is_null(stmt)) {
+        return -1;
+    };
+    rc: int = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc;
+}
+
+// Runs a query and returns its result rows, each an array of text columns.
+fn query(db: ptr, sql: str) -> [[str]] {
+    result: [[str]] = [];
+    stmt: ptr = prepare(db, sql);
+    if (ptr.is_null(stmt)) {
+        return result;
+    };
+    ncols: int = sqlite3_column_count(stmt);
+    step: int = sqlite3_step(stmt);
+    while (step == 100) {
+        row: [str] = [];
+        c: int = 0;
+        while (c < ncols) {
+            row[c] = ptr.read_str(sqlite3_column_text(stmt, c));
+            c = c + 1;
+        };
+        push(result, row);
+        step = sqlite3_step(stmt);
+    };
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+// Returns the column names of `sql` as an array of strings.
+fn columns(db: ptr, sql: str) -> [str] {
+    names: [str] = [];
+    stmt: ptr = prepare(db, sql);
+    if (ptr.is_null(stmt)) {
+        return names;
+    };
+    ncols: int = sqlite3_column_count(stmt);
+    c: int = 0;
+    while (c < ncols) {
+        push(names, ptr.read_str(sqlite3_column_name(stmt, c)));
+        c = c + 1;
+    };
+    sqlite3_finalize(stmt);
+    return names;
+}

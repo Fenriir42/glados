@@ -1934,6 +1934,12 @@ static QtValue builtin_ptr(const char *fn, size_t nargs, const QtValue *args) {
         memcpy(p, &v, sizeof(v));
         return qt_unit();
     }
+    if (strcmp(fn, "read_str") == 0 && nargs == 1) {
+        if (p == NULL) {
+            return qt_string("");
+        }
+        return qt_string(qt_strdup((const char *)p));
+    }
     char msg[128];
     snprintf(msg, sizeof(msg), "ptr.%s: bad arguments", fn);
     qt_panic(msg);

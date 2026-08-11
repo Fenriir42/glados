@@ -418,7 +418,8 @@ ptrBuiltins =
     "read_int64",
     "write_int64",
     "read_float64",
-    "write_float64"
+    "write_float64",
+    "read_str"
   ]
 
 -- | socket.* TCP builtins the C runtime implements.

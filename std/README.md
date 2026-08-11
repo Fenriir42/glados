@@ -6,14 +6,26 @@ The Quant standard library provides modules for I/O, math, strings, arrays, syst
 
 ```
 std/
-├── io.qa       # Console I/O
-├── math.qa     # Mathematical functions
-├── string.qa   # String manipulation
-├── array.qa    # Array utilities
-├── sys.qa      # System operations + raw fd I/O + open flags
-├── file.qa     # File I/O (read, write, append, lines, …)
-├── buf.qa      # Mutable string buffers (write, flush, to_str, …)
-├── varargs.qa  # Variadic helpers (sum, join, format, …)
+├── io.qa        # Console I/O
+├── math.qa      # Mathematical functions
+├── string.qa    # String manipulation
+├── array.qa     # Array utilities
+├── sys.qa       # System operations + raw fd I/O + open flags
+├── file.qa      # File I/O (read, write, append, lines, …)
+├── buf.qa       # Mutable string buffers (write, flush, to_str, …)
+├── varargs.qa   # Variadic helpers (sum, join, format, …)
+├── dict.qa      # Dict helpers
+├── json.qa      # JSON parse/encode
+├── socket.qa    # TCP sockets
+├── regex.qa     # Regular expressions
+├── path.qa      # Filesystem path manipulation (join, basename, ext, normalize, …)
+├── datetime.qa  # UTC dates on Unix timestamps (ISO-8601, make, add, diff, …)
+├── csv.qa       # RFC 4180 CSV parse/encode
+├── yaml.qa      # Flat "key: value" YAML maps
+├── crypto.qa    # SHA-256 (pure Quant)
+├── os.qa        # Subprocess exec/capture + environment
+├── sqlite.qa    # SQLite binding via FFI (open/exec/query)
+├── test.qa      # Property-based testing (seeded generator + shrinking)
 └── README.md
 ```
 
