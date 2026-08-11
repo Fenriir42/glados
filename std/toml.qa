@@ -1,0 +1,173 @@
+# Quant Standard Library - TOML Module
+//
+// A pragmatic subset of TOML for configuration files.  `parse` flattens
+// tables and keys into a dict(str, str) with dotted paths: a `[server]`
+// table prefixes its keys as "server.host", dotted table headers like
+// `[a.b]` nest further, and inline arrays become indexed keys ("ports.0",
+// "ports.1") plus a "<key>.count".  Values keep their text form; surrounding
+// quotes are stripped.  (Multi-line strings, arrays of tables, and inline
+// tables are not handled.)
+
+// Appends `k` to a dotted `prefix` (no leading dot when prefix is empty).
+fn join_key(prefix: str, k: str) -> str {
+    if (string.is_empty(prefix)) {
+        return k;
+    };
+    return string.concat(prefix, string.concat(".", k));
+}
+
+// Removes a matching pair of surrounding single or double quotes.
+fn strip_quotes(v: str) -> str {
+    n: int = string.len(v);
+    if (n < 2) {
+        return v;
+    };
+    first: str = string.char_at(v, 0);
+    last: str = string.char_at(v, n - 1);
+    dq: bool = False;
+    if (first == "\"") {
+        if (last == "\"") {
+            dq = True;
+        };
+    };
+    sq: bool = False;
+    if (first == "'") {
+        if (last == "'") {
+            sq = True;
+        };
+    };
+    if (dq) {
+        return string.substring(v, 1, n - 1);
+    };
+    if (sq) {
+        return string.substring(v, 1, n - 1);
+    };
+    return v;
+}
+
+// Cuts an inline `#` comment from a line, ignoring `#` inside quotes.
+fn strip_comment(line: str) -> str {
+    n: int = string.len(line);
+    inq: bool = False;
+    qc: str = "";
+    i: int = 0;
+    while (i < n) {
+        ch: str = string.char_at(line, i);
+        if (inq) {
+            if (ch == qc) {
+                inq = False;
+            };
+        } else if (ch == "\"") {
+            inq = True;
+            qc = "\"";
+        } else if (ch == "'") {
+            inq = True;
+            qc = "'";
+        } else if (ch == "#") {
+            return string.substring(line, 0, i);
+        };
+        i = i + 1;
+    };
+    return line;
+}
+
+// True if `v` is a `[ ... ]` inline array.
+fn is_array(v: str) -> bool {
+    if (string.starts_with(v, "[")) {
+        if (string.ends_with(v, "]")) {
+            return True;
+        };
+    };
+    return False;
+}
+
+// Splits an inline array body on top-level commas (quotes respected).
+fn split_array(v: str) -> [str] {
+    inner: str = string.trim(string.substring(v, 1, string.len(v) - 1));
+    out: [str] = [];
+    if (string.is_empty(inner)) {
+        return out;
+    };
+    n: int = string.len(inner);
+    cur: str = "";
+    inq: bool = False;
+    qc: str = "";
+    i: int = 0;
+    while (i < n) {
+        ch: str = string.char_at(inner, i);
+        if (inq) {
+            cur = string.concat(cur, ch);
+            if (ch == qc) {
+                inq = False;
+            };
+        } else if (ch == "\"") {
+            inq = True;
+            qc = "\"";
+            cur = string.concat(cur, ch);
+        } else if (ch == "'") {
+            inq = True;
+            qc = "'";
+            cur = string.concat(cur, ch);
+        } else if (ch == ",") {
+            push(out, string.trim(cur));
+            cur = "";
+        } else {
+            cur = string.concat(cur, ch);
+        };
+        i = i + 1;
+    };
+    push(out, string.trim(cur));
+    return out;
+}
+
+// Parses a TOML document into a flat dict with dotted keys.
+fn parse(text: str) -> dict(str, str) {
+    result: dict(str, str) = {};
+    section: str = "";
+    lines: [str] = string.split(text, "\n");
+    li: int = 0;
+    while (li < len(lines)) {
+        content: str = string.trim(strip_comment(lines[li]));
+        li = li + 1;
+        skip: bool = False;
+        if (string.is_empty(content)) {
+            skip = True;
+        };
+        if (!skip) {
+            if (string.starts_with(content, "[")) {
+                inner: str = string.trim(string.substring(content, 1, string.len(content) - 1));
+                if (string.starts_with(inner, "[")) {
+                    inner = string.trim(string.substring(inner, 1, string.len(inner) - 1));
+                };
+                section = inner;
+            } else {
+                ei: int = string.index_of(content, "=");
+                if (ei >= 0) {
+                    key: str = string.trim(string.substring(content, 0, ei));
+                    val: str = string.trim(string.substring(content, ei + 1, string.len(content)));
+                    fullkey: str = join_key(section, key);
+                    if (is_array(val)) {
+                        items: [str] = split_array(val);
+                        j: int = 0;
+                        while (j < len(items)) {
+                            result[join_key(fullkey, string.from_int(j))] = strip_quotes(items[j]);
+                            j = j + 1;
+                        };
+                        result[join_key(fullkey, "count")] = string.from_int(len(items));
+                    } else {
+                        result[fullkey] = strip_quotes(val);
+                    };
+                };
+            };
+        };
+    };
+    return result;
+}
+
+// Convenience lookup with a default when the key is absent.
+fn get(d: dict(str, str), key: str, fallback: str) -> str {
+    if (dict.has(d, key)) {
+        return d[key];
+    };
+    return fallback;
+}

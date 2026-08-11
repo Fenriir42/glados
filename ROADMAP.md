@@ -13,7 +13,7 @@ Current state of the `feat/revival` branch as of 2026-08-11.
 | Compiler / Codegen | Done | All control flow, structs, error handling, compound assignment |
 | VM Interpreter | Done | Stack-based; 46 VM tests; OOB and type errors throw correctly |
 | Import system | Done | `import M`, `from M import f`, `from M import *`; user `.qa` files resolved relative to the source file; transitive imports; visibility enforced; cycle detection |
-| Standard library | Done | 20 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket`, `regex`, `path`, `datetime`, `csv`, `yaml`, `crypto`, `os`, `sqlite`, `test` (plus `net/http` in progress) |
+| Standard library | Done | 21 modules: `math`, `string`, `array`, `sys`, `io`, `file`, `buf`, `varargs`, `dict`, `json`, `socket`, `regex`, `path`, `datetime`, `csv`, `yaml`, `toml`, `crypto`, `os`, `sqlite`, `test` (plus `net/http` in progress) |
 | REPL | Done | `:load`, `:run`, `:env`, `:reset`, multiline, tab completion |
 | CLI | Done | `--stdlib`, `--dump`, `--load`, `--output` flags; 27 integration tests |
 | Structs | Done | Declare, init, field access/assignment, nested structs, field compound assignment |
@@ -64,7 +64,8 @@ Current state of the `feat/revival` branch as of 2026-08-11.
 | `path` | Done | `is_absolute/join/basename/dirname/ext/stem/normalize/exists` |
 | `datetime` | Done | `now/make/to_iso/from_iso/year/month/day/hour/minute/second/weekday/add/diff` |
 | `csv` | Done | `parse/encode/rows/headers` (RFC 4180) |
-| `yaml` | Done | `parse_map/encode_map` (flat maps) |
+| `yaml` | Done | `parse_map/encode_map` (flat) + `parse` (nested, dotted keys) |
+| `toml` | Done | `parse/get` (tables, arrays -> dotted-key `dict(str, str)`) |
 | `crypto` | Done | `sha256_hex/md5_hex/hmac_sha256/crc32` (pure Quant) |
 | `os` | Done | `exec/succeeds/capture/spawn/wait/kill/getenv/setenv/cwd/platform` + signal constants |
 | `sqlite` | Done | `open/close/exec/query/columns` (libsqlite3 FFI) |
@@ -229,5 +230,6 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 | ~~`os`~~ | Done | Synchronous `exec`/`succeeds`/`capture` (via the `sys.capture` popen builtin), background `spawn`/`wait`/`kill` with `SIGTERM`/`SIGKILL`/`SIGINT` constants (via new raw-POSIX `sys.spawn`/`wait`/`kill` builtins -- identical on VM and native), plus `getenv`/`setenv`/`cwd`/`platform`. Anonymous pipes and async signal *handlers* are out of scope (they need infrastructure the runtime does not have); `tests/std_os.qa` |
 | ~~`sqlite`~~ | Done | `open/close/exec/query/columns` via FFI to `libsqlite3` (prepare/step/column API); `query` returns rows as `[[str]]`. Runs byte-identically on VM and native (both dlopen the lib); needed a new `ptr.read_str` builtin and an import-system fix to carry `extern` blocks through module imports; `tests/std_sqlite.qa` |
 | ~~`csv`~~ | Done | `parse/encode/rows/headers`; RFC 4180 quoting (embedded commas, quotes, newlines); `tests/std_csv.qa` |
-| ~~`yaml`~~ | Partial | `parse_map`/`encode_map` for flat `key: value` maps (the config-file subset) into `dict(str, str)`; comments, quoted values. Nested maps and sequences are not yet handled; `tests/std_yaml.qa` |
+| ~~`yaml`~~ | Done | `parse_map`/`encode_map` for flat maps, plus `parse` for indentation-based nested maps and block sequences, flattened to a `dict(str, str)` with dotted paths (`server.host`) and indexed sequence keys (`tags.0`). Comments and quoted scalars handled; sequences-of-maps and flow style are out of scope. `tests/std_yaml.qa` |
+| ~~`toml`~~ | Done | `parse`/`get` -- tables `[a.b]` (dotted-path flattening), `key = value`, inline arrays (indexed keys + `.count`), quote-aware inline-comment stripping, into a `dict(str, str)`. Multi-line strings, arrays-of-tables, and inline tables are out of scope; `tests/std_toml.qa` |
 | ~~`test`~~ | Done | Property-based testing: `forall_int(seed, count, lo, hi, prop)` with a deterministic seeded LCG generator and binary-search shrinking of the counterexample; predicates are first-class `(int) -> bool` functions; `tests/std_test.qa` |

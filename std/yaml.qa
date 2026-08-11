@@ -1,9 +1,12 @@
 # Quant Standard Library - YAML Module
 //
-// A pragmatic subset of YAML: flat "key: value" maps, the form used by most
-// configuration files.  Blank lines and '#' comments are ignored; values may
-// be single- or double-quoted.  (Nested maps, block/flow sequences, and
-// multi-document streams are not handled.)
+// A pragmatic subset of YAML for configuration files.  `parse_map` handles a
+// single flat "key: value" map; `parse` additionally understands
+// indentation-based nested maps and block sequences, flattening them into a
+// dict(str, str) with dotted paths ("server.host") and indexed sequence keys
+// ("tags.0").  Blank lines and '#' comments are ignored; scalar values may be
+// single- or double-quoted.  (Sequences of maps and flow style are not
+// handled.)
 
 // Removes a matching pair of surrounding single or double quotes from `v`.
 fn strip_quotes(v: str) -> str {
@@ -100,4 +103,110 @@ fn encode_map(d: dict(str, str)) -> str {
         i = i + 1;
     };
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Nested parsing (indentation-based maps and sequences -> dotted keys)
+
+// Number of leading spaces on a line (its indentation level).
+fn leading_spaces(s: str) -> int {
+    n: int = string.len(s);
+    i: int = 0;
+    while (i < n) {
+        if (string.char_at(s, i) != " ") {
+            return i;
+        };
+        i = i + 1;
+    };
+    return n;
+}
+
+// Joins a path stack of keys with dots.
+fn dotted(keys: [str]) -> str {
+    out: str = "";
+    i: int = 0;
+    while (i < len(keys)) {
+        if (i > 0) {
+            out = string.concat(out, ".");
+        };
+        out = string.concat(out, keys[i]);
+        i = i + 1;
+    };
+    return out;
+}
+
+// Appends `k` to a dotted `prefix` (no leading dot when prefix is empty).
+fn join_key(prefix: str, k: str) -> str {
+    if (string.is_empty(prefix)) {
+        return k;
+    };
+    return string.concat(prefix, string.concat(".", k));
+}
+
+// Returns the next sequence index for `key`, bumping the shared counter.
+fn next_index(counters: dict(str, int), key: str) -> int {
+    cur: int = 0;
+    if (dict.has(counters, key)) {
+        cur = counters[key];
+    };
+    counters[key] = cur + 1;
+    return cur;
+}
+
+// Parses nested YAML into a flat dict with dotted paths and indexed
+// sequence keys.  Nested maps use `parent.child`; sequence items use
+// `parent.0`, `parent.1`, ...
+fn parse(text: str) -> dict(str, str) {
+    result: dict(str, str) = {};
+    counters: dict(str, int) = {};
+    pkeys: [str] = [];
+    pindents: [int] = [];
+    lines: [str] = string.split(text, "\n");
+    li: int = 0;
+    while (li < len(lines)) {
+        raw: str = lines[li];
+        li = li + 1;
+        content: str = string.trim(raw);
+        skip: bool = False;
+        if (string.is_empty(content)) {
+            skip = True;
+        };
+        if (string.starts_with(content, "#")) {
+            skip = True;
+        };
+        if (!skip) {
+            indent: int = leading_spaces(raw);
+            // Pop path entries at or deeper than the current indent.
+            popping: bool = True;
+            while (popping) {
+                popping = False;
+                if (len(pindents) > 0) {
+                    if (pindents[len(pindents) - 1] >= indent) {
+                        pop(pkeys);
+                        pop(pindents);
+                        popping = True;
+                    };
+                };
+            };
+            if (string.starts_with(content, "- ")) {
+                item: str = string.trim(string.substring(content, 2, string.len(content)));
+                parent: str = dotted(pkeys);
+                key: str = join_key(parent, string.from_int(next_index(counters, parent)));
+                result[key] = strip_quotes(item);
+            } else {
+                ci: int = string.index_of(content, ":");
+                if (ci >= 0) {
+                    k: str = string.trim(string.substring(content, 0, ci));
+                    v: str = string.trim(string.substring(content, ci + 1, string.len(content)));
+                    if (string.is_empty(v)) {
+                        push(pkeys, k);
+                        push(pindents, indent);
+                    } else {
+                        result[join_key(dotted(pkeys), k)] = strip_quotes(v);
+                    };
+                };
+            };
+        };
+    };
+    return result;
 }

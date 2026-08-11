@@ -21,7 +21,8 @@ std/
 ├── path.qa      # Filesystem path manipulation (join, basename, ext, normalize, …)
 ├── datetime.qa  # UTC dates on Unix timestamps (ISO-8601, make, add, diff, …)
 ├── csv.qa       # RFC 4180 CSV parse/encode
-├── yaml.qa      # Flat "key: value" YAML maps
+├── yaml.qa      # YAML config (flat + nested, dotted-key flattening)
+├── toml.qa      # TOML config (tables + arrays, dotted-key flattening)
 ├── crypto.qa    # SHA-256, MD5, HMAC-SHA-256, CRC-32 (pure Quant)
 ├── os.qa        # Subprocess exec/capture/spawn/wait/kill + environment
 ├── sqlite.qa    # SQLite binding via FFI (open/exec/query)

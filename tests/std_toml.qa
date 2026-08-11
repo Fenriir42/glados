@@ -1,0 +1,21 @@
+// Showcase / test for the std/toml module.
+from toml import parse, get
+
+fn main() -> void {
+    src: str = "# app config\ntitle = \"Quant App\"\n\n[server]\nhost = \"localhost\"  # inline comment\nport = 8080\n\n[server.tls]\nenabled = true\n\n[database]\nurls = [\"pg://a\", \"pg://b\", \"pg://c\"]\nretries = 3\n";
+
+    d: dict(str, str) = parse(src);
+
+    ks: [str] = dict.keys(d);
+    i: int = 0;
+    while (i < len(ks)) {
+        println("%s = %s", ks[i], d[ks[i]]);
+        i = i + 1;
+    };
+
+    println("-- get with default --");
+    println("host = %s", get(d, "server.host", "?"));
+    println("missing = %s", get(d, "server.nope", "default"));
+    println("array[1] = %s", get(d, "database.urls.1", "?"));
+    println("array count = %s", get(d, "database.urls.count", "?"));
+}
