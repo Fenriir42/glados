@@ -653,19 +653,21 @@ execInstr = \case
     val <- pop "IArraySet (value)"
     idx <- pop "IArraySet (index)"
     ref <- pop "IArraySet (ref)"
+    strings <- gets vmStrings
+    -- Resolve pool refs before they enter the heap (see 'heapPush').
+    let val' = resolveStringRef strings val
     case (ref, idx) of
       (VArrayRef aid, VInt i) -> do
         modify $ \s ->
           s
-            { vmHeap = Map.adjust (Map.insert (fromIntegral i) val) aid (vmHeap s)
+            { vmHeap = Map.adjust (Map.insert (fromIntegral i) val') aid (vmHeap s)
             }
         return Nothing
       (VDictRef did, key) -> do
-        strings <- gets vmStrings
         let resolvedKey = resolveStringRef strings key
         modify $ \s ->
           s
-            { vmDictHeap = Map.adjust (Map.insert resolvedKey val) did (vmDictHeap s)
+            { vmDictHeap = Map.adjust (Map.insert resolvedKey val') did (vmDictHeap s)
             }
         return Nothing
       _ -> throwError $ VMTypeMismatch $ "IArraySet: bad types " ++ show ref ++ " " ++ show idx
@@ -961,12 +963,14 @@ callHeapBuiltin name args = case (name, args) of
 
   -- push / array.push : [int] -> int -> void  (modifies in place)
   (n, [VArrayRef aid, val]) | n `elem` ["push", "array.push"] -> do
+    strings <- gets vmStrings
+    let val' = resolveStringRef strings val
     heap <- gets vmHeap
     case Map.lookup aid heap of
       Nothing -> throwError $ VMRuntimeError $ "Array #" ++ show aid ++ " not found"
       Just arr -> do
         let nextIdx = if Map.null arr then 0 else fst (Map.findMax arr) + 1
-        modify $ \s -> s {vmHeap = Map.adjust (Map.insert nextIdx val) aid (vmHeap s)}
+        modify $ \s -> s {vmHeap = Map.adjust (Map.insert nextIdx val') aid (vmHeap s)}
         return VUnit
 
   -- pop / array.pop : [int] -> int  (removes last element)
@@ -1536,12 +1540,18 @@ allocArray = do
 
 heapPush :: Int -> Value -> VM ()
 heapPush aid val = do
+  -- Resolve string-pool references eagerly: a VStringRef stored in the heap
+  -- would otherwise be re-resolved against a different function's pool once
+  -- the array crosses a call boundary.  (The native backend resolves pool
+  -- refs to immortal pointers at push time, so this keeps the two in step.)
+  strings <- gets vmStrings
+  let val' = resolveStringRef strings val
   heap <- gets vmHeap
   case Map.lookup aid heap of
     Nothing -> return ()
     Just arr -> do
       let nextIdx = if Map.null arr then 0 else fst (Map.findMax arr) + 1
-      modify $ \s -> s {vmHeap = Map.adjust (Map.insert nextIdx val) aid (vmHeap s)}
+      modify $ \s -> s {vmHeap = Map.adjust (Map.insert nextIdx val') aid (vmHeap s)}
 
 resolveStringRef :: [Text] -> Value -> Value
 resolveStringRef strings (VStringRef i)
