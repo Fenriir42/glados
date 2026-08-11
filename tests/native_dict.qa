@@ -1,0 +1,53 @@
+// Showcase for the native backend's dict.* builtins, including the
+// Ord-ordered dict.keys / dict.values (inserted out of order, iterated in
+// the VM's Map key order).  Must diff byte-identically under
+// `glados native-diff tests/native_dict.qa`.
+
+fn main() -> void {
+    // string-keyed dict, inserted out of alphabetical order
+    fruit: dict(str, int) = {};
+    fruit["banana"] = 2;
+    fruit["apple"] = 1;
+    fruit["cherry"] = 3;
+    fruit["date"] = 4;
+
+    println("has apple = %d", dict.has(fruit, "apple"));
+    println("len = %d", dict.len(fruit));
+
+    // keys come back sorted lexicographically
+    ks: [str] = dict.keys(fruit);
+    line: str = "";
+    i: int = 0;
+    while (i < len(ks)) {
+        if (i > 0) { line = string.concat(line, ","); };
+        line = string.concat(line, ks[i]);
+        i = i + 1;
+    };
+    println("keys = %s", line);
+
+    // values follow the same key order
+    vs: [int] = dict.values(fruit);
+    total: int = 0;
+    j: int = 0;
+    while (j < len(vs)) {
+        total = total + vs[j];
+        j = j + 1;
+    };
+    println("values sum = %d", total);
+    println("first value = %d", vs[0]);
+    println("last value = %d", vs[3]);
+
+    dict.delete(fruit, "apple");
+    println("len after delete = %d", dict.len(fruit));
+    ks2: [str] = dict.keys(fruit);
+    println("first key after delete = %s", ks2[0]);
+
+    // int-keyed dict: keys sort numerically
+    nums: dict(int, str) = {};
+    nums[30] = "thirty";
+    nums[5] = "five";
+    nums[17] = "seventeen";
+    nk: [int] = dict.keys(nums);
+    println("int keys: %d %d %d", nk[0], nk[1], nk[2]);
+    println("smallest maps to %s", nums[nk[0]]);
+}

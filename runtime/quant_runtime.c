@@ -441,6 +441,41 @@ int qt_is_error(QtValue v) {
 /* ------------------------------------------------------------------ */
 /* Equality                                                            */
 
+/* Constructor rank mirroring the VM's derived Ord on Value (VInt < VFloat
+ * < VBool < VString < ...), so dict.keys/values can iterate in the VM's
+ * order.  UTF-8 byte order matches Text's code-point order, so strcmp on
+ * string keys agrees with the VM. */
+static int tag_rank(QtTag t) {
+    switch (t) {
+        case QT_INT: return 0;
+        case QT_FLOAT: return 1;
+        case QT_BOOL: return 2;
+        case QT_STRING: return 3;
+        default: return 4 + (int)t;
+    }
+}
+
+int qt_value_cmp(QtValue a, QtValue b) {
+    int ra = tag_rank(a.tag);
+    int rb = tag_rank(b.tag);
+    if (ra != rb) {
+        return ra < rb ? -1 : 1;
+    }
+    switch (a.tag) {
+        case QT_INT:
+        case QT_BOOL:
+            return a.as.i < b.as.i ? -1 : (a.as.i > b.as.i ? 1 : 0);
+        case QT_FLOAT:
+            return a.as.f < b.as.f ? -1 : (a.as.f > b.as.f ? 1 : 0);
+        case QT_STRING: {
+            int c = strcmp(a.as.s, b.as.s);
+            return c < 0 ? -1 : (c > 0 ? 1 : 0);
+        }
+        default:
+            return 0;
+    }
+}
+
 int qt_value_eq(QtValue a, QtValue b) {
     if (a.tag != b.tag) {
         return 0;
@@ -2354,6 +2389,31 @@ QtValue qt_call_builtin(const char *name, size_t nargs, const QtValue *args) {
     if (strcmp(name, "dict.delete") == 0 && nargs == 2) {
         qt_dict_delete(args[0], args[1]);
         return qt_unit();
+    }
+    if ((strcmp(name, "dict.keys") == 0 || strcmp(name, "dict.values") == 0) &&
+        nargs == 1) {
+        QtDict *d = as_dict(args[0], "dict.keys/values");
+        size_t n = d->len;
+        /* insertion-sort an index array by key (dicts are small) */
+        size_t *idx = qt_alloc((n + 1) * sizeof(size_t));
+        for (size_t i = 0; i < n; i++) {
+            idx[i] = i;
+        }
+        for (size_t i = 1; i < n; i++) {
+            size_t k = idx[i];
+            size_t j = i;
+            while (j > 0 && qt_value_cmp(d->keys[idx[j - 1]], d->keys[k]) > 0) {
+                idx[j] = idx[j - 1];
+                j--;
+            }
+            idx[j] = k;
+        }
+        int want_keys = strcmp(name, "dict.keys") == 0;
+        QtValue out = qt_array_new();
+        for (size_t i = 0; i < n; i++) {
+            qt_array_push(out, want_keys ? d->keys[idx[i]] : d->vals[idx[i]]);
+        }
+        return out;
     }
     if (strncmp(name, "ptr.", 4) == 0) {
         return builtin_ptr(name + 4, nargs, args);

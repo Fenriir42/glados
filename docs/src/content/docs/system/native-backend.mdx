@@ -78,12 +78,13 @@ dynamic method dispatch, closures and first-class functions, `extern` FFI
 calls (via `dlopen`, including callbacks of any arity 0-4 with pointer args
 and int-class return, e.g. `qsort` and `qsort_r`), raw pointers,
 casts, the printing builtins, and the full `string.*` (except `hash`),
-`math.*`, `sys.*`, `file.*`, `buf.*`, `ptr.*`, and `socket.*` builtin
-families (plus `dict.has`/`len`/`delete`), and async `spawn`/`await` (a
-cooperative `ucontext` scheduler). The `dict.keys`/`values`, `json.*`, and
-`regex.*` builtins are not yet translated -- programs using them fail at
-compile time with a message naming the unsupported instruction or builtin.
-Coverage grows stage by stage; see ROADMAP.md.
+`math.*`, `sys.*`, `file.*`, `buf.*`, `ptr.*`, `socket.*`, and `dict.*`
+builtin families, and async `spawn`/`await` (a cooperative `ucontext`
+scheduler). The only builtins left untranslated are `json.*`, `regex.*`, and
+`string.hash` -- each would have to reproduce a specific Haskell library's
+exact byte output or semantics (aeson, regex-tdfa, unbounded-`Integer`
+hashing), which can't be matched in C, so programs using them fail at
+compile time rather than silently diverging. See ROADMAP.md.
 
 A program whose output is inherently non-deterministic (external network,
 wall-clock, randomness) cannot be compared byte-for-byte; mark it with a

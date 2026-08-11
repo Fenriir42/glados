@@ -175,11 +175,15 @@ under `--native` until the corpus is green end-to-end.
 showcase programs matching the VM byte-for-byte, with a single skip:
 `socket_http.qa`, which is annotated `native-diff: skip` because it talks to
 an external host (its response varies between runs and cannot be diffed).
-The `socket.*` TCP builtins are ported (`socket_echo.qa` matches
-byte-identically). The only unported builtins are `dict.keys`/`values` (need
-VM `Ord` key ordering), `json.*` (needs a C encoder/parser), `regex.*`
-(needs a regex engine), and `string.hash` (its VM definition folds over
-unbounded Integers).
+The `socket.*` TCP builtins and the full `dict.*` family (including
+`keys`/`values`, iterated in the VM's `Ord` key order via `qt_value_cmp`)
+are ported. The only builtins left unported are ones that cannot be made
+byte-identical to their Haskell reference implementation: `json.*` (would
+have to reproduce aeson's exact serialization and number formatting),
+`regex.*` (would have to match regex-tdfa's semantics), and `string.hash`
+(folds over unbounded `Integer`s). These are principled exclusions, not
+gaps -- a native port would diverge from the VM, which the whole backend is
+built not to do.
 
 ### Debugger (DAP) -- done
 

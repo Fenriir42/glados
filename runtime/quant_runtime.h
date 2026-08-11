@@ -178,6 +178,10 @@ int qt_is_error(QtValue v);                   /* IIsOk is the negation */
 
 int qt_value_eq(QtValue a, QtValue b);
 
+/* VM-derived Ord on Value: returns -1/0/1.  Used to iterate dict keys and
+ * values in the same order as the VM (Map key order). */
+int qt_value_cmp(QtValue a, QtValue b);
+
 /* ------------------------------------------------------------------ */
 /* Rendering and printing                                              */
 

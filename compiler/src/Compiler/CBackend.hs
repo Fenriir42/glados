@@ -280,7 +280,9 @@ supportedBuiltins =
       "array.pop",
       "dict.has",
       "dict.len",
-      "dict.delete"
+      "dict.delete",
+      "dict.keys",
+      "dict.values"
     ]
       ++ map ("string." <>) stringBuiltins
       ++ map ("math." <>) mathBuiltins
