@@ -381,8 +381,8 @@ System, environment, and raw file-descriptor functions.
 | `sys.time` | `() -> int` | Unix timestamp (seconds since epoch) |
 | `sys.time_millis` | `() -> int` | CPU time in milliseconds |
 | `sys.sleep` | `(int) -> void` | Sleep for `ms` milliseconds |
-| `sys.argc` | `() -> int` | Number of command-line arguments |
-| `sys.args` | `() -> [str]` | Command-line arguments as string array |
+| `sys.argc` | `() -> int` | Number of command-line arguments (program name excluded) |
+| `sys.args` | `() -> [str]` | Command-line arguments as a string array; `args()[0]` is the first argument, not the program name |
 | `sys.env` | `(str) -> str` | Read environment variable (empty string if unset) |
 | `sys.set_env` | `(str, str) -> bool` | Set environment variable |
 | `sys.platform` | `() -> str` | OS name: `"linux"`, `"macos"`, or `"windows"` |
