@@ -233,3 +233,49 @@ Full Debug Adapter Protocol implementation, VS Code can set breakpoints, step th
 | ~~`yaml`~~ | Done | `parse_map`/`encode_map` for flat maps, plus `parse` for indentation-based nested maps and block sequences, flattened to a `dict(str, str)` with dotted paths (`server.host`) and indexed sequence keys (`tags.0`). Comments and quoted scalars handled; sequences-of-maps and flow style are out of scope. `tests/std_yaml.qa` |
 | ~~`toml`~~ | Done | `parse`/`get` -- tables `[a.b]` (dotted-path flattening), `key = value`, inline arrays (indexed keys + `.count`), quote-aware inline-comment stripping, into a `dict(str, str)`. Multi-line strings, arrays-of-tables, and inline tables are out of scope; `tests/std_toml.qa` |
 | ~~`test`~~ | Done | Property-based testing: `forall_int(seed, count, lo, hi, prop)` with a deterministic seeded LCG generator and binary-search shrinking of the counterexample; predicates are first-class `(int) -> bool` functions; `tests/std_test.qa` |
+
+---
+
+## Future directions (backlog)
+
+Ideas beyond the V1 scope above, in rough priority order. (i really need to do a release because i'm spewing random things).
+
+### Differential fuzzer
+
+Auto-generate random *valid* Quant programs and run each under both the
+bytecode VM and the native binary, flagging any divergence in stdout or exit
+code. The hand-written `tests/*.qa` corpus is only ~40 files; a generator
+that explores arithmetic, control flow, strings, arrays, structs, enums,
+closures, and calls would exhaustively probe the byte-identical invariant the
+whole native backend depends on. Two real bugs were already found by hand
+(unresolved `VStringRef` stored in arrays; non-short-circuiting `&&`); a
+fuzzer would surface the long tail -- integer/float edge cases, formatting
+boundaries, deep recursion, operator precedence. Shrink any counterexample to
+a minimal reproducer. Could reuse the `native-diff` harness as the oracle.
+
+### VM performance pass
+
+Profile and speed up the reference interpreter. Concrete targets: the string
+pool is a `[Text]` indexed with `!!` (O(n) per string-ref resolution) -- a
+`Vector`/`Array` makes it O(1); hot-path allocation in the eval loop; the
+dict/struct heaps use linear-scan association lists (fine for correctness,
+slow at size). The VM is the dev-loop and reference engine and currently runs
+~60-100x slower than native, so this improves every workflow. Must stay
+behaviourally identical -- `native-diff` and the suites are the guardrail.
+
+### Error-message quality
+
+A pass over compiler and type-checker diagnostics: precise multi-line spans,
+"did you mean" suggestions for undefined names (edit-distance over in-scope
+identifiers and stdlib functions), batching multiple independent errors
+instead of stopping at the first, and targeted hints for common mistakes
+(e.g. `true`/`false` vs `True`/`False`, mixed int/float arithmetic, missing
+`float(...)` casts). User-facing polish that makes the language pleasant to
+write.
+
+### Showcase applications
+
+Substantial real programs written in Quant, end-to-end, exercising the
+stdlib and language: a `json` <-> `yaml`/`toml` config converter, a
+Markdown-to-HTML renderer, a small expression-language interpreter, a CSV
+query tool...
