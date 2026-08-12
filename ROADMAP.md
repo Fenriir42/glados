@@ -149,7 +149,7 @@ The language core, LSP, and initial toolchain are done. Remaining V1 work is tra
 | ~~FFI callbacks~~ | Done -- extern fns may take function-typed params: `fn qsort(..., compar: (ptr, ptr) -> int)`; a Quant function passed there becomes a C function pointer (GHC wrapper import) that re-enters the VM; `ptr.add`/`ptr.read_*`/`ptr.write_*` builtins for raw memory; see `tests/ffi_callback.qa` |
 | ~~Generalized FFI callback shapes~~ | Done -- callbacks of any arity 0-4 (pointer args, int-class return) on both engines. The callback's parameter count is recovered from its prologue and used to select the matching trampoline natively and the matching `foreign import "wrapper"` in the VM; `tests/ffi_qsort_r.qa` exercises a 3-argument comparator. Callbacks with float or narrower-than-pointer args remain unsupported (the bytecode does not preserve extern argument types) |
 | ~~Async / await~~ | Done -- `async fn f() -> T` returns `task(T)` at the call site; `await expr` unwraps it; cooperative green-task scheduler in the VM (`ISpawn`/`IAwait`); tasks advance only at await points; see `tests/async.qa` |
-| ~~Native backend~~ | Done -- transpiles compiled bytecode to C for an optimized standalone binary (60-100x the VM); all ten stages below complete; `glados native-diff` gates it in CI |
+| ~~Native backend~~ | Done -- transpiles compiled bytecode to C for an optimized standalone binary (~40x the VM, measured after the VM performance pass below narrowed the gap from ~60-100x); all ten stages below complete; `glados native-diff` gates it in CI |
 
 ### Native backend: transpile to C
 
@@ -166,7 +166,7 @@ replaces the interpreter.
 | Stage | Deliverable | Notes |
 |-------|-------------|-------|
 | ~~1. C runtime foundations~~ | `runtime/quant_runtime.{h,c}` | Done -- `QtValue` tagged union; arrays/dicts/structs/errors as heap objects; never-free arena allocation (`-DQUANT_GC` hooks in Boehm); `print`/`println`/format holes byte-identical to the VM (verified by diff); `make runtime-test` runs 93 C unit checks |
-| ~~2. Core translator + driver~~ | `Compiler.CBackend`, `glados build --target=c` | Done -- one bytecode function per C function (stack array, `goto` labels, direct calls, `qt_call_builtin` fallback); `glados compiler FILE --native BIN` / `--emit-c` for single files; unsupported instructions fail at compile time with function+offset; `tests/native_smoke.qa` output is byte-identical to the VM; fib(30) ~50x faster than the VM |
+| ~~2. Core translator + driver~~ | `Compiler.CBackend`, `glados build --target=c` | Done -- one bytecode function per C function (stack array, `goto` labels, direct calls, `qt_call_builtin` fallback); `glados compiler FILE --native BIN` / `--emit-c` for single files; unsupported instructions fail at compile time with function+offset; `tests/native_smoke.qa` output is byte-identical to the VM; fib ~42x faster than the VM (post VM-perf-pass) |
 | ~~3. Differential test harness~~ | `glados native-diff` | Done -- runs every `tests/*.qa` under both VM and native binary and diffs stdout + exit codes; the translator statically rejects unsupported instructions *and* builtins, so untranslatable files are clean skips, never silent runtime diffs; wired into CI (`build.yml`) as a gate from this point on -- semantics regressions become impossible to miss |
 | ~~4. Builtin coverage~~ | runtime ports of `string.*`, `math.*`, `array.*`, `io.*`, `sys.*`, `file.*`, `buf.*` | Done for every builtin that does not need later-stage heap instructions: all `string.*` (except `hash`, whose VM definition folds over unbounded Integers), all `math.*`, all `sys.*` (fd I/O, open flags, env, process, time; `main` now captures argv), all `file.*`, and all `buf.*`. `tests/native_builtins.qa` and `tests/fd_buf.qa` run byte-identically to the VM. `dict.*` and `json.*` are deferred to stage 5 (they need the dict/struct heap instructions, so any program using them is rejected earlier anyway); `regex.*` needs a regex engine and `socket.*`/`ptr.*` belong to later stages |
 | ~~5. Structs, enums, dispatch~~ | struct heap + type tags in C | Done -- `INewStruct`/`IFieldGet`/`IFieldSet` over `QtStruct`; `IDynMethodCall` resolves `<type>.<method>` at runtime from the receiver's type name through a generated `qf_dispatch` if-chain; `INewDict` plus dict-polymorphic `IArrayGet`/`IArraySet` (`qt_index_get`/`qt_index_set`) and the order-independent `dict.has`/`len`/`delete` builtins. Every struct/enum/interface/tuple test in the corpus now diffs byte-identically; `tests/native_structs.qa` is a combined showcase. (`dict.keys`/`values` still need VM `Ord` key ordering; `json.*` needs a C encoder/parser -- both follow-ups) |
@@ -279,15 +279,30 @@ Future extension: coverage-guided input mutation (feed back which inputs
 reached new code paths), and stdin/file-based input fuzzing in addition to
 argv.
 
-### VM performance pass
+### ~~VM performance pass~~ (partly done)
 
-Profile and speed up the reference interpreter. Concrete targets: the string
-pool is a `[Text]` indexed with `!!` (O(n) per string-ref resolution) -- a
-`Vector`/`Array` makes it O(1); hot-path allocation in the eval loop; the
-dict/struct heaps use linear-scan association lists (fine for correctness,
-slow at size). The VM is the dev-loop and reference engine and currently runs
-~60-100x slower than native, so this improves every workflow. Must stay
-behaviourally identical -- `native-diff` and the suites are the guardrail.
+Profile and speed up the reference interpreter. **Done so far** (2.5-3.2x on
+the loop/branch benchmarks, 1.8x on recursion, output byte-identical --
+`native-diff` and all suites still green):
+
+- The eval loop fetched instructions with `instrs !! ip` and bounds-checked
+  with `length instrs`, both **O(n) per instruction**, so a function body ran
+  in O(n^2). The instruction stream is now a `Data.Vector`, making fetch and
+  length O(1). This is the headline win (loops 3481->1392ms, primes
+  3130->980ms).
+- Every function call rebuilt the callee's instruction vector and string pool
+  from the raw bytecode. Functions are now compiled once at load time into a
+  `CompiledFn` (instruction `Vector` + string pool) cached in `vmFunctions`,
+  so a call is an O(1) map lookup with no per-call allocation. This is what
+  lifted recursion-heavy `fib` (6600->3708ms).
+
+**Still open:** the string pool is still a `[Text]` (indexed with `!!`) --
+left as-is because pools are per-function and tiny, the win is small, and
+converting cascades into `callBuiltin`/the DAP server; the per-instruction
+`catchError` context-tagging and per-instruction `modify` of the state record
+also cost on the happy path but are entangled with error reporting. The
+dict/struct/array heaps are `Data.Map` (already O(log n), not the association
+lists an earlier draft of this note assumed).
 
 ### Error-message quality
 

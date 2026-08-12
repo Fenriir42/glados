@@ -90,7 +90,7 @@ data VMError
 data Frame = Frame
   { fLocals :: Map VarName Value,
     fIP :: Int,
-    fInstrs :: [Instruction],
+    fInstrs :: V.Vector Instruction,
     fStrings :: [Text],
     fFunc :: FuncName
   }
@@ -100,7 +100,7 @@ data TaskCtx = TaskCtx
   { tStack :: [Value],
     tLocals :: Map VarName Value,
     tIP :: Int,
-    tInstrs :: [Instruction],
+    tInstrs :: V.Vector Instruction,
     tStrings :: [Text],
     tCallStack :: [Frame],
     tFunc :: FuncName
@@ -115,11 +115,23 @@ data TaskEntry
   | -- | Finished with this (string-resolved) result
     TaskDone Value
 
+-- | A function compiled for execution: its instruction stream as an O(1)-index
+-- 'V.Vector' and its string pool, built once at load time rather than rebuilt
+-- on every call.  'cfBytecode' keeps the original around for metadata (arity).
+data CompiledFn = CompiledFn
+  { cfInstrs :: V.Vector Instruction,
+    cfStrings :: [Text],
+    cfBytecode :: Bytecode
+  }
+
+compileFn :: Bytecode -> CompiledFn
+compileFn bc = CompiledFn (V.fromList (bytecodeInstructions bc)) (bytecodeStrings bc) bc
+
 data VMState = VMState
   { vmStack :: [Value],
     vmLocals :: Map VarName Value,
     vmIP :: Int,
-    vmInstrs :: [Instruction],
+    vmInstrs :: V.Vector Instruction,
     vmStrings :: [Text],
     vmCallStack :: [Frame],
     vmHeap :: Map Int (Map Int Value),
@@ -130,7 +142,7 @@ data VMState = VMState
     vmSocketHeap :: Map Int NS.Socket,
     vmFFILibs :: Map Text DL,
     vmNextId :: Int,
-    vmFunctions :: Map FuncName Bytecode,
+    vmFunctions :: Map FuncName CompiledFn,
     vmCurrentFunc :: FuncName,
     vmCoverage :: Maybe (IORef (Set.Set FuncName)),
     -- | Per-function hit line numbers for line coverage.
@@ -157,7 +169,7 @@ type VM a = ExceptT VMError (StateT VMState IO) a
 -- | Load all bytecodes and execute @main@, returning its return value.
 runProgram :: [Bytecode] -> IO (Either VMError Value)
 runProgram bytecodes = do
-  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  let funcs = Map.fromList [(bytecodeFunction bc, compileFn bc) | bc <- bytecodes]
   case Map.lookup (FuncName "main") funcs of
     Nothing -> return $ Left $ VMUndefinedFunction (FuncName "main")
     Just mainBc -> do
@@ -166,8 +178,8 @@ runProgram bytecodes = do
               { vmStack = [],
                 vmLocals = Map.empty,
                 vmIP = 0,
-                vmInstrs = bytecodeInstructions mainBc,
-                vmStrings = bytecodeStrings mainBc,
+                vmInstrs = cfInstrs mainBc,
+                vmStrings = cfStrings mainBc,
                 vmCallStack = [],
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
@@ -193,7 +205,7 @@ runProgram bytecodes = do
 -- | Load all bytecodes and execute a named function directly (no @main@ required).
 runFunction :: FuncName -> [Bytecode] -> IO (Either VMError Value)
 runFunction fname bytecodes = do
-  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  let funcs = Map.fromList [(bytecodeFunction bc, compileFn bc) | bc <- bytecodes]
   case Map.lookup fname funcs of
     Nothing -> return $ Left $ VMUndefinedFunction fname
     Just bc -> do
@@ -202,8 +214,8 @@ runFunction fname bytecodes = do
               { vmStack = [],
                 vmLocals = Map.empty,
                 vmIP = 0,
-                vmInstrs = bytecodeInstructions bc,
-                vmStrings = bytecodeStrings bc,
+                vmInstrs = cfInstrs bc,
+                vmStrings = cfStrings bc,
                 vmCallStack = [],
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
@@ -229,7 +241,7 @@ runFunction fname bytecodes = do
 -- | Like 'runFunction' but records every user-function call into @covRef@.
 runFunctionCov :: IORef (Set.Set FuncName) -> FuncName -> [Bytecode] -> IO (Either VMError Value)
 runFunctionCov covRef fname bytecodes = do
-  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  let funcs = Map.fromList [(bytecodeFunction bc, compileFn bc) | bc <- bytecodes]
   case Map.lookup fname funcs of
     Nothing -> return $ Left $ VMUndefinedFunction fname
     Just bc -> do
@@ -238,8 +250,8 @@ runFunctionCov covRef fname bytecodes = do
               { vmStack = [],
                 vmLocals = Map.empty,
                 vmIP = 0,
-                vmInstrs = bytecodeInstructions bc,
-                vmStrings = bytecodeStrings bc,
+                vmInstrs = cfInstrs bc,
+                vmStrings = cfStrings bc,
                 vmCallStack = [],
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
@@ -272,7 +284,7 @@ runFunctionLineCov ::
   [Bytecode] ->
   IO (Either VMError Value)
 runFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes = do
-  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  let funcs = Map.fromList [(bytecodeFunction bc, compileFn bc) | bc <- bytecodes]
   case Map.lookup fname funcs of
     Nothing -> return $ Left $ VMUndefinedFunction fname
     Just bc -> do
@@ -281,8 +293,8 @@ runFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes = do
               { vmStack = [],
                 vmLocals = Map.empty,
                 vmIP = 0,
-                vmInstrs = bytecodeInstructions bc,
-                vmStrings = bytecodeStrings bc,
+                vmInstrs = cfInstrs bc,
+                vmStrings = cfStrings bc,
                 vmCallStack = [],
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
@@ -309,7 +321,7 @@ runFunctionLineCov covRef lineCovRef branchCovRef fname bytecodes = do
 -- enabling step-by-step debugging.  The hook may block to pause execution.
 runDebugProgram :: (VMState -> IO ()) -> [Bytecode] -> IO (Either VMError Value)
 runDebugProgram hook bytecodes = do
-  let funcs = Map.fromList [(bytecodeFunction bc, bc) | bc <- bytecodes]
+  let funcs = Map.fromList [(bytecodeFunction bc, compileFn bc) | bc <- bytecodes]
   case Map.lookup (FuncName "main") funcs of
     Nothing -> return $ Left $ VMUndefinedFunction (FuncName "main")
     Just mainBc -> do
@@ -318,8 +330,8 @@ runDebugProgram hook bytecodes = do
               { vmStack = [],
                 vmLocals = Map.empty,
                 vmIP = 0,
-                vmInstrs = bytecodeInstructions mainBc,
-                vmStrings = bytecodeStrings mainBc,
+                vmInstrs = cfInstrs mainBc,
+                vmStrings = cfStrings mainBc,
                 vmCallStack = [],
                 vmHeap = Map.empty,
                 vmDictHeap = Map.empty,
@@ -423,7 +435,7 @@ execLoop :: VM Value
 execLoop = do
   ip <- gets vmIP
   instrs <- gets vmInstrs
-  if ip >= length instrs
+  if ip >= V.length instrs
     then do
       frames <- gets vmCallStack
       case frames of
@@ -432,7 +444,7 @@ execLoop = do
           maybe execLoop return mv
         _ -> return VUnit
     else do
-      let instr = instrs !! ip
+      let instr = instrs V.! ip
       modify $ \s -> s {vmIP = ip + 1}
       mRet <-
         execInstr instr `catchError` \e ->
@@ -519,8 +531,8 @@ execInstr = \case
             { vmStack = resolvedArgs ++ rest,
               vmLocals = Map.empty,
               vmIP = 0,
-              vmInstrs = bytecodeInstructions bc,
-              vmStrings = bytecodeStrings bc,
+              vmInstrs = cfInstrs bc,
+              vmStrings = cfStrings bc,
               vmCurrentFunc = fname
             }
         return Nothing
@@ -710,8 +722,8 @@ execInstr = \case
             { vmStack = resolvedArgs ++ rest,
               vmLocals = Map.empty,
               vmIP = 0,
-              vmInstrs = bytecodeInstructions bc,
-              vmStrings = bytecodeStrings bc,
+              vmInstrs = cfInstrs bc,
+              vmStrings = cfStrings bc,
               vmCurrentFunc = resolvedName
             }
         return Nothing
@@ -738,8 +750,8 @@ execInstr = \case
                 { tStack = resolvedArgs,
                   tLocals = Map.empty,
                   tIP = 0,
-                  tInstrs = bytecodeInstructions bc,
-                  tStrings = bytecodeStrings bc,
+                  tInstrs = cfInstrs bc,
+                  tStrings = cfStrings bc,
                   tCallStack = [],
                   tFunc = fname
                 }
@@ -873,8 +885,8 @@ execInstr = \case
             { vmStack = resolvedArgs ++ remaining,
               vmLocals = initLocals,
               vmIP = 0,
-              vmInstrs = bytecodeInstructions bc,
-              vmStrings = bytecodeStrings bc,
+              vmInstrs = cfInstrs bc,
+              vmStrings = cfStrings bc,
               vmCurrentFunc = fname
             }
         return Nothing
@@ -1626,8 +1638,8 @@ invokeQuantValue st fnVal cbArgs = do
               { vmStack = cbArgs,
                 vmLocals = capturedLocals,
                 vmIP = 0,
-                vmInstrs = bytecodeInstructions bc,
-                vmStrings = bytecodeStrings bc,
+                vmInstrs = cfInstrs bc,
+                vmStrings = cfStrings bc,
                 vmCallStack = [],
                 vmCurrentFunc = fname,
                 -- The callback body is its own root task.
@@ -1642,10 +1654,10 @@ invokeQuantValue st fnVal cbArgs = do
 -- | Number of leading parameters a function takes, read from its prologue
 -- (codegen emits one @IStore@ per parameter before the body).  Used to pick
 -- the right callback wrapper arity for a function passed to C.
-callbackArity :: Map FuncName Bytecode -> Value -> Int
+callbackArity :: Map FuncName CompiledFn -> Value -> Int
 callbackArity funcs v =
   case Map.lookup fname funcs of
-    Just bc -> length (takeWhile isStore (bytecodeInstructions bc))
+    Just cf -> length (takeWhile isStore (bytecodeInstructions (cfBytecode cf)))
     Nothing -> 2
   where
     fname = case v of
